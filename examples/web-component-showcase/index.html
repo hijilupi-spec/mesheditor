@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeshEditor Web Component — StackBlitz Showcase</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-badge">WEB COMPONENT</span>
+        <h1 class="brand-title">MeshEditor Studio Integration</h1>
+      </div>
+      <div class="header-status">
+        <span id="engineBadge" class="status-pill status-connecting">Initializing...</span>
+        <a href="https://github.com/peer2p/mesheditor" target="_blank" rel="noreferrer" class="btn-github">
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="app-workspace">
+      <!-- Left Host Sidebar: Host Controls & Actions -->
+      <aside class="host-sidebar">
+        <div class="sidebar-section">
+          <h3>Primitives & Models</h3>
+          <div class="button-grid">
+            <button id="btnAddCube" class="btn-action">+ Cube</button>
+            <button id="btnAddSphere" class="btn-action">+ Sphere</button>
+            <button id="btnAddCylinder" class="btn-action">+ Cylinder</button>
+            <button id="btnAddTorus" class="btn-action">+ Torus</button>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Quick Materials</h3>
+          <div class="color-palette">
+            <button class="color-swatch" data-color="#3b82f6" style="background:#3b82f6" title="Blue"></button>
+            <button class="color-swatch" data-color="#10b981" style="background:#10b981" title="Green"></button>
+            <button class="color-swatch" data-color="#f59e0b" style="background:#f59e0b" title="Amber"></button>
+            <button class="color-swatch" data-color="#ef4444" style="background:#ef4444" title="Red"></button>
+            <button class="color-swatch" data-color="#8b5cf6" style="background:#8b5cf6" title="Purple"></button>
+            <button class="color-swatch" data-color="#06b6d4" style="background:#06b6d4" title="Cyan"></button>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Editor Layout Controls</h3>
+          <label class="toggle-control">
+            <input type="checkbox" id="toggleTopToolbar" checked />
+            <span>Top Toolbar</span>
+          </label>
+          <label class="toggle-control">
+            <input type="checkbox" id="toggleInspector" checked />
+            <span>Inspector Sidebar</span>
+          </label>
+          <label class="toggle-control">
+            <input type="checkbox" id="toggleStats" checked />
+            <span>Status Footer</span>
+          </label>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Plugin System</h3>
+          <p class="section-desc">Extend MeshEditor dynamically via plugins:</p>
+          <button id="btnToggleAssetPlugin" class="btn-plugin btn-plugin-active">
+            Asset Pipeline Plugin: Active
+          </button>
+          <button id="btnToggleLightingPlugin" class="btn-plugin btn-plugin-active">
+            Studio Lighting Plugin: Active
+          </button>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Live Telemetry</h3>
+          <div class="telemetry-box">
+            <div class="telemetry-row"><span>Meshes:</span> <strong id="telemetryMeshes">0</strong></div>
+            <div class="telemetry-row"><span>Active Mesh:</span> <strong id="telemetrySelected">None</strong></div>
+            <div class="telemetry-row"><span>FPS:</span> <strong id="telemetryFps">0</strong></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center: MeshEditor Custom Element -->
+      <main class="editor-container">
+        <!-- The Custom Element -->
+        <mesh-editor id="editor" show-toolbar="true" show-inspector="true" show-stats="true"></mesh-editor>
+      </main>
+
+      <!-- Right Host Sidebar: Event Log -->
+      <aside class="host-event-sidebar">
+        <div class="sidebar-header">
+          <h3>Host Event Stream</h3>
+          <button id="btnClearLog" class="btn-sm">Clear</button>
+        </div>
+        <div id="eventLog" class="event-stream-list">
+          <div class="event-entry event-info">Waiting for editor-ready event...</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>
