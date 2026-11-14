@@ -1,6 +1,6 @@
 # MeshEditor Web Component — StackBlitz & Vite Showcase
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase)
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase?view=preview)
 
 This showcase demonstrates how to integrate the `<mesh-editor>` custom element and its dynamic plugin system into a modern Vite + TypeScript application using the official `mesheditor` npm package.
 
@@ -9,9 +9,10 @@ This showcase demonstrates how to integrate the `<mesh-editor>` custom element a
 ## Run in StackBlitz
 
 Click the badge above or navigate to:
-**[https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase](https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase)**
+**[https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase?view=preview](https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase?view=preview)**
 
-StackBlitz will boot a Node WebContainer, install dependencies from npm, and launch Vite with hot reload.
+> [!TIP]
+> The link uses `?view=preview` to focus StackBlitz directly on the live app preview. You can also click the **"Open in New Tab"** button in the app header (or StackBlitz's own pop-out icon) to open the 3D studio in a separate full-screen browser window.
 
 ---
 

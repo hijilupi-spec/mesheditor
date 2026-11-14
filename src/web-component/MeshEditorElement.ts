@@ -35,7 +35,18 @@ export interface MeshEditorElementEvents {
  */
 export class MeshEditorElement extends HTMLElement {
   public static get observedAttributes(): string[] {
-    return ['src', 'model-url', 'layout', 'grid', 'clear-color', 'suppress-download', 'save-button-label'];
+    return [
+      'src',
+      'model-url',
+      'layout',
+      'grid',
+      'clear-color',
+      'suppress-download',
+      'save-button-label',
+      'show-toolbar',
+      'show-inspector',
+      'show-stats',
+    ];
   }
 
   public app: MeshEditorApp | null = null;
@@ -120,6 +131,17 @@ export class MeshEditorElement extends HTMLElement {
       this.app.service.setClearColor(clearColorAttr);
     }
 
+    // Apply layout element visibility attributes if specified
+    if (this.hasAttribute('show-toolbar')) {
+      this.setToolbarVisible(this.getAttribute('show-toolbar') !== 'false');
+    }
+    if (this.hasAttribute('show-inspector')) {
+      this.setInspectorVisible(this.getAttribute('show-inspector') !== 'false');
+    }
+    if (this.hasAttribute('show-stats')) {
+      this.setStatusVisible(this.getAttribute('show-stats') !== 'false');
+    }
+
     this.emitEvent('editor-ready', { app: this.app, service: this.app.service });
   }
 
@@ -160,6 +182,48 @@ export class MeshEditorElement extends HTMLElement {
           this.hostAdapter.options.suppressBrowserDownload = newValue !== null && newValue !== 'false';
         }
         break;
+      case 'show-toolbar':
+        this.setToolbarVisible(newValue !== 'false');
+        break;
+      case 'show-inspector':
+        this.setInspectorVisible(newValue !== 'false');
+        break;
+      case 'show-stats':
+        this.setStatusVisible(newValue !== 'false');
+        break;
+    }
+  }
+
+  /**
+   * Toggles visibility of the top toolbar.
+   */
+  public setToolbarVisible(visible: boolean): void {
+    const el = (this.querySelector('#top-toolbar') || this.querySelector('header')) as HTMLElement | null;
+    if (el) {
+      if (visible) el.style.removeProperty('display');
+      else el.style.setProperty('display', 'none', 'important');
+    }
+  }
+
+  /**
+   * Toggles visibility of the right inspector/stackpanel sidebar.
+   */
+  public setInspectorVisible(visible: boolean): void {
+    const el = (this.querySelector('#stackpanelRightSidebar') || this.querySelector('.stackpanel-sidebar')) as HTMLElement | null;
+    if (el) {
+      if (visible) el.style.removeProperty('display');
+      else el.style.setProperty('display', 'none', 'important');
+    }
+  }
+
+  /**
+   * Toggles visibility of the bottom status bar.
+   */
+  public setStatusVisible(visible: boolean): void {
+    const el = (this.querySelector('#bottom-bar') || this.querySelector('footer')) as HTMLElement | null;
+    if (el) {
+      if (visible) el.style.removeProperty('display');
+      else el.style.setProperty('display', 'none', 'important');
     }
   }
 

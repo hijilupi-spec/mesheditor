@@ -259,23 +259,92 @@ async function initHost() {
     });
   });
 
+  // Pop out full preview in new tab
+  document.getElementById('btnOpenNewTab')?.addEventListener('click', () => {
+    window.open(window.location.href, '_blank');
+  });
+
+  // Host Plugin Action Buttons
+  document.getElementById('btnToggleAssetPlugin')?.addEventListener('click', () => {
+    const service = editor.getService();
+    const app = editor.getApp();
+    const meshes = service?.importedMeshes || [];
+    let polyCount = 0;
+    for (const m of meshes) {
+      polyCount += Math.floor((m.getTotalIndices ? m.getTotalIndices() : 0) / 3);
+    }
+    const maxBudget = 50000;
+    if (polyCount <= maxBudget) {
+      app?.showToast(`Mesh budget OK: ${polyCount.toLocaleString()} / ${maxBudget.toLocaleString()} triangles`, 'success');
+    } else {
+      app?.showToast(`Warning: ${polyCount.toLocaleString()} triangles exceeds budget (${maxBudget.toLocaleString()})`, 'warning');
+    }
+    logEvent('Plugin Action', `Asset Pipeline: ${polyCount} triangles validated against budget (${maxBudget})`, 'plugin');
+  });
+
+  let warmLighting = false;
+  document.getElementById('btnToggleLightingPlugin')?.addEventListener('click', () => {
+    const service = editor.getService();
+    const app = editor.getApp();
+    warmLighting = !warmLighting;
+    const color = warmLighting ? '#1f1915' : '#0d1117';
+    service?.setClearColor(color);
+    const modeName = warmLighting ? 'Warm Studio Mode (#1f1915)' : 'Dark Studio Mode (#0d1117)';
+    app?.showToast(`Applied ${modeName}`, 'info');
+    logEvent('Plugin Action', `Studio Lighting switched to ${modeName}`, 'plugin');
+  });
+
   // Host Layout Toggles
   document.getElementById('toggleTopToolbar')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked;
-    const toolbar = editor.querySelector('#top-toolbar') as HTMLElement | null;
-    if (toolbar) toolbar.style.display = checked ? '' : 'none';
+    if (typeof (editor as any).setToolbarVisible === 'function') {
+      (editor as any).setToolbarVisible(checked);
+    } else {
+      const toolbar = (editor.querySelector('#top-toolbar') || editor.querySelector('header')) as HTMLElement | null;
+      if (toolbar) {
+        if (checked) toolbar.style.removeProperty('display');
+        else toolbar.style.setProperty('display', 'none', 'important');
+      }
+    }
+    logEvent('Layout Changed', `Top toolbar ${checked ? 'shown' : 'hidden'}`, 'info');
+  });
+
+  document.getElementById('toggleOutliner')?.addEventListener('change', (e) => {
+    const checked = (e.target as HTMLInputElement).checked;
+    const outliner = editor.querySelector('#dialog-outliner') as HTMLElement | null;
+    if (outliner) {
+      if (checked) outliner.style.removeProperty('display');
+      else outliner.style.setProperty('display', 'none', 'important');
+    }
+    logEvent('Layout Changed', `Scene outliner ${checked ? 'shown' : 'hidden'}`, 'info');
   });
 
   document.getElementById('toggleInspector')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked;
-    const inspector = (editor.querySelector('#rightSidebar') || editor.querySelector('#stackpanelRightSidebar')) as HTMLElement | null;
-    if (inspector) inspector.style.display = checked ? '' : 'none';
+    if (typeof (editor as any).setInspectorVisible === 'function') {
+      (editor as any).setInspectorVisible(checked);
+    } else {
+      const inspector = (editor.querySelector('#stackpanelRightSidebar') || editor.querySelector('.stackpanel-sidebar')) as HTMLElement | null;
+      if (inspector) {
+        if (checked) inspector.style.removeProperty('display');
+        else inspector.style.setProperty('display', 'none', 'important');
+      }
+    }
+    logEvent('Layout Changed', `Inspector sidebar ${checked ? 'shown' : 'hidden'}`, 'info');
   });
 
   document.getElementById('toggleStats')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked;
-    const footer = editor.querySelector('#footerStatusBar') as HTMLElement | null;
-    if (footer) footer.style.display = checked ? '' : 'none';
+    if (typeof (editor as any).setStatusVisible === 'function') {
+      (editor as any).setStatusVisible(checked);
+    } else {
+      const footer = (editor.querySelector('#bottom-bar') || editor.querySelector('footer')) as HTMLElement | null;
+      if (footer) {
+        if (checked) footer.style.removeProperty('display');
+        else footer.style.setProperty('display', 'none', 'important');
+      }
+    }
+    logEvent('Layout Changed', `Status footer ${checked ? 'shown' : 'hidden'}`, 'info');
   });
 }
 

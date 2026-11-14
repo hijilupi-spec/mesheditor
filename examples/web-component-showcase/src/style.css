@@ -68,7 +68,7 @@ body {
 .header-status {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .status-pill {
@@ -86,6 +86,24 @@ body {
 .status-ready {
   background: rgba(35, 134, 54, 0.2);
   color: #3fb950;
+}
+
+.btn-header-action {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.btn-header-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .btn-github {
@@ -112,13 +130,13 @@ body {
 
 /* Host Sidebar */
 .host-sidebar {
-  width: 250px;
+  width: 270px;
   background: var(--bg-surface);
   border-right: 1px solid var(--border-color);
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   overflow-y: auto;
   flex-shrink: 0;
 }
@@ -129,6 +147,17 @@ body {
   letter-spacing: 0.6px;
   color: var(--text-muted);
   margin-bottom: 8px;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.section-header-row h3 {
+  margin-bottom: 0;
 }
 
 .section-desc {
@@ -240,46 +269,11 @@ body {
   color: var(--text-muted);
 }
 
-/* Center Editor Container */
-.editor-container {
-  flex: 1;
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  background: #000;
-}
-
-mesh-editor {
-  display: block;
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-/* Right Event Stream */
-.host-event-sidebar {
-  width: 280px;
-  background: var(--bg-surface);
-  border-left: 1px solid var(--border-color);
+/* Event Stream inside Left Sidebar */
+.host-events-section {
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-}
-
-.sidebar-header {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sidebar-header h3 {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--text-muted);
+  min-height: 160px;
 }
 
 .btn-sm {
@@ -298,18 +292,21 @@ mesh-editor {
 }
 
 .event-stream-list {
-  flex: 1;
-  padding: 8px 12px;
+  background: #0d1117;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+  height: 160px;
   overflow-y: auto;
-  font-family: monospace;
-  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .event-entry {
-  padding: 5px 8px;
+  padding: 4px 6px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.03);
   border-left: 3px solid #58a6ff;
@@ -336,5 +333,22 @@ mesh-editor {
 
 .event-plugin {
   border-color: #f0883e;
+}
+
+/* Center Editor Container */
+.editor-container {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  background: #000;
+}
+
+mesh-editor {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
 

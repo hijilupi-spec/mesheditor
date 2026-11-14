@@ -538,7 +538,7 @@ npm install mesheditor
 ```
 
 > [!TIP]
-> - **Interactive StackBlitz Showcase**: Open and run the standalone Vite + Web Component showcase with one click in your browser: [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase) (Source code in [`examples/web-component-showcase/`](examples/web-component-showcase/))
+> - **Interactive StackBlitz Showcase**: Open and run the standalone Vite + Web Component showcase with one click in your browser: [![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/peer2p/mesheditor/tree/main/examples/web-component-showcase?view=preview) (Source code in [`examples/web-component-showcase/`](examples/web-component-showcase/))
 > - **Live Integration Example**: Check out the interactive [Host Application & Plugin Integration Demo](https://peer2p.github.io/mesheditor/webcomponent-example.html) (or locally in `docs/webcomponent-example.html`) showcasing live plugins, telemetry, and two-way host communication.
 
 Import and embed `<mesh-editor>` anywhere in your HTML application:

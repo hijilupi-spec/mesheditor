@@ -2,7 +2,8 @@ import { defineConfig } from 'vite';
 import fs from 'fs';
 import path from 'path';
 
-const isMonorepo = fs.existsSync(path.resolve(__dirname, '../../dist-lib'));
+const currentDir = typeof __dirname !== 'undefined' ? __dirname : path.dirname(new URL(import.meta.url).pathname);
+const isMonorepo = fs.existsSync(path.resolve(currentDir, '../../dist-lib'));
 
 export default defineConfig({
   server: {
@@ -12,8 +13,8 @@ export default defineConfig({
   resolve: isMonorepo
     ? {
         alias: {
-          'mesheditor/style.css': path.resolve(__dirname, '../../dist-lib/mesheditor.css'),
-          'mesheditor': path.resolve(__dirname, '../../dist-lib/esm/index.js')
+          'mesheditor/style.css': path.resolve(currentDir, '../../dist-lib/mesheditor.css'),
+          'mesheditor': path.resolve(currentDir, '../../dist-lib/esm/index.js')
         }
       }
     : {},
