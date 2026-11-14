@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MeshEditor Web Component — StackBlitz Showcase</title>
-  <link rel="stylesheet" href="./src/style.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <!-- Standalone Web Component bundle including Babylon.js runtime and <mesh-editor> -->
+  <script src="https://peer2p.github.io/mesheditor/mesheditor-element.bundle.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -67,12 +69,10 @@
         <div class="sidebar-section">
           <h3>Plugin System</h3>
           <p class="section-desc">Extend MeshEditor dynamically via plugins:</p>
-          <button id="btnToggleAssetPlugin" class="btn-plugin btn-plugin-active">
-            Asset Pipeline Plugin: Active
-          </button>
-          <button id="btnToggleLightingPlugin" class="btn-plugin btn-plugin-active">
-            Studio Lighting Plugin: Active
-          </button>
+          <div class="plugin-pill-box">
+            <div class="plugin-tag">Asset Pipeline Plugin: Active</div>
+            <div class="plugin-tag">Studio Lighting Plugin: Active</div>
+          </div>
         </div>
 
         <div class="sidebar-section">
@@ -88,7 +88,7 @@
       <!-- Center: MeshEditor Custom Element -->
       <main class="editor-container">
         <!-- The Custom Element -->
-        <mesh-editor id="editor" show-toolbar="true" show-inspector="true" show-stats="true"></mesh-editor>
+        <mesh-editor id="editor" grid="true" layout="floating"></mesh-editor>
       </main>
 
       <!-- Right Host Sidebar: Event Log -->
@@ -104,6 +104,6 @@
     </div>
   </div>
 
-  <script type="module" src="./src/main.ts"></script>
+  <script src="./main.js"></script>
 </body>
 </html>
