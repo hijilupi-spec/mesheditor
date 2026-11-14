@@ -20,6 +20,14 @@
   "publishConfig": {
     "access": "public"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peer2p/mesheditor.git"
+  },
+  "homepage": "https://peer2p.github.io/mesheditor/",
+  "bugs": {
+    "url": "https://github.com/peer2p/mesheditor/issues"
+  },
   "files": [
     "dist-lib/esm",
     "dist-lib/index.umd.js",
