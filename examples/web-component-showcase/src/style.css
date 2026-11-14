@@ -193,19 +193,31 @@ body {
   cursor: pointer;
 }
 
-.plugin-pill-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.btn-plugin {
+  width: 100%;
+  text-align: left;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  margin-bottom: 6px;
+  transition: all 0.15s ease;
 }
 
-.plugin-tag {
-  background: var(--bg-surface-hover);
+.btn-plugin:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-plugin-active {
   border-left: 3px solid #3fb950;
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 11px;
-  color: var(--text-primary);
+}
+
+.btn-plugin-inactive {
+  border-left: 3px solid #8b949e;
+  opacity: 0.6;
 }
 
 .telemetry-box {
@@ -325,3 +337,4 @@ mesh-editor {
 .event-plugin {
   border-color: #f0883e;
 }
+

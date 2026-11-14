@@ -1,0 +1,22 @@
+{
+  "name": "mesheditor-web-component-showcase",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "mesheditor": "^1.0.2",
+    "@babylonjs/core": "^9.29.0",
+    "@babylonjs/loaders": "^9.29.0",
+    "@babylonjs/materials": "^9.29.0",
+    "@babylonjs/serializers": "^9.29.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  }
+}

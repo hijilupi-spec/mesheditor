@@ -20,6 +20,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write
 
 jobs:
   # ============================================================================
@@ -184,6 +185,7 @@ jobs:
             - **Linux (`x64`)**: `MeshEditor-*-linux-x64.AppImage` / `MeshEditor-*-linux-x64.deb`
 
             ### 🌐 Web & NPM Library
+            - **Official NPM Registry**: `npm install mesheditor` (or `npm install mesheditor@${{ steps.release_meta.outputs.tag }}`)
             - **Standalone Web Application**: `MeshEditor-*-standalone-web.zip` (Ready to host on any static web server)
             - **Web Component & Library Bundle**: `MeshEditor-*-webcomponent-lib.zip` & `mesheditor-*.tgz` (`npm install ./mesheditor-*.tgz`)
 
@@ -196,4 +198,53 @@ jobs:
             > Or navigate to **System Settings > Privacy & Security** and click **"Open Anyway"**.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================================
+  # 4. PUBLISH PACKAGE TO NPM REGISTRY (registry.npmjs.org)
+  # ============================================================================
+  publish-npm:
+    name: Publish to NPM Registry
+    needs:
+      - build-web-and-lib
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build NPM Library & Web Component
+        run: npm run build:lib
+
+      - name: Sync package.json version with release tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag_name }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          # Strip leading 'v' if present (e.g. v1.0.2 -> 1.0.2)
+          VERSION="${TAG#v}"
+          echo "Syncing package.json version to: $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Publish to NPM Registry
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::warning::NPM_TOKEN secret is not configured in repository secrets. Skipping npm publish."
+            exit 0
+          fi
+          npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
