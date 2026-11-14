@@ -18,6 +18,7 @@ export default defineConfig({
       }
     : {},
   optimizeDeps: {
+    include: ['earcut'],
     exclude: [
       '@babylonjs/core',
       '@babylonjs/loaders',

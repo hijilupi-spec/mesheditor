@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "mesheditor": "^1.0.2"
+    "mesheditor": "^1.0.3"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

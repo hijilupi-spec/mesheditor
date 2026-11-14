@@ -5,7 +5,8 @@ import {
   Vector3,
   VertexData,
 } from '@babylonjs/core';
-import earcut from 'earcut';
+import * as earcutModule from 'earcut';
+const earcut: any = (earcutModule as any).default || earcutModule;
 import { createRoundedBoxMesh } from './roundedBox';
 
 export interface WallOpening {

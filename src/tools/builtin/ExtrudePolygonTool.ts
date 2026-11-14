@@ -1,5 +1,6 @@
 import { Mesh, MeshBuilder } from '@babylonjs/core';
-import earcut from 'earcut';
+import * as earcutModule from 'earcut';
+const earcut: any = (earcutModule as any).default || earcutModule;
 import { AbstractTool } from '../AbstractTool';
 import { ToolExecutionContext } from '../ToolExecutionContext';
 

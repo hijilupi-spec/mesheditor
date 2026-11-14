@@ -10,7 +10,8 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import type { Nullable, Observer } from '@babylonjs/core';
-import earcut from 'earcut';
+import * as earcutModule from 'earcut';
+const earcut: any = (earcutModule as any).default || earcutModule;
 import type { MeshEditorService } from '../MeshEditorService';
 import kenneyFutureFont from '../assets/fonts/Kenney_Future_Regular.json';
 import droidSansBoldFont from '../assets/fonts/Droid_Sans_Bold.json';
