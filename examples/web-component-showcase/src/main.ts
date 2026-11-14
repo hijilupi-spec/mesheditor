@@ -1,9 +1,8 @@
 import 'mesheditor';
 import 'mesheditor/style.css';
 import type { MeshEditorElement, MeshEditorPlugin, MeshEditorPluginContext } from 'mesheditor';
-import * as BABYLON from '@babylonjs/core';
 
-// Log helper
+// Telemetry & UI elements
 const eventLog = document.getElementById('eventLog') as HTMLElement;
 function logEvent(type: string, message: string, category: 'info' | 'success' | 'mesh' | 'plugin' = 'info') {
   if (!eventLog) return;
@@ -17,6 +16,12 @@ function logEvent(type: string, message: string, category: 'info' | 'success' | 
 document.getElementById('btnClearLog')?.addEventListener('click', () => {
   if (eventLog) eventLog.innerHTML = '';
 });
+
+// Helper for normalizing hex colors to [r, g, b] (0..1)
+function hexToRgbNorm(hex: string): [number, number, number] {
+  const bigint = parseInt(hex.replace('#', ''), 16);
+  return [((bigint >> 16) & 255) / 255, ((bigint >> 8) & 255) / 255, (bigint & 255) / 255];
+}
 
 // Telemetry DOM elements
 const telemetryMeshes = document.getElementById('telemetryMeshes') as HTMLElement;
@@ -42,7 +47,7 @@ const assetPipelinePlugin: MeshEditorPlugin = {
       icon: 'check-circle-2',
       shortcut: '⌥V',
       onClick: () => {
-        const meshes = ctx.service.importedMeshes;
+        const meshes = ctx.service.importedMeshes || [];
         let polyCount = 0;
         for (const m of meshes) {
           polyCount += Math.floor((m.getTotalIndices ? m.getTotalIndices() : 0) / 3);
@@ -75,70 +80,34 @@ const assetPipelinePlugin: MeshEditorPlugin = {
   }
 };
 
-// 2. Studio Lighting Plugin
+// 2. Studio Lighting Presets Plugin
 const studioLightingPlugin: MeshEditorPlugin = {
   id: 'studio.lighting.presets',
   name: 'Studio Lighting Presets',
   version: '1.0.0',
-  description: 'Applies studio 3-point and cinematic sunset lighting environments.',
+  description: 'Applies studio lighting presets and clear colors.',
   initialize(ctx: MeshEditorPluginContext) {
     logEvent('Plugin Initialized', 'Studio Lighting Presets plugin registered', 'plugin');
 
     ctx.registerToolMenuItem({
-      id: 'menuToolLightingStudio',
-      label: 'Apply 3-Point Studio Lights',
-      icon: 'sun',
+      id: 'menuToolLightingDarkStudio',
+      label: 'Apply Dark Studio Mode',
+      icon: 'moon',
       onClick: () => {
-        const scene = ctx.getScene();
-        if (!scene) return;
-
-        // Clear existing custom lights if any
-        scene.lights.forEach((l: BABYLON.Light) => {
-          if (l.name.startsWith('custom_studio_')) l.dispose();
-        });
-
-        // Key light
-        const key = new BABYLON.DirectionalLight('custom_studio_key', new BABYLON.Vector3(-1, -2, -1), scene);
-        key.intensity = 1.2;
-        key.diffuse = new BABYLON.Color3(1.0, 0.95, 0.9);
-
-        // Fill light
-        const fill = new BABYLON.DirectionalLight('custom_studio_fill', new BABYLON.Vector3(2, -1, 1), scene);
-        fill.intensity = 0.5;
-        fill.diffuse = new BABYLON.Color3(0.8, 0.85, 1.0);
-
-        // Rim/back light
-        const rim = new BABYLON.DirectionalLight('custom_studio_rim', new BABYLON.Vector3(0, 1, 2), scene);
-        rim.intensity = 0.8;
-        rim.diffuse = new BABYLON.Color3(1.0, 1.0, 1.0);
-
-        ctx.showToast('Applied 3-Point Studio Lighting', 'info');
-        logEvent('Lighting Preset', 'Applied 3-Point Studio Lighting rig', 'plugin');
+        ctx.service.setClearColor('#0d1117');
+        ctx.showToast('Applied Dark Studio Mode', 'info');
+        logEvent('Lighting Preset', 'Clear color set to #0d1117', 'plugin');
       }
     });
 
     ctx.registerToolMenuItem({
-      id: 'menuToolLightingSunset',
-      label: 'Apply Golden Hour Preset',
-      icon: 'sunset',
+      id: 'menuToolLightingWarmStudio',
+      label: 'Apply Warm Studio Mode',
+      icon: 'sun',
       onClick: () => {
-        const scene = ctx.getScene();
-        if (!scene) return;
-
-        scene.lights.forEach((l: BABYLON.Light) => {
-          if (l.name.startsWith('custom_studio_')) l.dispose();
-        });
-
-        const sun = new BABYLON.DirectionalLight('custom_studio_sun', new BABYLON.Vector3(-2, -0.6, -1), scene);
-        sun.intensity = 1.6;
-        sun.diffuse = new BABYLON.Color3(1.0, 0.65, 0.3);
-
-        const ambient = new BABYLON.HemisphericLight('custom_studio_ambient', new BABYLON.Vector3(0, 1, 0), scene);
-        ambient.intensity = 0.4;
-        ambient.diffuse = new BABYLON.Color3(0.4, 0.2, 0.5);
-
-        ctx.showToast('Applied Golden Hour Preset', 'info');
-        logEvent('Lighting Preset', 'Applied Golden Hour lighting rig', 'plugin');
+        ctx.service.setClearColor('#1f1915');
+        ctx.showToast('Applied Warm Studio Mode', 'info');
+        logEvent('Lighting Preset', 'Clear color set to #1f1915', 'plugin');
       }
     });
   }
@@ -149,8 +118,10 @@ async function initHost() {
   await customElements.whenDefined('mesh-editor');
 
   const onEditorReady = async () => {
-    engineBadge.textContent = 'Engine Ready';
-    engineBadge.className = 'status-pill status-ready';
+    if (engineBadge) {
+      engineBadge.textContent = 'Engine Ready';
+      engineBadge.className = 'status-pill status-ready';
+    }
     logEvent('editor-ready', 'MeshEditor host initialized successfully', 'success');
 
     // Register plugins
@@ -174,13 +145,15 @@ async function initHost() {
 
     // Add initial showcase cube if scene is empty
     const service = editor.getService();
-    if (service && scene && service.importedMeshes.length === 0) {
-      const box = BABYLON.MeshBuilder.CreateBox('DemoCube', { size: 1.5 }, scene);
-      box.position.y = 0.75;
-      const mat = new BABYLON.StandardMaterial('DemoCubeMat', scene);
-      mat.diffuseColor = new BABYLON.Color3(0.23, 0.51, 0.96); // #3b82f6
-      box.material = mat;
-      service.addMesh(box);
+    if (service && service.importedMeshes.length === 0) {
+      service.createPrimitive({
+        shape: 'Box',
+        width: 1.5,
+        height: 1.5,
+        depth: 1.5,
+        color: '#3b82f6',
+        name: 'DemoCube'
+      });
     }
   };
 
@@ -213,57 +186,53 @@ async function initHost() {
     logEvent('model-exported', `Exported format: ${e.detail?.format}`, 'success');
   });
 
-  // Host Primitive Button Handlers
+  // Host Primitive Button Handlers using service.createPrimitive()
   document.getElementById('btnAddCube')?.addEventListener('click', () => {
-    const scene = editor.getScene();
     const service = editor.getService();
-    if (!scene || !service) return;
-
-    const mesh = BABYLON.MeshBuilder.CreateBox(`Box_${Date.now().toString().slice(-4)}`, { size: 1.2 }, scene);
-    mesh.position.set((Math.random() - 0.5) * 3, 0.6, (Math.random() - 0.5) * 3);
-    const mat = new BABYLON.StandardMaterial(`Mat_${mesh.name}`, scene);
-    mat.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
-    mesh.material = mat;
-    service.addMesh(mesh);
+    if (!service) return;
+    service.createPrimitive({
+      shape: 'Box',
+      width: 1.2,
+      height: 1.2,
+      depth: 1.2,
+      color: '#3b82f6',
+      name: 'Cube'
+    });
   });
 
   document.getElementById('btnAddSphere')?.addEventListener('click', () => {
-    const scene = editor.getScene();
     const service = editor.getService();
-    if (!scene || !service) return;
-
-    const mesh = BABYLON.MeshBuilder.CreateSphere(`Sphere_${Date.now().toString().slice(-4)}`, { diameter: 1.2 }, scene);
-    mesh.position.set((Math.random() - 0.5) * 3, 0.6, (Math.random() - 0.5) * 3);
-    const mat = new BABYLON.StandardMaterial(`Mat_${mesh.name}`, scene);
-    mat.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
-    mesh.material = mat;
-    service.addMesh(mesh);
+    if (!service) return;
+    service.createPrimitive({
+      shape: 'Sphere',
+      size: 1.2,
+      color: '#10b981',
+      name: 'Sphere'
+    });
   });
 
   document.getElementById('btnAddCylinder')?.addEventListener('click', () => {
-    const scene = editor.getScene();
     const service = editor.getService();
-    if (!scene || !service) return;
-
-    const mesh = BABYLON.MeshBuilder.CreateCylinder(`Cylinder_${Date.now().toString().slice(-4)}`, { height: 1.5, diameter: 1 }, scene);
-    mesh.position.set((Math.random() - 0.5) * 3, 0.75, (Math.random() - 0.5) * 3);
-    const mat = new BABYLON.StandardMaterial(`Mat_${mesh.name}`, scene);
-    mat.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
-    mesh.material = mat;
-    service.addMesh(mesh);
+    if (!service) return;
+    service.createPrimitive({
+      shape: 'Cylinder',
+      height: 1.6,
+      diameter: 1.0,
+      color: '#f59e0b',
+      name: 'Cylinder'
+    });
   });
 
   document.getElementById('btnAddTorus')?.addEventListener('click', () => {
-    const scene = editor.getScene();
     const service = editor.getService();
-    if (!scene || !service) return;
-
-    const mesh = BABYLON.MeshBuilder.CreateTorus(`Torus_${Date.now().toString().slice(-4)}`, { diameter: 1.2, thickness: 0.35 }, scene);
-    mesh.position.set((Math.random() - 0.5) * 3, 0.6, (Math.random() - 0.5) * 3);
-    const mat = new BABYLON.StandardMaterial(`Mat_${mesh.name}`, scene);
-    mat.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random());
-    mesh.material = mat;
-    service.addMesh(mesh);
+    if (!service) return;
+    service.createPrimitive({
+      shape: 'Torus',
+      diameter: 1.3,
+      thickness: 0.35,
+      color: '#8b5cf6',
+      name: 'Torus'
+    });
   });
 
   // Color Swatches Handler
@@ -272,19 +241,19 @@ async function initHost() {
       const hex = (swatch as HTMLElement).dataset.color;
       if (!hex) return;
       const service = editor.getService();
-      const scene = editor.getScene();
       const selectedMesh = service?.selectedMesh;
-      if (!selectedMesh || !scene) {
+      if (!selectedMesh) {
         logEvent('Material Swatch', 'No mesh selected to apply color.', 'mesh');
         return;
       }
-      const color = BABYLON.Color3.FromHexString(hex);
-      if (selectedMesh.material && selectedMesh.material instanceof BABYLON.StandardMaterial) {
-        selectedMesh.material.diffuseColor = color;
-      } else {
-        const mat = new BABYLON.StandardMaterial(`Mat_${selectedMesh.name}_${Date.now()}`, scene);
-        mat.diffuseColor = color;
-        selectedMesh.material = mat;
+      const mat = selectedMesh.material as any;
+      if (mat) {
+        const [r, g, b] = hexToRgbNorm(hex);
+        if (mat.albedoColor) {
+          mat.albedoColor.set(r, g, b);
+        } else if (mat.diffuseColor) {
+          mat.diffuseColor.set(r, g, b);
+        }
       }
       logEvent('Material Changed', `Applied color ${hex} to '${selectedMesh.name}'`, 'mesh');
     });
@@ -299,7 +268,7 @@ async function initHost() {
 
   document.getElementById('toggleInspector')?.addEventListener('change', (e) => {
     const checked = (e.target as HTMLInputElement).checked;
-    const inspector = editor.querySelector('#rightSidebar') as HTMLElement | null;
+    const inspector = (editor.querySelector('#rightSidebar') || editor.querySelector('#stackpanelRightSidebar')) as HTMLElement | null;
     if (inspector) inspector.style.display = checked ? '' : 'none';
   });
 
@@ -311,4 +280,3 @@ async function initHost() {
 }
 
 initHost().catch(console.error);
-

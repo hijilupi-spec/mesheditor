@@ -18,7 +18,12 @@ export default defineConfig({
       }
     : {},
   optimizeDeps: {
-    include: ['@babylonjs/core', '@babylonjs/loaders', '@babylonjs/materials', '@babylonjs/serializers']
+    exclude: [
+      '@babylonjs/core',
+      '@babylonjs/loaders',
+      '@babylonjs/materials',
+      '@babylonjs/serializers',
+      'mesheditor'
+    ]
   }
 });
-

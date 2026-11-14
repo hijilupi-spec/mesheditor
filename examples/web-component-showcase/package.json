@@ -9,11 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "mesheditor": "^1.0.2",
-    "@babylonjs/core": "^9.29.0",
-    "@babylonjs/loaders": "^9.29.0",
-    "@babylonjs/materials": "^9.29.0",
-    "@babylonjs/serializers": "^9.29.0"
+    "mesheditor": "^1.0.2"
   },
   "devDependencies": {
     "typescript": "^5.4.5",
