@@ -21,7 +21,7 @@
       <a href="#" class="brand">
         <img src="app-icon.svg" alt="Mesh Editor Logo" class="brand-icon">
         <span>Mesh Editor</span>
-        <span class="brand-badge">v1.0</span>
+        <span class="brand-badge">v1.1</span>
       </a>
 
       <nav>
@@ -147,7 +147,7 @@
               <!-- Jumbotron Bottom Bar -->
               <div class="hero-carousel-bar">
                 <div class="hero-slide-info">
-                  <span class="hero-slide-index" id="heroSlideIndex">1 / 11</span>
+                  <span class="hero-slide-index" id="heroSlideIndex">1 / 12</span>
                   <div class="hero-slide-desc-wrap">
                     <span class="hero-slide-title" id="heroBarTitle">Ancient Fluted Pillar</span>
                     <span class="hero-slide-sub" id="heroBarSub">Procedural Fluted Column &amp; Marble PBR</span>
@@ -190,7 +190,7 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Co-create with the AI of your choice:</strong> Partner with local or cloud AI models (oMLX, Ollama, LM Studio, Gemini, Claude, GPT-4o) and delegate organic hero subtasks to Neural 3D Generators (TRELLIS 2, Hunyuan3D, Hi3D).</span>
+              <span><strong>Co-create with the AI of your choice:</strong> Partner with local or cloud AI models (oMLX, Ollama, LM Studio, Gemini, Claude, GPT-4o) across <strong>5 Surface Topology Archetypes</strong> (SDF clay with Catmull-Clark Sub-D, twist-free Parallel-Transport tapered sweeps, <code>standProud</code> shells), a <strong>6-Pass Image-to-Mesh</strong> workflow, and Neural 3D Generators (TRELLIS 2, Hunyuan3D, Hi3D).</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -226,7 +226,7 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Configure PBR &amp; per-facet materials:</strong> Assign realistic PBR materials with Albedo, Metallic, Roughness, Normal mapping, Emissive glow, and Alpha blending—or assign distinct materials, textures, and atlas tiles to individual facets via automatic <code>MultiMaterial</code> submeshes.</span>
+              <span><strong>Configure 4-Map De-Lit PBR &amp; per-facet materials:</strong> Synthesize coordinated <strong>4-Map PBR sets</strong> (De-Lit Albedo clamped to <code>[30, 240]</code>, Sobel Normal, ORM Roughness, Cavity AO) with <strong>29 Canonical Presets</strong> (Clearcoat, Sheen, Anisotropy, Subsurface Translucency) and double-sided rendering—or assign per-facet textures via automatic <code>MultiMaterial</code> submeshes.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -333,14 +333,14 @@
             <div class="card-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
             </div>
-            <h3 class="card-title">3D Vision &amp; Image-to-Mesh</h3>
+            <h3 class="card-title">6-Pass Vision &amp; Image-to-Mesh</h3>
             <p class="card-desc">
-              Feed the AI visual context. Toggle the <strong>+ 3D View</strong> switch to send an instantaneous snapshot of your active viewport, or attach 2D concept sketches and reference photographs for guided Image-to-Mesh reconstructions.
+              Toggle <strong>+ 3D View</strong> or attach reference art to trigger an <strong>Analysis-by-Synthesis 6-Pass Pipeline</strong>: detail inventory &amp; median RGB color sampling, <code>Y = 0</code> macro blockout, physical seam overlap, the <strong>Anti-Slab <code>distinctZ</code> rule</strong> for true 3D cross-sections, bevel catch-lights, and de-lit double-sided PBR calibration.
             </p>
             <div class="card-tags">
-              <span class="card-tag">Viewport Snapping</span>
-              <span class="card-tag">Image Reference</span>
-              <span class="card-tag">Visual Inspection</span>
+              <span class="card-tag">6-Pass Synthesis</span>
+              <span class="card-tag">Anti-Slab 3D Volume</span>
+              <span class="card-tag">Viewport &amp; Reference Vision</span>
             </div>
           </div>
 
@@ -351,12 +351,12 @@
             </div>
             <h3 class="card-title">Strict Geometric Poly Budgets</h3>
             <p class="card-desc">
-              Control the exact polygon count before generation begins. Set targets anywhere from <strong>200 low-poly primitives</strong> for mobile games up to <strong>1,000,000 polygons</strong> for cinematic assets, ensuring assets fit your game engine performance budget.
+              Control exact polygon targets from <strong>200 low-poly primitives</strong> up to <strong>1,000,000 triangles</strong>. Built-in <strong>Proportional Density Planning (<code>modeler_plan_model</code>)</strong> allocates <strong>50&ndash;65%</strong> of triangles to primary volumes, <strong>25&ndash;35%</strong> to secondary parts, and <strong>&lt; 10&ndash;15%</strong> to tertiary details.
             </p>
             <div class="card-tags">
-              <span class="card-tag">Min / Max Sliders</span>
-              <span class="card-tag">Preset Poly Chips</span>
-              <span class="card-tag">Game Ready</span>
+              <span class="card-tag">Proportional Density</span>
+              <span class="card-tag">modeler_plan_model</span>
+              <span class="card-tag">200 &ndash; 1M Triangles</span>
             </div>
           </div>
 
@@ -383,13 +383,13 @@
             </div>
             <h3 class="card-title">AI Texture Generator (Local &amp; Cloud)</h3>
             <p class="card-desc">
-              Synthesize seamless 2D PBR Albedo and Tangent-Space Normal Maps directly from natural language prompts. Connect to <strong>Draw Things</strong> (local Apple Silicon / Metal), <strong>Google Imagen 3 / Banana Pro</strong>, <strong>Pollinations.ai</strong> (free), <strong>OpenAI DALL-E</strong>, or <strong>Fal.ai</strong>, or use built-in procedural synthesis.
+              Coordinated <strong>4-Map PBR Synthesis</strong> (De-Lit <code>[30, 240]</code> Albedo, Sobel Tangent Normal, ORM Roughness variation, and Cavity AO) with <strong>29 Canonical Material Presets</strong> across <strong>Draw Things</strong> (local Apple Silicon / Metal), <strong>Google Imagen 3 / Banana Pro</strong>, <strong>Pollinations.ai</strong>, <strong>OpenAI DALL-E</strong>, <strong>Fal.ai</strong>, and offline procedural synthesis.
             </p>
             <div class="card-tags">
-              <span class="card-tag">Draw Things / SD WebUI</span>
-              <span class="card-tag">Google Imagen 3 / Banana</span>
-              <span class="card-tag">Tangent Normal Maps</span>
-              <span class="card-tag">Seamless Tiling</span>
+              <span class="card-tag">4-Map De-Lit PBR</span>
+              <span class="card-tag">29 Canonical Presets</span>
+              <span class="card-tag">Draw Things / Imagen 3</span>
+              <span class="card-tag">ORM &amp; Cavity AO</span>
             </div>
           </div>
 
@@ -554,7 +554,7 @@
           <span class="section-tag">AI Texture Generator &amp; PBR Engine</span>
           <h2 class="section-title">Local &amp; Cloud AI Texture Generation for 3D Meshes.</h2>
           <p class="section-desc">
-            Synthesize photorealistic, stylized, or hand-painted diffuse and normal map textures directly onto meshes.
+            Synthesize coordinated <strong>4-Map PBR texture sets</strong> (De-Lit Albedo, Tangent Normal, ORM Roughness, and Cavity AO) alongside <strong>29 Canonical PBR Material Presets</strong> with Clearcoat, Sheen, Anisotropy, and Subsurface Translucency.
             MeshEditor connects seamlessly to local generators like <strong>Draw Things</strong> (Metal / Apple Silicon) and <strong>SD WebUI / ComfyUI</strong>,
             as well as zero-config cloud backends like <strong>Pollinations.ai</strong>, <strong>Google Imagen 3 (Banana Pro)</strong>, <strong>OpenAI DALL-E 3</strong>, and <strong>Fal.ai</strong>.
           </p>
@@ -578,20 +578,20 @@
             </div>
           </div>
 
-          <!-- Card 2: Tangent Normal Maps & UV Tiling -->
+          <!-- Card 2: 4-Map De-Lit PBR & 29 Canonical Presets -->
           <div class="feature-card">
             <div class="card-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
             </div>
-            <h3 class="card-title">Tangent Normal Maps &amp; UV Tiling</h3>
+            <h3 class="card-title">4-Map De-Lit PBR &amp; 29 Canonical Presets</h3>
             <p class="card-desc">
-              High-frequency surface detail is automatically derived via Sobel gradient filtering to produce tangent-space normal maps directly from generated albedos. Adjust UV scaling, roughness, and metalness per mesh or submesh, or remap UV regions and orientation per individual facet.
+              Generated albedos are automatically <strong>de-lit and clamped to PBR-safe <code>[30, 240]</code> sRGB</strong> to prevent double shadows, paired with Sobel Tangent Normals, ORM Roughness variation, and Laplacian Cavity AO—plus <strong>29 canonical presets</strong> (<code>skin</code>, <code>velvet</code>, <code>fur</code>, <code>hair</code>, <code>leather</code>, <code>glazed_ceramic</code>, <code>candy_coat</code>, <code>brushed_steel</code>).
             </p>
             <div class="card-tags">
-              <span class="card-tag">Tangent Normal Maps</span>
-              <span class="card-tag">Sobel Height-to-Normal</span>
-              <span class="card-tag">UV Scale &amp; Per-Facet UVs</span>
-              <span class="card-tag">PBR Metallic-Roughness</span>
+              <span class="card-tag">De-Lit Albedo [30..240]</span>
+              <span class="card-tag">Normal + ORM + Cavity AO</span>
+              <span class="card-tag">Clearcoat / Sheen / Subsurface</span>
+              <span class="card-tag">29 Material Presets</span>
             </div>
           </div>
 
@@ -618,24 +618,24 @@
             <span class="section-tag">Autonomous AI Texture Synthesis</span>
             <h3 class="section-title" style="font-size: 28px;">AI Copilot Textures Meshes with Natural Language.</h3>
             <p class="section-desc" style="margin-bottom: 18px;">
-              The AI Agent is fully equipped with texture generation capabilities. When you prompt the agent to build or update textured meshes, it autonomously triggers the <code>modeler_generate_texture</code> tool.
+              The AI Agent is fully equipped with 4-map PBR generation capabilities. When you prompt the agent to build or update textured meshes, it autonomously triggers <code>modeler_generate_texture</code> or <code>modeler_create_material</code> with canonical presets.
             </p>
             <ul class="adapter-list" style="margin-bottom: 20px;">
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Intelligent Backend Routing (<code>auto</code>):</strong> The agent automatically selects the active local server (Draw Things or SD WebUI), configured cloud provider (Google Imagen 3, OpenAI, Fal), or instant free Pollinations.ai.</span>
+                <span><strong>Intelligent Backend Routing (<code>auto</code>):</strong> Automatically routes to your active local server (Draw Things or SD WebUI), configured cloud provider (Google Imagen 3, OpenAI, Fal), or free Pollinations.ai.</span>
               </li>
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Automated Tangent Normal Generation:</strong> The agent generates matching normal maps in one step, ensuring realistic PBR depth and micro-detail under dynamic lighting.</span>
+                <span><strong>Automatic Albedo De-Lighting &amp; 4-Map Synthesis:</strong> Strips baked lighting from AI images (clamped to PBR-safe <code>[30, 240]</code> sRGB) and synthesizes coordinated <strong>Albedo, Sobel Normal, ORM Roughness, and Cavity AO</strong> maps in one step.</span>
               </li>
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Mathematical Procedural Fallback:</strong> Even in offline air-gapped environments without any AI backend configured, the generator falls back seamlessly to procedural canvas pattern generation (checker, wood, marble, noise).</span>
+                <span><strong>29 Canonical PBR Presets &amp; Multi-Stop Palettes:</strong> Applies calibrated Clearcoat, energy-compensated Sheen, Anisotropy, and Subsurface Translucency (<code>skin</code>, <code>velvet</code>, <code>fur</code>, <code>hair</code>, <code>candy_coat</code>) with offline procedural 4-map fallback.</span>
               </li>
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Persistent Embedded Project Textures:</strong> Textures are embedded directly inside saved <code>.json</code> scene files and exported <code>.glb</code> assets with optimized resolution and deduplication.</span>
+                <span><strong>Mandatory Double-Sided PBR &amp; Deduplication:</strong> All AI materials enforce <code>backFaceCulling = false</code> and <code>twoSidedLighting = true</code> to prevent missing interior or thin faces, with embedded <code>.json</code> and <code>.glb</code> texture deduplication.</span>
               </li>
             </ul>
           </div>
@@ -647,19 +647,27 @@
                 <span class="dot dot-yellow"></span>
                 <span class="dot dot-green"></span>
               </div>
-              <span class="code-title">AI Texture Generation &bull; Copilot Tool</span>
+              <span class="code-title">AI 4-Map PBR &amp; Preset Synthesis &bull; Copilot Tools</span>
               <span style="font-size: 11px; color: var(--accent-hover);">Tool Execution</span>
             </div>
-            <pre class="code-body"><code><span class="code-cm">// AI Agent generates seamless weathered stone texture with normal map</span>
+            <pre class="code-body"><code><span class="code-cm">// 1. AI generates de-lit Albedo + Normal + ORM + Cavity AO</span>
 <span class="code-fn">modeler_generate_texture</span>({
-  prompt: <span class="code-str">'ancient weathered cobblestone wall, moss in crevices, seamless game texture, photorealistic'</span>,
+  prompt: <span class="code-str">'ancient weathered cobblestone wall, moss in crevices'</span>,
   applyToMesh: <span class="code-str">'Dungeon_Pillar_Base'</span>,
-  backend: <span class="code-str">'auto'</span>, <span class="code-cm">// Draw Things local | Imagen 3 | Pollinations</span>
-  useAI: <span class="code-kwd">true</span>,
-  generateNormalMap: <span class="code-kwd">true</span>,
-  normalStrength: <span class="code-num">1.5</span>,
-  uvScale: [<span class="code-num">2.0</span>, <span class="code-num">2.0</span>],
-  materialType: <span class="code-str">'pbr'</span>
+  backend: <span class="code-str">'auto'</span>, <span class="code-cm">// Draw Things | Imagen 3 | Pollinations</span>
+  materialPreset: <span class="code-str">'natural_stone'</span>,
+  palette: [<span class="code-str">'#595651'</span>, <span class="code-str">'#3f4a36'</span>, <span class="code-str">'#757068'</span>],
+  delight: <span class="code-kw">true</span>,
+  generateNormalMap: <span class="code-kw">true</span>,
+  uvScale: [<span class="code-num">2.0</span>, <span class="code-num">2.0</span>]
+});
+
+<span class="code-cm">// 2. Or apply a Canonical Preset with 4-map procedural PBR</span>
+<span class="code-fn">modeler_create_material</span>({
+  materialName: <span class="code-str">'RoyalVelvetMat'</span>,
+  materialPreset: <span class="code-str">'velvet'</span>, <span class="code-cm">// skin | fur | hair | candy_coat</span>
+  withProceduralMaps: <span class="code-kw">true</span>,
+  sheen: <span class="code-num">0.72</span>, clearcoat: <span class="code-num">0.0</span>, subsurfaceTranslucency: <span class="code-num">0.15</span>
 });</code></pre>
           </div>
         </div>
@@ -780,26 +788,26 @@
         <div class="plugin-section-grid">
           <div>
             <span class="section-tag">Automated AI Game Pipeline</span>
-            <h3 class="section-title" style="font-size: 28px;">Retopologize, Unwrap, Bake &amp; Rig via AI Skills.</h3>
+            <h3 class="section-title" style="font-size: 28px;">5 Topology Archetypes, 6-Pass Vision &amp; Game-Ready Pipeline.</h3>
             <p class="section-desc" style="margin-bottom: 18px;">
-              Built-in skills (<code>procedural-modeler</code>, <code>figure-sculptor</code>, and <code>mesh-updater</code>) instruct the AI Agent on how to chain retopology, UV unwrapping, texture baking, and skeletal rigging into a seamless game-ready workflow:
+              Built-in skills (<code>procedural-modeler</code>, <code>figure-sculptor</code>, <code>image-to-mesh</code>, and <code>mesh-updater</code>) guide the AI Agent from initial sculptural topology through retopology, UV unwrapping, 4-map PBR baking, and skeletal rigging:
             </p>
             <ul class="adapter-list" style="margin-bottom: 20px;">
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Shrinkwrap &amp; Quad-Flow Cage:</strong> Wraps low-poly topology onto high-poly sculpts while relaxing edge loops for clean joint articulation.</span>
+                <span><strong>5 Surface Topology Archetypes:</strong> Combines <code>continuous-sculpt</code> (SDF clay + Catmull-Clark <code>subdivide</code> + 3D <code>vertexPaintRegions</code>), <code>fiber-strand</code> (twist-free Parallel-Transport tapered sweeps with apex tip convergence), <code>conforming-shell</code> &amp; <code>surface-relief</code> (<code>standProud</code> clearance), and <code>assembled-solid</code> (manifold architecture &amp; beveled CSG2).</span>
               </li>
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Uniform Texel Density &amp; Packing:</strong> Prevents blurry armor next to crisp faces by normalizing every UV island to the exact same <code>px/m</code> density.</span>
+                <span><strong>6-Pass Image-to-Mesh &amp; Proportional Budgets:</strong> Plans density tiers with <code>modeler_plan_model</code>, enforces physical seam overlap, prevents flat 2.5D cutouts via the <strong>Anti-Slab <code>distinctZ</code> rule</strong>, and calibrates double-sided 4-map PBR materials.</span>
               </li>
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Raytraced Normal &amp; AO Projection:</strong> Automatically builds a smooth cage, bakes high-res surface relief, dilates UV borders, and assigns maps to the PBR material.</span>
+                <span><strong>Shrinkwrap Retopo &amp; Uniform <code>px/m</code> UVs:</strong> Wraps clean low-poly quad cages onto high-poly sculpts, marks smart seams, and packs islands to uniform Texel Density.</span>
               </li>
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Normalized 4-Bone Skinning:</strong> Binds vertices to a Humanoid or Quadruped rig with weights summing strictly to <code>1.0</code> for artifact-free engine deformations.</span>
+                <span><strong>Cage Normal/AO Baking &amp; 4-Bone Auto-Rigging:</strong> Projects high-res micro-relief via smooth Projection Cages and binds normalized 4-bone weights to Humanoid or Quadruped skeletons.</span>
               </li>
             </ul>
           </div>
@@ -814,30 +822,24 @@
               <span class="code-title">AI Game Asset Pipeline &bull; Tool Chain</span>
               <span style="font-size: 11px; color: var(--accent-hover);">Skill Execution</span>
             </div>
-            <pre class="code-body"><code><span class="code-cm">// 1. Generate &amp; Shrinkwrap Low-Poly Quad Cage onto High-Poly Sculpt</span>
-<span class="code-fn">modeler_retopologize_mesh</span>({
-  meshName: <span class="code-str">'Warrior_HighPoly'</span>, mode: <span class="code-str">'quad_cage'</span>,
-  rings: <span class="code-num">24</span>, segments: <span class="code-num">24</span>, surfaceOffset: <span class="code-num">0.002</span>, relaxIterations: <span class="code-num">3</span>
+            <pre class="code-body"><code><span class="code-cm">// 1. Continuous-Sculpt SDF Volume + Catmull-Clark Sub-D + Vertex Paint</span>
+<span class="code-fn">modeler_create_sdf_mesh</span>({
+  name: <span class="code-str">'Warrior_HighPoly'</span>, subdivide: <span class="code-num">1</span>, materialPreset: <span class="code-str">'skin'</span>,
+  symmetryX: <span class="code-kw">true</span>, rootTipGradient: { rootColor: <span class="code-str">'#8c4a32'</span>, tipColor: <span class="code-str">'#e2ad8d'</span> },
+  vertexPaintRegions: [{ shape: <span class="code-str">'ellipsoid'</span>, color: <span class="code-str">'#d46a6a'</span>, mirrorX: <span class="code-kw">true</span> }]
 });
 
-<span class="code-cm">// 2. Smart Seam Unwrap, 256 px/m Texel Density &amp; Island Packing</span>
-<span class="code-fn">modeler_uv_unwrap</span>({
-  meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, seamMode: <span class="code-str">'sharp_edges'</span>,
-  targetTexelDensity: <span class="code-num">256</span>, textureSize: <span class="code-num">1024</span>, packIslands: <span class="code-kw">true</span>
+<span class="code-cm">// 2. Fiber-Strand Sweep (Parallel Transport Framing + Apex Tip)</span>
+<span class="code-fn">modeler_create_tube</span>({
+  name: <span class="code-str">'Hero_Horn'</span>, smoothPath: <span class="code-kw">true</span>, materialPreset: <span class="code-str">'bone_horn'</span>,
+  stations: [{ x: <span class="code-num">0</span>, y: <span class="code-num">0</span>, z: <span class="code-num">0</span>, rx: <span class="code-num">0.12</span> }, { x: <span class="code-num">0.2</span>, y: <span class="code-num">0.4</span>, z: <span class="code-num">0.1</span>, rx: <span class="code-num">0</span>, rz: <span class="code-num">0</span> }]
 });
 
-<span class="code-cm">// 3. Bake High-to-Low-Poly Tangent Normal Map &amp; Ambient Occlusion</span>
-<span class="code-fn">modeler_bake_textures</span>({
-  lowPolyMeshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>,
-  highPolyMeshName: <span class="code-str">'Warrior_HighPoly'</span>,
-  cageOffset: <span class="code-num">0.05</span>, bakeNormals: <span class="code-kw">true</span>, bakeAO: <span class="code-kw">true</span>, applyToMaterial: <span class="code-kw">true</span>
-});
-
-<span class="code-cm">// 4. Auto-Rig 20-Bone Humanoid Skeleton &amp; Bind Normalized Skin Weights</span>
-<span class="code-fn">modeler_rig_and_weight</span>({
-  meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>,
-  action: <span class="code-str">'auto_rig'</span>, template: <span class="code-str">'humanoid'</span>, autoBindSkin: <span class="code-kw">true</span>
-});</code></pre>
+<span class="code-cm">// 3. Retopologize, Unwrap Uniform px/m UVs, Bake Maps &amp; Auto-Rig</span>
+<span class="code-fn">modeler_retopologize_mesh</span>({ meshName: <span class="code-str">'Warrior_HighPoly'</span>, mode: <span class="code-str">'quad_cage'</span>, relaxIterations: <span class="code-num">3</span> });
+<span class="code-fn">modeler_uv_unwrap</span>({ meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, targetTexelDensity: <span class="code-num">256</span>, packIslands: <span class="code-kw">true</span> });
+<span class="code-fn">modeler_bake_textures</span>({ lowPolyMeshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, highPolyMeshName: <span class="code-str">'Warrior_HighPoly'</span>, bakeNormals: <span class="code-kw">true</span>, bakeAO: <span class="code-kw">true</span> });
+<span class="code-fn">modeler_rig_and_weight</span>({ meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, action: <span class="code-str">'auto_rig'</span>, template: <span class="code-str">'humanoid'</span>, autoBindSkin: <span class="code-kw">true</span> });</code></pre>
           </div>
         </div>
       </div>
@@ -1125,7 +1127,7 @@
             </div>
             <h4 class="feature-box-title">AI Texture Generator &amp; PBR Materials</h4>
             <p class="feature-box-desc">
-              Generate AI textures locally (Draw Things, SD WebUI) or via cloud (Google Imagen 3, Pollinations.ai). Full PBR metallic-roughness, tangent normal maps, Poly Haven presets, and per-facet material/texture assignment via automatic <code>MultiMaterial</code> submeshes.
+              Generate 4-map de-lit PBR textures (Albedo, Tangent Normal, ORM Roughness, Cavity AO) locally (Draw Things, SD WebUI) or via cloud (Google Imagen 3, Pollinations.ai), backed by 29 canonical presets (Clearcoat, Sheen, Anisotropy, Subsurface) and per-facet <code>MultiMaterial</code> submeshes.
             </p>
           </div>
 
@@ -1324,20 +1326,20 @@
             <div class="roadmap-step-num">Milestone 02</div>
             <h3 class="roadmap-title">2. Better AI Models</h3>
             <p class="roadmap-desc">
-              You may notice that the AI generated models are not always perfect for every case and can be a bit rough, or error prone sometimes. We want to improve the generation process with better AI Skills and provide more iteration options in the future to create even nicer models.
+              Building on our 5 Surface Topology Archetypes, 6-Pass Image-to-Mesh workflow, and 4-Map Canonical PBR pipeline, we continue refining multi-turn visual self-correction and procedural asset libraries so AI-generated figures and props require even less manual cleanup.
             </p>
             <ul class="roadmap-items">
               <li>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span>Better organic model generation</span>
+                <span>Multi-angle visual verification &amp; self-correction loops</span>
               </li>
               <li>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span>Better character model generation</span>
+                <span>Richer SDF &amp; Parallel-Transport character assemblies</span>
               </li>
               <li>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span>Better texturing / colorization</span>
+                <span>Expanded de-lit 4-map PBR presets &amp; architectural kits</span>
               </li>
             </ul>
           </div>
