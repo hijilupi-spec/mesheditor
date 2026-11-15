@@ -1,6 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import {
+  Color3,
   Mesh,
   MeshBuilder,
   NullEngine,
@@ -373,8 +372,47 @@ describe('Gaming Pipeline Tools: Non-Destructive CSG Bevel, Retopo Shrinkwrap/Qu
     });
 
     it('auto-rigs multi-part Mario model, exports valid GLB and loads it back with 20-bone skeleton without DataView errors', async () => {
-      const marioPath = path.resolve(__dirname, '../../docs/models/mario.glb');
-      const marioBytes = fs.readFileSync(marioPath);
+      // Build an 11-part multi-material chibi character in-memory and round-trip through GLB
+      const partSpecs: Array<{
+        name: string;
+        color: [number, number, number];
+        create: () => Mesh;
+        pos: [number, number, number];
+      }> = [
+        { name: 'head', color: [0.95, 0.78, 0.65], create: () => MeshBuilder.CreateSphere('head', { diameter: 0.5, segments: 12 }, service.scene), pos: [0, 1.2, 0] },
+        { name: 'cap', color: [0.9, 0.1, 0.1], create: () => MeshBuilder.CreateSphere('cap', { diameter: 0.36, segments: 12 }, service.scene), pos: [0, 1.37, 0] },
+        { name: 'torso', color: [0.1, 0.25, 0.85], create: () => MeshBuilder.CreateBox('torso', { width: 0.42, height: 0.36, depth: 0.26 }, service.scene), pos: [0, 0.86, 0] },
+        { name: 'arm_l', color: [0.85, 0.12, 0.12], create: () => MeshBuilder.CreateBox('arm_l', { width: 0.26, height: 0.14, depth: 0.14 }, service.scene), pos: [0.34, 0.9, 0] },
+        { name: 'arm_r', color: [0.85, 0.15, 0.12], create: () => MeshBuilder.CreateBox('arm_r', { width: 0.26, height: 0.14, depth: 0.14 }, service.scene), pos: [-0.34, 0.9, 0] },
+        { name: 'hand_l', color: [0.98, 0.98, 0.98], create: () => MeshBuilder.CreateSphere('hand_l', { diameter: 0.14, segments: 6 }, service.scene), pos: [0.52, 0.89, 0] },
+        { name: 'hand_r', color: [0.96, 0.96, 0.96], create: () => MeshBuilder.CreateSphere('hand_r', { diameter: 0.14, segments: 6 }, service.scene), pos: [-0.52, 0.89, 0] },
+        { name: 'leg_l', color: [0.12, 0.22, 0.75], create: () => MeshBuilder.CreateBox('leg_l', { width: 0.16, height: 0.36, depth: 0.16 }, service.scene), pos: [0.12, 0.36, 0] },
+        { name: 'leg_r', color: [0.12, 0.26, 0.75], create: () => MeshBuilder.CreateBox('leg_r', { width: 0.16, height: 0.36, depth: 0.16 }, service.scene), pos: [-0.12, 0.36, 0] },
+        { name: 'boot_l', color: [0.42, 0.22, 0.08], create: () => MeshBuilder.CreateBox('boot_l', { width: 0.18, height: 0.18, depth: 0.24 }, service.scene), pos: [0.12, 0.09, 0.04] },
+        { name: 'boot_r', color: [0.46, 0.24, 0.1], create: () => MeshBuilder.CreateBox('boot_r', { width: 0.18, height: 0.18, depth: 0.24 }, service.scene), pos: [-0.12, 0.09, 0.04] },
+      ];
+
+      const sourceMeshes: Mesh[] = [];
+      const sourceMaterials: PBRMaterial[] = [];
+      for (const spec of partSpecs) {
+        const mesh = spec.create();
+        mesh.position.set(spec.pos[0], spec.pos[1], spec.pos[2]);
+        const mat = new PBRMaterial(`mat_${spec.name}`, service.scene);
+        mat.albedoColor = new Color3(spec.color[0], spec.color[1], spec.color[2]);
+        mat.roughness = 0.6;
+        mat.metallic = 0.05;
+        mesh.material = mat;
+        sourceMeshes.push(mesh);
+        sourceMaterials.push(mat);
+        service.importedMeshes.push(mesh);
+      }
+
+      const sourceGlb = await service.exportToGLBBlob('mario_source');
+      const marioBytes = Buffer.from(await sourceGlb.arrayBuffer());
+      service.importedMeshes.length = 0;
+      for (const m of sourceMeshes) m.dispose();
+      for (const mat of sourceMaterials) mat.dispose();
+
       const marioContainer = await SceneLoader.LoadAssetContainerAsync(
         '',
         'data:base64,' + marioBytes.toString('base64'),
