@@ -60,6 +60,7 @@ import {
   setFacetCornerUVs,
   transformFacetUVs,
 } from './geometry/facetSurfaceUtils';
+import { subdivideCatmullClarkMesh } from './geometry/organicGeometry';
 import { GridMaterial } from '@babylonjs/materials';
 import { GLTF2Export, OBJExport, RegisterEXT_texture_webp, STLExport } from '@babylonjs/serializers';
 import { DataWriter } from '@babylonjs/serializers/glTF/2.0/dataWriter';
@@ -288,6 +289,7 @@ export class MeshEditorService {
     this.textureBaker = new TextureBaker(this);
     this.weightPaintController = new WeightPaintController(this);
     this.aiTextureGenerator = new AITextureGenerator(this);
+    this.aiAgent.syncExternalImageGenerator();
     this.textMeshController = new TextMeshController(this);
     this.decalController = new DecalController(this);
     const defaultAtlas = this.textureAtlasManager.getAtlases()[0];
@@ -4611,61 +4613,24 @@ export class MeshEditorService {
       return;
     }
     this.selectMesh(mesh);
-    // Subdivide first
-    this.subdivideMesh(mesh);
 
-    // Laplacian vertex relaxation
-    const indices = Array.from(mesh.getIndices() || []);
-    const positions = Array.from(mesh.getVerticesData(VertexBuffer.PositionKind) || []);
-    const vertCount = positions.length / 3;
+    const clampedIterations = Math.min(3, Math.max(1, Math.round(iterations)));
+    const result = subdivideCatmullClarkMesh(mesh, clampedIterations, true);
 
-    // Build adjacency graph
-    const adjacency: Set<number>[] = Array.from({ length: vertCount }, () => new Set<number>());
-    for (let i = 0; i < indices.length; i += 3) {
-      const a = indices[i];
-      const b = indices[i + 1];
-      const c = indices[i + 2];
-      adjacency[a].add(b);
-      adjacency[a].add(c);
-      adjacency[b].add(a);
-      adjacency[b].add(c);
-      adjacency[c].add(a);
-      adjacency[c].add(b);
-    }
-
-    for (let iter = 0; iter < Math.min(iterations, 3); iter++) {
-      const smoothed = [...positions];
-      for (let v = 0; v < vertCount; v++) {
-        const neighbors = Array.from(adjacency[v]);
-        if (neighbors.length === 0) continue;
-        let avgX = 0;
-        let avgY = 0;
-        let avgZ = 0;
-        for (const n of neighbors) {
-          avgX += positions[n * 3];
-          avgY += positions[n * 3 + 1];
-          avgZ += positions[n * 3 + 2];
-        }
-        avgX /= neighbors.length;
-        avgY /= neighbors.length;
-        avgZ /= neighbors.length;
-
-        const factor = 0.4;
-        smoothed[v * 3] = positions[v * 3] * (1 - factor) + avgX * factor;
-        smoothed[v * 3 + 1] = positions[v * 3 + 1] * (1 - factor) + avgY * factor;
-        smoothed[v * 3 + 2] = positions[v * 3 + 2] * (1 - factor) + avgZ * factor;
+    if (this.selectedFaceId !== null) {
+      this.selectedFaceId = null;
+      if (this.facetHighlightMesh) {
+        this.facetHighlightMesh.dispose();
+        this.facetHighlightMesh = null;
       }
-      for (let i = 0; i < positions.length; i++) positions[i] = smoothed[i];
+      this.events.onFaceSelected?.(null);
     }
-
-    mesh.setVerticesData(VertexBuffer.PositionKind, positions);
-    const normals: number[] = [];
-    VertexData.ComputeNormals(positions, indices, normals);
-    mesh.setVerticesData(VertexBuffer.NormalKind, normals);
-    mesh.refreshBoundingInfo();
 
     this.events.onSceneModified?.();
-    this.events.onToast?.(`Applied Sub-D smooth subdivision to "${mesh.name}"!`, 'success');
+    this.events.onToast?.(
+      `Applied Catmull-Clark Sub-D smoothing (${clampedIterations}x, ${result.vertexCount} verts) to "${mesh.name}"!`,
+      'success'
+    );
   }
 
   public solidifyMeshOrFacet(thickness: number = 0.2, selectedOnly: boolean = false, targetMesh?: Mesh): void {

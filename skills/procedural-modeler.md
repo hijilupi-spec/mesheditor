@@ -118,36 +118,37 @@ If you are running in an agentic coding environment with a dedicated `generate_i
 
 When working offline or when mathematical procedural textures are preferred:
 
-1. **`modeler_generate_texture` (Procedural Mode)**:
-   Runs instantly and offline with mathematical synthesis:
+1. **`modeler_generate_texture` (Procedural & 4-Map PBR Mode)**:
+   Runs instantly and offline with multi-band mathematical synthesis (de-lit `[30, 240]` Albedo, Sobel Tangent Normal, ORM Roughness variation, Cavity AO) plus canonical PBR presets (`materialPreset`, `palette`):
    ```json
    {
      "tool": "modeler_generate_texture",
      "prompt": "Weathered dark dungeon cobblestone floor with mossy crevices",
      "style": "cobblestone",
+     "materialPreset": "cobblestone",
      "useAI": false,
      "size": 512,
      "applyToMesh": "DungeonWall"
    }
    ```
 
-2. **Built-in Procedural Textures (`proceduralTexture` in `modeler_create_material`)**:
-   Mesh Editor contains a built-in mathematical procedural texture generator that runs instantly and offline.
-   - **Supported Types**: `sand`, `tiles`, `grass`, `fabric`, `wood`, `stone`, `marble`, `brick`, `metal`, `checker`, `grid`, `noise`, `gradient`.
-   - **Parameters**: `primaryColor`, `secondaryColor`, `scale`, `uScale`, `vScale`.
+2. **Tasteful 4-Map PBR & Canonical Presets (`modeler_create_material`)**:
+   Mesh Editor includes 29 canonical PBR material presets (`skin`, `hair`, `fur`, `velvet`, `leather`, `bone_horn`, `foliage`, `bark`, `clay`, `glazed_ceramic`, `painted_metal`, `candy_coat`, `brushed_steel`, `cast_iron`, etc.), Babylon advanced channels (`clearcoat`, `clearcoatRoughness`, `sheen`, `sheenColor`, `sheenRoughness`, `anisotropy`, `anisotropyAngleDeg`, `subsurfaceTranslucency`, `subsurfaceTintColor`, `ior`), multi-stop `palette` color mixing, spatial `colorGradient`, and `withProceduralMaps: true`.
+   - **Supported Procedural Types**: `sand`, `tiles`, `grass`, `fabric`, `wood`, `stone`, `marble`, `brick`, `metal`, `checker`, `grid`, `noise`, `gradient`, `skin`, `leather`, `velvet`, `fur`, `hair`, `ceramic`, `foliage`, `bone`, `painted_metal`, `candy_coat`, `bark`, `carbon`, `scales`, `rust`.
+   - **Parameters**: `materialPreset`, `withProceduralMaps`, `palette`, `colorGradient`, `primaryColor`, `secondaryColor`, `accentColor`, `scale`, `uScale`, `vScale`, `clearcoat`, `sheen`, `anisotropy`, `subsurfaceTranslucency`.
    - **Example**:
      ```json
      {
-       "materialName": "DuneSandMat",
-       "roughness": 0.92,
-       "metallic": 0.0,
+       "materialName": "RoyalVelvetMat",
+       "materialPreset": "velvet",
+       "palette": ["#5e1828", "#7a2236", "#42101c"],
+       "withProceduralMaps": true,
+       "sheen": 0.72,
        "proceduralTexture": {
-         "type": "sand",
-         "primaryColor": "#c2b280",
-         "secondaryColor": "#9c8c5a",
-         "scale": 1.2,
-         "uScale": 4,
-         "vScale": 4
+         "type": "velvet",
+         "scale": 1.4,
+         "uScale": 3,
+         "vScale": 3
        }
      }
      ```
@@ -243,8 +244,8 @@ Normal mapping simulates fine geometric crevices, pores, grooves, bevels, and bu
    - `modeler_extrude_shape` extrudes a 2D profile along a 3D path.
 4. **Rotational Bodies (`modeler_create_lathe`)**:
    - Ideal for vases, chalices, pillar bases, bottles, chess pieces, domes, or lamp shades. Define profile in the XY plane (`x >= 0` radius, `y` height).
-5. **Metallic & filigree structures**:
-   - Use thin cylinders or `modeler_create_tube` for railings, frames, pipes, and cables. For realistic metal use `metallic: 0.8`, `roughness: 0.25`.
+5. **Tapered Elliptical Sweeps (`modeler_create_tube`) & Metallic Structures**:
+   - Use `modeler_create_tube` with `stations` (`{ x, y, z, rx, rz, twist }`), `radiusStart`/`radiusEnd` or `radii`, `ellipticalRatio`, `smoothPath: true` (Catmull-Rom + twist-free Parallel Transport Framing + single-vertex tip convergence when `rx=0, rz=0`), `rootTipGradient`, and `vertexPaintRegions` for horns, tentacles, limbs, vines, railings, pipes, and cables. For realistic metal use `materialPreset: "brushed_steel"` or `metallic: 0.85`, `roughness: 0.25`.
 
 ## Parametric Architecture, Beveled Hard-Surface & Organic SDF Tools
 
@@ -268,7 +269,7 @@ To avoid crude, wooden, or blocky results, prefer these high-level parametric to
 8. **Pitched, Hip, Mansard & Dome Roofs (`modeler_create_roof`)**:
    - Builds `"gable"`, `"hip"`, `"pyramid"`, `"shed"`, or `"dome"` roofs with real fascia slab thickness, eaves `overhang`, ridge cap beam, and triangular gable infill walls. Place at `position: { x: 0, y: wallHeight, z: 0 }`.
 9. **Seamless Organic Clay / Metaball Meshes (`modeler_create_sdf_mesh`)**:
-   - Evaluates analytical Signed Distance Fields (`sphere`, `ellipsoid`, `round_cone`, `capsule`, `box`, `torus`, `cylinder`) with polynomial smooth union (`blend: 0.04` to `0.12`), smooth subtraction (`op: "subtract"`), `symmetryX: true`, and smooth vertex color blending.
+   - Evaluates analytical Signed Distance Fields (`sphere`, `ellipsoid`, `round_cone`, `capsule`, `box`, `torus`, `cylinder`) with polynomial smooth union (`blend: 0.04` to `0.12`), smooth subtraction (`op: "subtract"`), `symmetryX: true`, quad-aware Catmull-Clark `subdivide: 1..2`, `standProud` surface clearance, `rootTipGradient`, `vertexPaintRegions` (`"axis_band"`, `"ellipsoid"`, `"tapered_capsule"`, `"sphere"`), and `materialPreset`.
 10. **Non-Destructive CSG & Bevel Modifier (`modeler_boolean_operation`)**:
    - Pass `nonDestructive: true` (default) to preserve a lossless base-mesh snapshot for later adjustments or reverts.
    - Pass `bevelWidth` (e.g. `0.02` to `0.06`), `bevelSegments` (`1` to `3`), `bevelAngleThreshold` (`30`), and `bevelProfile` (`"chamfer"` or `"fillet"`) to automatically round sharp boolean intersection edges.

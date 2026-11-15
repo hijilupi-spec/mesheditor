@@ -80,46 +80,35 @@ When asked to create stylized cartoon characters, mascots, dwarves, toons, or ic
 
 ---
 
-## 4. Soft Organic Contours vs. Rigid Mannequin (How to Avoid the "Holzig" / Wooden Look)
+## 4. Soft Organic Contours vs. Rigid Mannequin (How to Avoid the Wooden / Blocky Look)
 
-A common flaw when proceduralizing characters is the **"Wooden Mannequin" (Gliederpuppe) syndrome**: stacking primitive cylinders and sphere ball-joints. Even when vertex buffers are merged, harsh intersecting seams remain visible, making the character look like a rigid wooden toy.
+A common flaw when proceduralizing characters is the **"Wooden Mannequin" syndrome**: stacking primitive cylinders and sphere ball-joints. Even when vertex buffers are merged, harsh intersecting seams remain visible, making the character look like a rigid wooden toy.
 
-### The 4 Essential Rules for Soft, Continuous Organic Contours:
+### The 5 Surface Topology Archetypes & Essential Organic Contour Rules:
 
-1. **Continuous Spline Limbs (`MeshBuilder.CreateTube`)**:
-   - **NEVER** build organic limbs out of disjoint cylinders with sphere joints!
-   - Construct limbs as continuous, smoothly curved 3D paths using `MeshBuilder.CreateTube`.
-   - Use `radiusFunction: (index, distance) => number` to smoothly taper limbs from shoulder/hip through elbow/knee down to wrist/ankle.
-   - Example arm tube path:
-     ```javascript
-     const armPath = [
-       new Vector3(side * 0.18, 0.65, 0.02), // Shoulder
-       new Vector3(side * 0.32, 0.5, 0.07), // Curved elbow
-       new Vector3(side * 0.42, 0.35, 0.13), // Wrist
-     ];
-     MeshBuilder.CreateTube(
-       "arm",
-       {
-         path: armPath,
-         radiusFunction: (i) => (i === 0 ? 0.07 : i === 1 ? 0.055 : 0.045),
-         tessellation: 16,
-         cap: Mesh.CAP_ALL,
-       },
-       scene,
-     );
-     ```
+Choose the matching topology archetype for every region rather than approximating everything with boxes and cylinders:
+- **`continuous-sculpt`**: Unified organic volumes (torsos, heads, limbs, creature bodies) via `modeler_create_sdf_mesh` + `subdivide: 1..2` (Catmull-Clark smoothing) + `vertexPaintRegions` (`"axis_band"`, `"ellipsoid"`, `"tapered_capsule"`, `"sphere"` with `mirrorX`) + `rootTipGradient`.
+- **`assembled-solid`**: Rigid props, buckles, hilts, plates with crisp beveled chamfers (`modeler_create_rounded_box` or `bevelWidth` CSG).
+- **`conforming-shell`**: Armor pauldrons, collars, tunics, cuffs, and boots hugging underlying anatomical contours.
+- **`surface-relief`**: Brow ridges, tendons, raised seams, and surface ornaments using `standProud` radial clearance so details remain proud above base anatomy without z-fighting.
+- **`fiber-strand`**: Horns, claws, tails, tentacles, vines, braids, and hair locks using `modeler_create_tube` with `stations` (`{ x, y, z, rx, rz, twist }`), `radiusStart`/`radiusEnd`, `ellipticalRatio`, `smoothPath: true` (Parallel Transport Framing — zero 180° Frenet twist flips), and `rx=0, rz=0` tip convergence.
+
+1. **Tapered Elliptical Sweeps (`modeler_create_tube`)**:
+   - **NEVER** build organic limbs, horns, or tails out of disjoint cylinders with sphere joints!
+   - Construct limbs, horns, tails, and tentacles with `modeler_create_tube` using `stations` (`{ x, y, z, rx, rz, twist }`) or `path` + `radii` / `radiusStart` / `radiusEnd` + `ellipticalRatio` + `smoothPath: true`.
+   - Parallel Transport Framing eliminates 180° ribbon/normal flips along 3D curves, while converging `rx` and `rz` to `0` at the final station closes horns, fangs, and foliage tips cleanly at a single apex vertex.
+   - Add `rootTipGradient` (`rootColor` -> `tipColor`) to shade roots darker into clean light tips on horns, hair strands, feathers, and tentacles.
 
 2. **Unified Organic Volumes (Pear / Teardrop Silhouette)**:
-   - For cute, stylized, or creature models (such as Chibi characters, imps, demons, and mascots), unite the head and potbelly into **one continuous pear-shaped volume** (e.g. `MeshBuilder.CreateSphere` with non-uniform scaling `(1.08, 1.25, 0.98)` or a smooth capsule).
+   - For cute, stylized, or creature models (such as Chibi characters, imps, demons, and mascots), unite the head and potbelly into **one continuous pear-shaped SDF volume** (`modeler_create_sdf_mesh` with smooth polynomial `blend` + `subdivide: 1`).
    - Eliminating the separate neck cylinder immediately removes the robotic look.
 
-3. **Subdivision Surface (Sub-D) Smoothing (`modeler_subd_smooth`)**:
-   - When joining components or box-modeling cages, apply `modeler_subd_smooth` with `iterations: 1` or `2`.
-   - Sub-D midpoint subdivision combined with Laplacian vertex relaxation automatically welds and fillets sharp intersection creases into soft, organic skin transitions.
+3. **Quad-Aware Catmull-Clark Subdivision (`modeler_subd_smooth` / SDF `subdivide`)**:
+   - Apply `modeler_subd_smooth` (`iterations: 1..2`) or pass `subdivide: 1..2` directly to `modeler_create_sdf_mesh` to smoothly subdivide triangles (pairing adjacent triangles into quads when appropriate) across welded spatial topology while preserving UV seams and MultiMaterial slots—without shrinking organic silhouettes.
 
-4. **Satin Specular PBR Shading**:
-   - High roughness ($\ge 0.8$) flattens lighting and turns models into chalky, unappealing clay.
-   - Soft organic skin requires **PBR roughness between $0.35$ and $0.45$** with subtle metallic ($0.0 - 0.05$). The resulting soft specular glint accentuates the smooth curvature of the silhouette.
+4. **Canonical PBR Materials & Subsurface / Sheen / Clearcoat Shading**:
+   - High roughness ($\ge 0.8$) with flat solid albedo turns models into chalky, unappealing clay.
+   - Use `modeler_create_material` with `materialPreset` (`skin`, `fur`, `velvet`, `leather`, `bone_horn`, `hair`, `glazed_ceramic`, `clay`), `palette` multi-stop color mixing, and `withProceduralMaps: true` (4-map de-lit Albedo clamped to `[30, 240]`, Sobel Normal, ORM Roughness variation, Cavity AO) with subtle Babylon `clearCoat`, `sheen` (energy-compensated), `anisotropy`, and `subSurface` translucency.
 
 ---
 
@@ -257,6 +246,7 @@ When building or updating figures, combine these built-in tools:
    - **Option A — Smooth Organic SDF Clay (`modeler_create_sdf_mesh`)**:
      - Best for seamless, watertight organic torsos, heads, creatures, muscles, and stylized characters without hard primitive seams.
      - Combine `ellipsoid`, `sphere`, `round_cone` (tapered capsules from `start` to `end` with `radius` and `endRadius`), and `box` (with `rounding`) using `blend: 0.04` to `0.12` and `symmetryX: true`. Use `op: "subtract"` to carve eye sockets or mouth cavities.
+     - Pass `subdivide: 1` or `2` (Catmull-Clark smoothing), `standProud` for raised surface features, `rootTipGradient` for axial color transitions, `vertexPaintRegions` for symmetric markings/blush/gloves, and `materialPreset: "skin"` (or `"fur"`, `"bone_horn"`, `"clay"`).
    - **Option B — Anatomical Base Mesh (`modeler_spawn_base_mesh`)**:
      - `type: "chibi"` (`style: "organic"`): 3.5-head cartoon blockout in T-Pose with pre-assigned PBR materials.
      - `type: "creature"`: Stylized organic creature / demon base mesh.
@@ -294,7 +284,9 @@ When building or updating figures, combine these built-in tools:
 6. **Step 6: Skeleton Rigging, Skinning & Weight Painting (`modeler_rig_and_weight`)**:
    - Call `modeler_rig_and_weight` with `action: "auto_rig"`, `template: "humanoid"` (20-bone hierarchy), `"quadruped"` (11-bone hierarchy), or `"spine"` (5-bone chain), and `autoBindSkin: true` to bind normalized 4-bone skin weights (`matricesIndices` & `matricesWeights`) ready for Unreal, Unity, and glTF export.
    - Fine-tune joint deformation zones using `action: "paint_weights"` (`boneName`, `mode: "add" | "subtract" | "smooth" | "replace"`, `strokes`, `symmetryX: true`) and verify deformations with `action: "pose_bone"` (`pitchDeg`, `yawDeg`, `rollDeg`).
-7. **Step 7: PBR Material & Normal Maps**:
-   - Call `modeler_create_material` with PBR skin/clay parameters:
-     - Skin / Clay: `albedoColor: "#d9b38c"`, `roughness: 0.65`, `metallic: 0.0`.
-     - Normal maps: Use `normalMapUrl`, `modeler_bake_textures`, or procedural surface relief with `bumpLevel: 1.2` to retain fine wrinkles and skin pores without polygon overhead.
+7. **Step 7: Canonical PBR Materials, 4-Map Micro-Relief & Normal Maps**:
+   - Call `modeler_create_material` with `materialPreset` and `withProceduralMaps: true` (synthesizes coordinated 4-map PBR channels: de-lit `[30, 240]` Albedo, Sobel Normal, ORM Roughness variation, and Cavity AO):
+     - Skin / Clay: `materialPreset: "skin"` (`subsurfaceTranslucency`, `clearcoat`, `albedoColor: "#d9b38c"`), or `materialPreset: "clay"`.
+     - Velvet / Cloth / Fur: `materialPreset: "velvet"` or `"fur"` (energy-compensated `sheen`).
+     - Hair / Brushed Metal: `materialPreset: "hair"` or `"brushed_steel"` (directional `anisotropy`).
+     - Normal maps: Use `normalMapUrl`, `modeler_bake_textures`, or `withProceduralMaps: true` with `bumpLevel: 1.0..1.4` to retain fine wrinkles, pores, and surface variation without polygon overhead.

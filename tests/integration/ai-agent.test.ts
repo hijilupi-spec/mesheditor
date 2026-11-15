@@ -1,3 +1,7 @@
+import * as fs from 'fs';
+import { createRequire } from 'module';
+import * as os from 'os';
+import * as path from 'path';
 import { NullEngine } from '@babylonjs/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BUILT_IN_AGENT_SKILLS, discoverSkills, parseSkillMarkdown } from '../../src/builtInSkills';
@@ -861,6 +865,166 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       container.remove();
     });
 
+    it('persists AI Agent skill selections across reloadSkills, fetchSkillsFromApi, and new app instances', async () => {
+      localStorage.clear();
+      const container1 = document.createElement('div');
+      document.body.appendChild(container1);
+      const engine1 = new NullEngine();
+      const app1 = new MeshEditorApp({ container: container1, engine: engine1 });
+
+      // Open AI Agent Settings
+      const btnToggle1 = container1.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
+      btnToggle1.click();
+
+      const voxelCheckbox = container1.querySelector(
+        '#aiSkillsList input[type="checkbox"][data-skill-id="voxel-painter"]'
+      ) as HTMLInputElement;
+      const sculptorCheckbox = container1.querySelector(
+        '#aiSkillsList input[type="checkbox"][data-skill-id="figure-sculptor"]'
+      ) as HTMLInputElement;
+      expect(voxelCheckbox).not.toBeNull();
+      expect(sculptorCheckbox).not.toBeNull();
+      expect(voxelCheckbox.checked).toBe(true);
+
+      // Toggle voxel-painter off via change event and figure-sculptor off before Save
+      voxelCheckbox.checked = false;
+      voxelCheckbox.dispatchEvent(new Event('change'));
+      sculptorCheckbox.checked = false;
+
+      const btnSave = container1.querySelector('#btnSaveAISettings') as HTMLButtonElement;
+      btnSave.click();
+
+      const savedConfig = JSON.parse(localStorage.getItem('mesheditor_ai_agent_config') || '{}');
+      expect(savedConfig.skillStates?.['voxel-painter']).toBe(false);
+      expect(savedConfig.skillStates?.['figure-sculptor']).toBe(false);
+
+      app1.dispose();
+      engine1.dispose();
+      container1.remove();
+
+      // Create a fresh app instance and mock /api/skills returning enabled: true defaults
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => [
+          {
+            id: 'voxel-painter',
+            name: 'Voxel & Block Modeler',
+            description: 'Voxel skill',
+            instructions: 'Build voxels',
+            enabled: true,
+          },
+          {
+            id: 'figure-sculptor',
+            name: 'Figure Sculptor & Game Retopology',
+            description: 'Sculpt skill',
+            instructions: 'Sculpt meshes',
+            enabled: true,
+          },
+        ],
+      }) as any;
+
+      try {
+        const container2 = document.createElement('div');
+        document.body.appendChild(container2);
+        const engine2 = new NullEngine();
+        const app2 = new MeshEditorApp({ container: container2, engine: engine2 });
+
+        await app2.service.aiAgent.fetchSkillsFromApi();
+        app2.service.aiAgent.reloadSkills();
+
+        const btnToggle2 = container2.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
+        btnToggle2.click();
+
+        const restoredVoxel = container2.querySelector(
+          '#aiSkillsList input[type="checkbox"][data-skill-id="voxel-painter"]'
+        ) as HTMLInputElement;
+        const restoredSculptor = container2.querySelector(
+          '#aiSkillsList input[type="checkbox"][data-skill-id="figure-sculptor"]'
+        ) as HTMLInputElement;
+        const restoredModeler = container2.querySelector(
+          '#aiSkillsList input[type="checkbox"][data-skill-id="procedural-modeler"]'
+        ) as HTMLInputElement;
+
+        expect(restoredVoxel.checked).toBe(false);
+        expect(restoredSculptor.checked).toBe(false);
+        expect(restoredModeler.checked).toBe(true);
+        expect(app2.service.aiAgent.getSkills().find((s) => s.id === 'voxel-painter')?.enabled).toBe(false);
+        expect(app2.service.aiAgent.getSkills().find((s) => s.id === 'figure-sculptor')?.enabled).toBe(false);
+
+        app2.dispose();
+        engine2.dispose();
+        container2.remove();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('persists and restores external image generator selection and credentials in AI Agent Settings', async () => {
+      localStorage.clear();
+      const container1 = document.createElement('div');
+      document.body.appendChild(container1);
+      const engine1 = new NullEngine();
+      const app1 = new MeshEditorApp({ container: container1, engine: engine1 });
+
+      const btnToggle1 = container1.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
+      btnToggle1.click();
+
+      const backendSelect1 = container1.querySelector('#aiImageGenBackendSelect') as HTMLSelectElement;
+      const modelInput1 = container1.querySelector('#aiImageGenModel') as HTMLInputElement;
+      const urlInput1 = container1.querySelector('#aiImageGenUrl') as HTMLInputElement;
+      const keyInput1 = container1.querySelector('#aiImageGenKey') as HTMLInputElement;
+      const enabledCheck1 = container1.querySelector('#aiImageGenEnabled') as HTMLInputElement;
+
+      expect(backendSelect1).not.toBeNull();
+      expect(enabledCheck1.checked).toBe(true);
+
+      // Switch external image generator to OpenAI and set custom fields
+      backendSelect1.value = 'openai';
+      backendSelect1.dispatchEvent(new Event('change'));
+      modelInput1.value = 'gpt-image-1';
+      urlInput1.value = 'https://api.openai.com/v1/images/generations';
+      keyInput1.value = 'sk-persisted-img-key';
+
+      const btnSave1 = container1.querySelector('#btnSaveAISettings') as HTMLButtonElement;
+      btnSave1.click();
+
+      expect(app1.service.aiAgent.getConfig().imageGeneratorActiveBackend).toBe('openai');
+      expect(app1.service.externalImageGenerator.getActiveBackend()).toBe('openai');
+
+      app1.dispose();
+      engine1.dispose();
+      container1.remove();
+
+      // Reload into a brand new MeshEditorApp instance and verify UI + service state
+      const container2 = document.createElement('div');
+      document.body.appendChild(container2);
+      const engine2 = new NullEngine();
+      const app2 = new MeshEditorApp({ container: container2, engine: engine2 });
+
+      const btnToggle2 = container2.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
+      btnToggle2.click();
+
+      const backendSelect2 = container2.querySelector('#aiImageGenBackendSelect') as HTMLSelectElement;
+      const modelInput2 = container2.querySelector('#aiImageGenModel') as HTMLInputElement;
+      const urlInput2 = container2.querySelector('#aiImageGenUrl') as HTMLInputElement;
+      const keyInput2 = container2.querySelector('#aiImageGenKey') as HTMLInputElement;
+      const enabledCheck2 = container2.querySelector('#aiImageGenEnabled') as HTMLInputElement;
+
+      expect(enabledCheck2.checked).toBe(true);
+      expect(backendSelect2.value).toBe('openai');
+      expect(modelInput2.value).toBe('gpt-image-1');
+      expect(urlInput2.value).toBe('https://api.openai.com/v1/images/generations');
+      expect(keyInput2.value).toBe('sk-persisted-img-key');
+      expect(app2.service.externalImageGenerator.getActiveBackend()).toBe('openai');
+      expect(app2.service.externalImageGenerator.getProvider('openai').apiKey).toBe('sk-persisted-img-key');
+
+      app2.dispose();
+      engine2.dispose();
+      container2.remove();
+    });
+
     it('enforces size-adaptive tessellation (eye has fewer polygons than torso) and supports clay sphere sculpting', async () => {
       // 1. Verify figure-sculptor skill allows clay sphere sculpting when requested
       const sysPrompt = service.aiAgent.buildSystemPrompt();
@@ -1409,6 +1573,101 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(calledUrls).toContain('http://localhost:42003/call/image_to_3d');
       expect(calledUrls).toContain('http://localhost:42003/call/extract_glb');
       expect(calledUrls).toContain('http://localhost:42003/file=/tmp/gradio/12345/sample.obj');
+    });
+  });
+
+  describe('10. Antigravity CLI Bridge Protocol & Babylon Script Execution', () => {
+    it('frames virtual modeler_* JSON tool calls in Antigravity Bridge prompts and recovers temp .js Babylon scripts', () => {
+      const require = createRequire(import.meta.url);
+      const bridge = require('../../scripts/antigravity-bridge.js');
+
+      const { prompt } = bridge.buildAgyPromptFromOpenAI(
+        [{ role: 'user', content: 'Build a treasure chest' }],
+        [
+          {
+            type: 'function',
+            function: {
+              name: 'modeler_execute_babylon_code',
+              description: 'Executes custom Babylon.js code',
+              parameters: { type: 'object', properties: { code: { type: 'string' } } },
+            },
+          },
+        ]
+      );
+
+      expect(prompt).toContain('CRITICAL ANTIGRAVITY BRIDGE PROTOCOL');
+      expect(prompt).toContain('VIRTUAL AVAILABLE 3D MODELER TOOLS');
+      expect(prompt).toContain('modeler_execute_babylon_code');
+
+      // Test recovery of a temporary .js script written to os.tmpdir()
+      const tmpFile = path.join(os.tmpdir(), `agy_test_chest_${Date.now()}.js`);
+      const scriptCode = `const lid = MeshBuilder.CreateBox('chest_lid', { size: 1 }, scene); registerMesh(lid);`;
+      fs.writeFileSync(tmpFile, scriptCode, 'utf8');
+
+      try {
+        const recovered = bridge.parseStructuredAgentResponse(
+          `I saved the Babylon.js script to ${tmpFile} for you.`
+        );
+        expect(recovered.toolCalls.length).toBe(1);
+        expect(recovered.toolCalls[0].name).toBe('modeler_execute_babylon_code');
+        expect(recovered.toolCalls[0].arguments.code).toContain('MeshBuilder.CreateBox');
+      } finally {
+        if (fs.existsSync(tmpFile)) {
+          fs.unlinkSync(tmpFile);
+        }
+      }
+    });
+
+    it('executes Babylon scripts using GlowLayer, DynamicTexture, ExtrudePolygon with earcut, and CreateRibbon', async () => {
+      const code = `
+        const gl = new BABYLON.GlowLayer('test_glow', scene);
+        const dt = new DynamicTexture('test_dyn_tex', { width: 64, height: 64 }, scene, false);
+        const ctx = dt.getContext();
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillRect(0, 0, 64, 64);
+        dt.update();
+
+        const poly = MeshBuilder.ExtrudePolygon('test_extrude_poly', {
+          shape: [new Vector3(-0.5, 0, -0.5), new Vector3(0.5, 0, -0.5), new Vector3(0, 0, 0.5)],
+          depth: 0.4
+        }, scene);
+        registerMesh(poly);
+
+        const ribbon = MeshBuilder.CreateRibbon('test_ribbon', {
+          pathArray: [
+            [new Vector3(-1, 0, 0), new Vector3(1, 0, 0)],
+            [new Vector3(-1, 1, 0), new Vector3(1, 1, 0)]
+          ]
+        }, scene);
+        registerMesh(ribbon);
+        gl.dispose();
+      `;
+
+      const res = JSON.parse(
+        await service.aiAgent.executeToolCall('modeler_execute_babylon_code', {
+          description: 'Test GlowLayer, DynamicTexture, ExtrudePolygon, and CreateRibbon',
+          code,
+        })
+      );
+
+      expect(res.status).toBe('ok');
+      expect(res.createdMeshes).toContain('test_extrude_poly');
+      expect(res.createdMeshes).toContain('test_ribbon');
+    });
+
+    it('extracts 429 quota errors when agy returns status ERROR with empty response', () => {
+      const require = createRequire(import.meta.url);
+      const bridge = require('../../scripts/antigravity-bridge.js');
+
+      const stdout = JSON.stringify({
+        status: 'ERROR',
+        response: '',
+        error: 'RESOURCE_EXHAUSTED: {"error_code": 429, "message": "Individual quota reached for model"}',
+      });
+
+      const details = bridge.extractBridgeErrorDetails(new Error(''), stdout, '', 0);
+      expect(details.statusCode).toBe(429);
+      expect(details.message).toContain('Individual quota reached');
     });
   });
 });

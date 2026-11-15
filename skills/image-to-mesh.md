@@ -143,12 +143,12 @@ Before generating geometry or code, perform a structured visual audit of the ref
 
 ### Pass 6: PBR Material Calibration & De-Lighting
 
-1. **The De-Lighting Rule**:
+1. **The De-Lighting Rule & PBR-Safe Albedo Clamping (`[30, 240]`)**:
    - Reference photos contain **pre-baked shadows, ambient occlusion, and flash reflections**.
    - If you copy shaded photo colors directly into the albedo, the 3D model will render with conflicting "double shadows" when illuminated in the scene.
-   - **Neutralize the albedo**: Extract the base unshaded hue. Let the 3D engine's physical lights and ambient occlusion handle illumination dynamically.
-2. **Physically-Based Roughness & Metallic Calibration**:
-   - Never leave models with uniform default roughness. Apply calibrated PBR values:
+   - **Neutralize the albedo**: `modeler_generate_texture` automatically de-lits image textures (removing directional low-frequency shading while preserving local pigment contrast) and clamps PBR albedo channels safely to `[30, 240]` sRGB (never blown-out `#ffffff` or crushed `#000000` black), while generating matching Sobel tangent-space Normal, ORM Roughness variation, and Laplacian Cavity AO maps.
+2. **Canonical PBR Presets & Micro-Surface Calibration**:
+   - Never leave models with uniform flat roughness. Apply `materialPreset` (`skin`, `hair`, `fur`, `velvet`, `leather`, `bone_horn`, `foliage`, `bark`, `clay`, `glazed_ceramic`, `painted_metal`, `candy_coat`, `brushed_steel`, `cast_iron`) in `modeler_create_material` / `modeler_generate_texture`, or tune `clearcoat`, `sheen`, `anisotropy`, `subsurfaceTranslucency`, `palette`, and `withProceduralMaps: true`:
 
 | Material Type | Albedo Hue / Base | Roughness | Metallic | Notes |
 | :--- | :--- | :--- | :--- | :--- |
@@ -190,12 +190,12 @@ Before generating geometry or code, perform a structured visual audit of the ref
   - Stairs: `modeler_create_stairs` (`"straight"` or `"spiral"` with beveled treads and handrails).
 
 ### C. Organic Figures & Characters
-- Cross-reference `skills/figure-sculptor.md` for full human/creature anatomical proportions.
-- **Cartoon / Chibi Canon (3.5 – 4 Heads)**:
-  - For mascots, toons, and stylized heroes (e.g. Mario-style characters): spawn `modeler_spawn_base_mesh` (`type: "chibi"`, `style: "organic"`).
-  - Limbs must be continuous curved tubes (`MeshBuilder.CreateTube`) rather than segmented robotic sphere-joint cylinders.
-- **Organic Pear Volume**: Unite head and potbelly into a continuous soft volume.
-- **Sub-D Smoothing (`modeler_subd_smooth`)**: Apply 1–2 iterations of subdivision smoothing to low-poly blockouts to eliminate hard faceted seams.
+- Cross-reference `skills/figure-sculptor.md` for full human/creature anatomical proportions and the **5 Surface Topology Archetypes** (`continuous-sculpt`, `assembled-solid`, `conforming-shell`, `surface-relief`, `fiber-strand`).
+- **Tapered Elliptical Sweeps (`fiber-strand`)**:
+  - For limbs, horns, tails, tentacles, and tendrils, prefer `modeler_create_tube` with `stations` (`{ x, y, z, rx, rz, twist }`), `radiusStart`/`radiusEnd`, `ellipticalRatio`, `smoothPath: true` (Catmull-Rom + Parallel Transport Frames with single-vertex tip convergence when `rx=0, rz=0`), and `rootTipGradient`.
+- **Smooth Organic SDF Clay (`continuous-sculpt`)**:
+  - Use `modeler_create_sdf_mesh` with `subdivide: 1..2` (Catmull-Clark smoothing), `standProud` surface clearance, `vertexPaintRegions` (`"axis_band"`, `"ellipsoid"`, `"tapered_capsule"`, `"sphere"` with `mirrorX`), and `rootTipGradient`.
+- **Sub-D Smoothing (`modeler_subd_smooth`)**: Apply 1–2 iterations of quad-aware Catmull-Clark subdivision smoothing to low-poly blockouts to eliminate hard faceted seams while preserving silhouette volume.
 
 ---
 

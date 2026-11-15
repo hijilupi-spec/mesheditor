@@ -1,3 +1,4 @@
+import * as BABYLON_CORE from '@babylonjs/core';
 import {
   Color3,
   Color4,
@@ -21,6 +22,89 @@ import * as earcutModule from 'earcut';
 const earcut: any = (earcutModule as any).default || earcutModule;
 import { AbstractTool } from '../AbstractTool';
 import { ToolExecutionContext } from '../ToolExecutionContext';
+
+function createFallback2DContext(): Record<string, any> {
+  const noop = () => {};
+  const gradStub = () => ({ addColorStop: noop });
+  return {
+    fillStyle: '#000000',
+    strokeStyle: '#000000',
+    lineWidth: 1,
+    font: '10px sans-serif',
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    textAlign: 'left',
+    textBaseline: 'alphabetic',
+    fillRect: noop,
+    clearRect: noop,
+    strokeRect: noop,
+    beginPath: noop,
+    closePath: noop,
+    moveTo: noop,
+    lineTo: noop,
+    arc: noop,
+    arcTo: noop,
+    ellipse: noop,
+    rect: noop,
+    quadraticCurveTo: noop,
+    bezierCurveTo: noop,
+    fill: noop,
+    stroke: noop,
+    clip: noop,
+    save: noop,
+    restore: noop,
+    translate: noop,
+    rotate: noop,
+    scale: noop,
+    transform: noop,
+    setTransform: noop,
+    resetTransform: noop,
+    setLineDash: noop,
+    getLineDash: () => [],
+    fillText: noop,
+    strokeText: noop,
+    measureText: (text: string) => ({ width: String(text || '').length * 6 }),
+    createLinearGradient: gradStub,
+    createRadialGradient: gradStub,
+    createConicGradient: gradStub,
+    createPattern: () => null,
+    drawImage: noop,
+    createImageData: (w: number, h: number) => ({
+      width: w,
+      height: h,
+      data: new Uint8ClampedArray(Math.max(1, w * h * 4)),
+    }),
+    getImageData: (_x: number, _y: number, w: number, h: number) => ({
+      width: w,
+      height: h,
+      data: new Uint8ClampedArray(Math.max(1, w * h * 4)),
+    }),
+    putImageData: noop,
+  };
+}
+
+/**
+ * DynamicTexture wrapper that preserves native CanvasRenderingContext2D in browsers
+ * while providing a safe no-op 2D context fallback in headless jsdom/NullEngine runs.
+ */
+class SafeDynamicTexture extends DynamicTexture {
+  private _fallbackCtx: any = null;
+
+  public override getContext(): any {
+    const ctx = super.getContext();
+    if (ctx) return ctx;
+    if (!this._fallbackCtx) {
+      this._fallbackCtx = createFallback2DContext();
+      (this as any)._context = this._fallbackCtx;
+    }
+    return this._fallbackCtx;
+  }
+
+  public override update(invertY?: boolean, premulAlpha?: boolean, allowGPUOptimization?: boolean): void {
+    if (this._fallbackCtx) return;
+    super.update(invertY, premulAlpha, allowGPUOptimization);
+  }
+}
 
 export class ExecuteBabylonCodeTool extends AbstractTool {
   public readonly name = 'modeler_execute_babylon_code';
@@ -94,22 +178,8 @@ export class ExecuteBabylonCodeTool extends AbstractTool {
     };
 
     const BABYLON_NS = {
-      MeshBuilder,
-      Mesh,
-      Vector3,
-      Color3,
-      Color4,
-      Quaternion,
-      Matrix,
-      PBRMaterial,
-      StandardMaterial,
-      MultiMaterial,
-      Texture,
-      DynamicTexture,
-      VertexData,
-      VertexBuffer,
-      CSG,
-      CSG2,
+      ...BABYLON_CORE,
+      DynamicTexture: SafeDynamicTexture,
     };
 
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -157,7 +227,7 @@ export class ExecuteBabylonCodeTool extends AbstractTool {
       StandardMaterial,
       MultiMaterial,
       Texture,
-      DynamicTexture,
+      SafeDynamicTexture,
       VertexData,
       VertexBuffer,
       CSG,

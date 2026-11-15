@@ -425,6 +425,7 @@ export class MeshEditorApp {
   private speechRecognition: any = null;
   private isRecordingSpeech: boolean = false;
   private speechInitialPrompt: string = '';
+  private syncAIAgentImageGenUI: (() => void) | null = null;
 
   // GUI parameter proxy objects
   private meshParams = {
@@ -2617,12 +2618,6 @@ export class MeshEditorApp {
 
     btnClose?.addEventListener('click', () => this.closeExportDialog());
     btnCancel?.addEventListener('click', () => this.closeExportDialog());
-
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        this.closeExportDialog();
-      }
-    });
 
     formatCards.forEach((card) => {
       card.addEventListener('click', () => {
@@ -5459,6 +5454,7 @@ export class MeshEditorApp {
     if (willOpen) {
       this.service.aiAgent.reloadSkills();
       this.renderAISkills();
+      this.syncAIAgentImageGenUI?.();
       settingsPanel.style.display = 'flex';
       if (agentBody) agentBody.style.display = 'none';
       btnSettingsToggle?.classList.add('active');
@@ -5857,18 +5853,29 @@ export class MeshEditorApp {
 
     const syncImageGenUI = () => {
       const imgGenService = this.service.externalImageGenerator;
-      const isEnabled = this.service.aiAgent.config.imageGeneratorEnabled ?? true;
+      const cfg = this.service.aiAgent.getConfig();
+      const isEnabled = cfg.imageGeneratorEnabled ?? true;
       const currentActive = imgGenService.getActiveBackend();
-      const targetBackend = (imgGenBackendEl?.value || (currentActive !== 'procedural' ? currentActive : 'pollinations')) as any;
-      const provider = imgGenService.getProvider(targetBackend);
+      const savedBackend = cfg.imageGeneratorActiveBackend;
+      const targetBackend = (
+        savedBackend && savedBackend !== 'procedural'
+          ? savedBackend
+          : currentActive && currentActive !== 'procedural'
+            ? currentActive
+            : 'pollinations'
+      ) as any;
+      const provider =
+        cfg.imageGeneratorProviders?.[targetBackend as keyof typeof cfg.imageGeneratorProviders] ||
+        imgGenService.getProvider(targetBackend);
 
       if (imgGenEnableEl) imgGenEnableEl.checked = isEnabled;
       if (imgGenBodyEl) imgGenBodyEl.style.display = isEnabled ? 'flex' : 'none';
       if (imgGenBackendEl) imgGenBackendEl.value = targetBackend;
-      if (imgGenModelEl) imgGenModelEl.value = provider.modelId || '';
-      if (imgGenUrlEl) imgGenUrlEl.value = provider.endpointUrl || '';
-      if (imgGenKeyEl) imgGenKeyEl.value = provider.apiKey || '';
+      if (imgGenModelEl) imgGenModelEl.value = provider?.modelId || '';
+      if (imgGenUrlEl) imgGenUrlEl.value = provider?.endpointUrl || '';
+      if (imgGenKeyEl) imgGenKeyEl.value = provider?.apiKey || '';
     };
+    this.syncAIAgentImageGenUI = syncImageGenUI;
 
     const saveImageGenFromDOM = () => {
       const isEnabled = !!imgGenEnableEl?.checked;
@@ -6013,6 +6020,18 @@ export class MeshEditorApp {
 
       saveImageGenFromDOM();
 
+      const skillStates: Record<string, boolean> = {
+        ...(this.service.aiAgent.getConfig().skillStates || {}),
+      };
+      if (skillsList) {
+        skillsList.querySelectorAll<HTMLInputElement>('input[type="checkbox"][data-skill-id]').forEach((cb) => {
+          const skillId = cb.getAttribute('data-skill-id');
+          if (skillId) {
+            skillStates[skillId] = !!cb.checked;
+          }
+        });
+      }
+
       this.service.aiAgent.saveConfig({
         baseUrl: endpointInput?.value.trim() || 'https://api.openai.com/v1',
         apiKey: apiKeyInput?.value.trim() || '',
@@ -6023,6 +6042,7 @@ export class MeshEditorApp {
         createNormalMaps: createNorm,
         visualCritique: visCritique,
         neural3DProviders: readNeuralProvidersFromDOM(),
+        skillStates,
       });
       updateEndpointBadge();
       if (settingsStatus) settingsStatus.textContent = 'Saved ✓';
@@ -9130,7 +9150,16 @@ export class MeshEditorApp {
     backendSelect?.addEventListener('change', () => {
       const selected = (backendSelect.value || 'procedural') as any;
       imgGenService.setActiveBackend(selected);
+      if (selected === 'procedural') {
+        this.service.aiAgent.saveConfig({ imageGeneratorEnabled: false });
+      } else {
+        this.service.aiAgent.saveConfig({
+          imageGeneratorEnabled: true,
+          imageGeneratorActiveBackend: selected,
+        });
+      }
       syncTextureBackendUI();
+      this.syncAIAgentImageGenUI?.();
     });
 
     btnToggleConfig?.addEventListener('click', () => {
@@ -9157,6 +9186,10 @@ export class MeshEditorApp {
       if (promptEnhanceCheck) {
         imgGenService.setPromptEnhance(promptEnhanceCheck.checked);
       }
+      this.service.aiAgent.saveConfig({
+        imageGeneratorProviders: imgGenService.getProviders(),
+      });
+      this.syncAIAgentImageGenUI?.();
     };
 
     endpointUrlInput?.addEventListener('change', saveBackendConfigFromDOM);

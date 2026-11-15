@@ -94,6 +94,7 @@ export const DEFAULT_AI_AGENT_CONFIG: AIAgentEndpointConfig = {
   imageGeneratorEnabled: true,
   imageGeneratorActiveBackend: 'pollinations',
   imageGeneratorProviders: createDefaultImageGeneratorProviders(),
+  skillStates: {},
 };
 
 export interface EndpointPreset {
@@ -183,6 +184,7 @@ export class AIAgentService {
   private currentRequestImages: string[] = [];
   private currentRequestSignal?: AbortSignal;
   private currentRequestOnStatus?: (statusText: string) => void;
+  public hasSavedImageGeneratorConfig: boolean = false;
 
   constructor(
     service: MeshEditorService,
@@ -194,6 +196,13 @@ export class AIAgentService {
     this.skills = discoverSkills();
     this.toolRegistry = createDefaultToolRegistry();
     const saved = this.loadSavedConfig();
+    if (
+      initialConfig?.imageGeneratorActiveBackend !== undefined ||
+      initialConfig?.imageGeneratorEnabled !== undefined ||
+      initialConfig?.imageGeneratorProviders !== undefined
+    ) {
+      this.hasSavedImageGeneratorConfig = true;
+    }
     this.config = {
       ...DEFAULT_AI_AGENT_CONFIG,
       ...saved,
@@ -201,7 +210,51 @@ export class AIAgentService {
       neural3DProviders: normalizeNeural3DProviders(
         initialConfig?.neural3DProviders || saved.neural3DProviders || DEFAULT_AI_AGENT_CONFIG.neural3DProviders
       ),
+      imageGeneratorProviders: normalizeImageGeneratorProviders(
+        initialConfig?.imageGeneratorProviders ||
+          saved.imageGeneratorProviders ||
+          DEFAULT_AI_AGENT_CONFIG.imageGeneratorProviders
+      ),
+      skillStates: {
+        ...(saved.skillStates || {}),
+        ...(initialConfig?.skillStates || {}),
+      },
     };
+    this.applySavedSkillStates();
+  }
+
+  private applySavedSkillStates(): void {
+    const states = this.config?.skillStates;
+    if (!states || typeof states !== 'object') return;
+    for (const skill of this.skills) {
+      if (typeof states[skill.id] === 'boolean') {
+        skill.enabled = states[skill.id];
+      }
+    }
+  }
+
+  public syncExternalImageGenerator(): void {
+    if (!this.service?.externalImageGenerator) return;
+    if (this.hasSavedImageGeneratorConfig) {
+      const providers = normalizeImageGeneratorProviders(this.config.imageGeneratorProviders);
+      for (const [id, prov] of Object.entries(providers)) {
+        this.service.externalImageGenerator.updateProvider(id as any, prov);
+      }
+      const isEnabled = this.config.imageGeneratorEnabled ?? true;
+      const activeBackend = this.config.imageGeneratorActiveBackend || 'pollinations';
+      this.service.externalImageGenerator.setActiveBackend(
+        isEnabled && activeBackend !== 'procedural' ? (activeBackend as any) : 'procedural'
+      );
+    } else {
+      const extActive = this.service.externalImageGenerator.getActiveBackend();
+      if (extActive !== 'procedural') {
+        this.config.imageGeneratorEnabled = true;
+        this.config.imageGeneratorActiveBackend = extActive;
+        this.config.imageGeneratorProviders = normalizeImageGeneratorProviders(
+          this.service.externalImageGenerator.getProviders()
+        );
+      }
+    }
   }
 
   /**
@@ -277,6 +330,13 @@ export class AIAgentService {
       const raw = localStorage.getItem(AI_AGENT_STORAGE_KEY);
       if (!raw) return {};
       const parsed = JSON.parse(raw);
+      if (
+        parsed.imageGeneratorActiveBackend !== undefined ||
+        parsed.imageGeneratorEnabled !== undefined ||
+        parsed.imageGeneratorProviders !== undefined
+      ) {
+        this.hasSavedImageGeneratorConfig = true;
+      }
       const baseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl : DEFAULT_AI_AGENT_CONFIG.baseUrl;
       const rawModel = typeof parsed.model === 'string' ? parsed.model : DEFAULT_AI_AGENT_CONFIG.model;
       return {
@@ -305,6 +365,8 @@ export class AIAgentService {
         imageGeneratorActiveBackend:
           parsed.imageGeneratorActiveBackend || DEFAULT_AI_AGENT_CONFIG.imageGeneratorActiveBackend,
         imageGeneratorProviders: normalizeImageGeneratorProviders(parsed.imageGeneratorProviders),
+        skillStates:
+          parsed.skillStates && typeof parsed.skillStates === 'object' ? { ...parsed.skillStates } : {},
       };
     } catch {
       return {};
@@ -312,6 +374,14 @@ export class AIAgentService {
   }
 
   public saveConfig(newConfig: Partial<AIAgentEndpointConfig>): AIAgentEndpointConfig {
+    if (
+      newConfig.imageGeneratorActiveBackend !== undefined ||
+      newConfig.imageGeneratorEnabled !== undefined ||
+      newConfig.imageGeneratorProviders !== undefined
+    ) {
+      this.hasSavedImageGeneratorConfig = true;
+    }
+
     const mergedBaseUrl = newConfig.baseUrl !== undefined ? newConfig.baseUrl : this.config.baseUrl;
     const mergedModel =
       newConfig.model !== undefined
@@ -332,6 +402,11 @@ export class AIAgentService {
         })
       : normalizeImageGeneratorProviders(this.config.imageGeneratorProviders);
 
+    const mergedSkillStates: Record<string, boolean> = {
+      ...(this.config.skillStates || {}),
+      ...(newConfig.skillStates || {}),
+    };
+
     this.config = {
       ...this.config,
       ...newConfig,
@@ -339,7 +414,12 @@ export class AIAgentService {
       model: mergedModel,
       neural3DProviders: mergedProviders,
       imageGeneratorProviders: mergedImageProviders,
+      skillStates: mergedSkillStates,
     };
+
+    if (newConfig.skillStates) {
+      this.applySavedSkillStates();
+    }
 
     // Keep externalImageGenerator service synchronized with active backend if specified
     if (this.service?.externalImageGenerator) {
@@ -377,6 +457,8 @@ export class AIAgentService {
     return {
       ...this.config,
       neural3DProviders: normalizeNeural3DProviders(this.config.neural3DProviders),
+      imageGeneratorProviders: normalizeImageGeneratorProviders(this.config.imageGeneratorProviders),
+      skillStates: { ...(this.config.skillStates || {}) },
     };
   }
 
@@ -426,6 +508,12 @@ export class AIAgentService {
     if (skill) {
       skill.enabled = enabled;
     }
+    this.saveConfig({
+      skillStates: {
+        ...(this.config.skillStates || {}),
+        [skillId]: enabled,
+      },
+    });
   }
 
   /**
@@ -454,12 +542,20 @@ export class AIAgentService {
    */
   public reloadSkills(): AIAgentSkillDefinition[] {
     const existingStates = new Map<string, boolean>();
+    const savedStates = this.config?.skillStates || {};
+    for (const [id, enabled] of Object.entries(savedStates)) {
+      if (typeof enabled === 'boolean') {
+        existingStates.set(id, enabled);
+      }
+    }
     for (const s of this.skills) {
       existingStates.set(s.id, s.enabled);
     }
     const freshSkills = discoverSkills();
     for (const fresh of freshSkills) {
-      if (existingStates.has(fresh.id)) {
+      if (typeof savedStates[fresh.id] === 'boolean') {
+        fresh.enabled = savedStates[fresh.id];
+      } else if (existingStates.has(fresh.id)) {
         fresh.enabled = existingStates.get(fresh.id)!;
       }
     }
@@ -478,9 +574,17 @@ export class AIAgentService {
       if (!res.ok) return this.skills;
       const data = await res.json();
       if (Array.isArray(data)) {
+        const savedStates = this.config?.skillStates || {};
         for (const item of data) {
           if (item && item.id && item.instructions) {
-            this.registerSkill(item);
+            const existing = this.skills.find((s) => s.id === item.id);
+            const enabled =
+              typeof savedStates[item.id] === 'boolean'
+                ? savedStates[item.id]
+                : existing
+                  ? existing.enabled
+                  : item.enabled !== false;
+            this.registerSkill({ ...item, enabled });
           }
         }
       }
@@ -889,14 +993,14 @@ export class AIAgentService {
     const createNormalMaps = this.config.createNormalMaps !== false && createTextures;
 
     const normalMapRule = createNormalMaps
-      ? ` Normal maps are ENABLED: use \`normalMapUrl\` / \`bumpTextureUrl\` or automatic procedural normal mapping in \`modeler_create_material\` (with \`bumpLevel\`, \`invertNormalMapY\` for DirectX/OpenGL, or \`useParallax\`) to add realistic tactile depth and surface micro-relief.`
+      ? ` Normal maps are ENABLED: use \`normalMapUrl\` / \`bumpTextureUrl\`, \`modeler_generate_texture\` (automatic 4-map de-lit Albedo + Sobel Normal + ORM + Cavity AO), or \`withProceduralMaps: true\` in \`modeler_create_material\` (with \`bumpLevel\`, \`invertNormalMapY\`, or \`useParallax\`) to add realistic tactile depth and surface micro-relief.`
       : ` Normal maps are DISABLED by the user: do not apply bump or normal maps.`;
 
     const textureRule = createTextures
-      ? `3. **Colors, Textures & Materials (Textures ENABLED)**:
-   - For primary visible surfaces (e.g. walls, floors, columns, stairs, roofs, armor, props), call \`modeler_generate_texture\` (with a descriptive \`prompt\` like \`"Weathered fluted white marble"\`, \`"Aged terracotta roof tiles"\`, \`"Ancient ashlar stone wall"\`, \`"Polished dark oak wood"\`, \`useAI: true\`, and \`applyToMesh\`) so high-resolution AI textures and normal maps are synthesized and bound to the meshes!
-   - You can also pass \`texturePrompt\` directly to architectural tools (\`modeler_create_column\`, \`modeler_create_wall\`, \`modeler_create_roof\`, \`modeler_create_stairs\`) or use \`proceduralTexture\` in \`modeler_create_material\`.
-   - Never leave the entire model in flat solid untextured colors when Textures is enabled!${normalMapRule}`
+      ? `3. **Colors, Textures & Tasteful 4-Map PBR Materials (Textures ENABLED)**:
+   - For primary visible surfaces (e.g. walls, floors, columns, skins, cloth, leather, foilage, wood, props), call \`modeler_generate_texture\` (with a descriptive \`prompt\`, \`style\`, optional \`materialPreset\`, \`palette\`, and \`applyToMesh\`) OR \`modeler_create_material\` with \`materialPreset\` (\`skin\`, \`velvet\`, \`leather\`, \`fur\`, \`hair\`, \`bone_horn\`, \`glazed_ceramic\`, \`painted_metal\`, \`candy_coat\`, \`brushed_steel\`, \`oak_wood\`, \`sandstone\`, etc.) and \`withProceduralMaps: true\` so a coordinated 4-map PBR set (PBR-safe de-lit Albedo clamped to \`[30, 240]\`, Sobel Normal, ORM Roughness variation, Cavity AO) plus Babylon \`clearcoat\`, \`sheen\`, \`anisotropy\`, and \`subsurfaceTranslucency\` is bound cleanly!
+   - You can also pass \`texturePrompt\` directly to architectural tools (\`modeler_create_column\`, \`modeler_create_wall\`, \`modeler_create_roof\`, \`modeler_create_stairs\`), or \`palette\` + \`colorGradient\` + \`proceduralTexture\` in \`modeler_create_material\`.
+   - Never leave the entire model in flat solid untextured colors or blown-out white (\`> 240\`) / pure black (\`< 30\`) albedo when Textures is enabled!${normalMapRule}`
       : `3. **Colors & Materials (Textures DISABLED)**: Texturing is turned OFF by the user. Do NOT generate or apply procedural or image textures (\`proceduralTexture\` / \`textureUrl\`). Use ONLY solid PBR colors (\`color\` / \`albedoColor\`, \`roughness\`, \`metallic\`).`;
 
     const enabledNeural = this.getEnabledNeural3DProviders();
@@ -930,10 +1034,15 @@ ${sceneStateJson}
 1. **Actively call the provided tools** to create or modify geometry in the scene! Never reply with text alone when the user requests a 3D model or modification.
 2. **Descriptive Naming**: Give every created mesh and material a meaningful name (e.g., \`"stone_pillar_base"\`, \`"gear_wheel"\`, \`"oak_wood_mat"\`).
 ${textureRule}
-4. **Right Tool for the Job (Avoid Wooden / Blocky Results)**:
-   - **Organic, Characters, Creatures & Smooth Clay**: Use \`modeler_create_sdf_mesh\` (smooth polynomial union/subtraction of spheres, ellipsoids, tapered round_cones, and capsules with \`symmetryX: true\`) for seamless, watertight organic bodies, busts, and limbs, OR \`modeler_spawn_base_mesh\` + \`modeler_sculpt_mesh\`.
+4. **Right Tool for the Job & 5 Surface Topology Archetypes (Avoid Wooden / Blocky Results)**:
+   - **5 Surface Topology Archetypes**:
+     1. \`continuous-sculpt\`: Organic characters, creatures, smooth clay volumes -> \`modeler_create_sdf_mesh\` (smooth polynomial union/subtraction + \`subdivide: 1..2\` Catmull-Clark smoothing + \`vertexPaintRegions\` / \`rootTipGradient\`, \`symmetryX: true\`) OR \`modeler_spawn_base_mesh\` + \`modeler_sculpt_mesh\`.
+     2. \`assembled-solid\`: Hard-surface machinery, furniture, buildings -> \`modeler_create_wall\`, \`modeler_create_arch\`, \`modeler_create_column\`, \`modeler_create_molding\`, \`modeler_create_stairs\`, \`modeler_create_roof\`, \`modeler_create_rounded_box\`, and \`modeler_boolean_operation\` with \`bevelWidth\`.
+     3. \`conforming-shell\`: Armor plates, collars, cuffs, boots, capes -> snug parametric extrusions/sweeps or retopologized shells with \`subdivide\`.
+     4. \`surface-relief\`: Raised emblems, belts, knuckles, ridges -> \`modeler_create_sdf_mesh\` with \`standProud\` clearance or \`modeler_decal\`.
+     5. \`fiber-strand\`: Horns, tentacles, tails, claws, branches, hair locks -> \`modeler_create_tube\` with \`stations\` (\`x, y, z, rx, rz, twist\`), \`radiusStart\`/\`radiusEnd\` or \`radii\`, \`ellipticalRatio\`, \`smoothPath: true\` (twist-free Parallel Transport Framing + single-vertex tip convergence when \`rx/rz -> 0\`), and \`rootTipGradient\`.
    - **Explicit Clay Sphere Requests**: If the user explicitly asks to sculpt or model from a clay sphere, ALWAYS honor the request! Call \`modeler_spawn_base_mesh\` with \`type: "sculpt_sphere"\` and shape it using \`modeler_sculpt_mesh\` (using \`"grab"\`, \`"clay"\`, \`"inflate"\`, \`"pinch"\`, \`"flatten"\`, \`"smooth"\` with \`from\`/\`to\` paths) and/or \`modeler_create_sdf_mesh\`.
-   - **Architecture & Hard-Surface**: Prefer high-level architectural tools (\`modeler_create_wall\` with window/door \`openings\`, \`modeler_create_arch\`, \`modeler_create_column\`, \`modeler_create_molding\`, \`modeler_create_stairs\`, \`modeler_create_roof\`, and \`modeler_create_rounded_box\` for beveled masonry/furniture) instead of raw un-beveled boxes.
+   - **Sub-D Smoothing**: Call \`modeler_subd_smooth\` for quad-aware Catmull-Clark subdivision smoothing without shrinking volumes.
    - **Game Asset Pipeline (Bevel CSG, Retopology, UV Unwrap, Baking & Rigging)**: Use \`modeler_boolean_operation\` (with \`nonDestructive: true\` and \`bevelWidth\` / \`bevelProfile\`), \`modeler_retopologize_mesh\` (\`mode: "decimate" | "shrinkwrap" | "quad_cage" | "quad_strip"\`), \`modeler_uv_unwrap\` (Smart Seams, uniform Texel Density \`px/m\`, and 2D Island Bin-Packing), \`modeler_bake_textures\` (High-to-Low-Poly Tangent-Space Normal & AO baking with smooth Projection Cage), and \`modeler_rig_and_weight\` (\`humanoid\`/\`quadruped\`/\`spine\` Auto-Rigging, normalized 4-bone skin weights, Weight Painting, and Joint Pose testing).
    - **AI Texture Generation, 3D Text & Surface Decals**:
      - Use \`modeler_generate_texture\` to synthesize custom seamless 2D PBR textures and normal maps from a natural language \`prompt\` (e.g., cobblestone, brick, wood planks, sci-fi panels, rust, volcanic lava, marble, glowing runes, dragon scales, moss, or alpha decals) and apply them to meshes.
@@ -1133,11 +1242,15 @@ ${textureRule}
 
     if (calls.length > 0) return calls;
 
-    // 2. Check for ```javascript / ```ts / ```babylon code blocks that use MeshBuilder
+    // 2. Check for ```javascript / ```js / ```ts / ```babylon code blocks that construct Babylon meshes/materials
     const codeFenceRegex = /```(?:javascript|js|typescript|ts|babylon)\s*([\s\S]*?)```/gi;
     while ((match = codeFenceRegex.exec(content)) !== null) {
       const code = match[1].trim();
-      if (code.includes('MeshBuilder.') || code.includes('CSG') || code.includes('new Mesh')) {
+      if (
+        /\b(?:MeshBuilder\.|new\s+(?:BABYLON\.)?(?:PBRMaterial|StandardMaterial|Mesh)|registerMesh\s*\(|ExtrudePolygon|CreateRibbon|CSG2?\b)/.test(
+          code
+        )
+      ) {
         calls.push({
           name: 'modeler_execute_babylon_code',
           arguments: {

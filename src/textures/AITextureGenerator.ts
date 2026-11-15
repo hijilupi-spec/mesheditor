@@ -5,7 +5,15 @@ import {
   Texture,
 } from '@babylonjs/core';
 import type { MeshEditorService } from '../MeshEditorService';
-import { generateNormalMapFromCanvas } from '../tools/textureUtils';
+import {
+  applyCanonicalPbrPreset,
+  clampAlbedoByte,
+  extractPbrMapsFromCanvas,
+  FALLBACK_1X1_PNG,
+  generateNormalMapFromCanvas,
+  generatePbrTextureSet,
+  ProceduralTextureType,
+} from '../tools/textureUtils';
 import { ImageGeneratorBackendId } from '../types';
 import { ExternalImageGeneratorService } from './ExternalImageGeneratorService';
 
@@ -24,7 +32,18 @@ export type TextureStylePreset =
   | 'fabric'
   | 'scales'
   | 'runes'
-  | 'decal';
+  | 'decal'
+  | 'skin'
+  | 'leather'
+  | 'velvet'
+  | 'fur'
+  | 'hair'
+  | 'ceramic'
+  | 'foliage'
+  | 'bone'
+  | 'painted_metal'
+  | 'candy_coat'
+  | 'bark';
 
 export interface AITextureGenerationOptions {
   prompt: string;
@@ -38,8 +57,13 @@ export interface AITextureGenerationOptions {
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
+  palette?: string[];
   roughness?: number;
+  roughnessVariation?: number;
   metallic?: number;
+  aoStrength?: number;
+  materialPreset?: string;
+  delight?: boolean;
   uvScale?: number;
   embedInScene?: boolean;
   applyToMesh?: string;
@@ -59,15 +83,21 @@ export interface GeneratedTextureItem {
   seamless: boolean;
   albedoDataUrl: string;
   normalDataUrl?: string;
+  ormDataUrl?: string;
+  aoDataUrl?: string;
+  roughnessDataUrl?: string;
   roughness: number;
   metallic: number;
   normalStrength: number;
+  materialPreset?: string;
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
   createdAt: number;
   embeddedAlbedoName?: string;
   embeddedNormalName?: string;
+  embeddedOrmName?: string;
+  embeddedAoName?: string;
   generatorBackend?: string;
   isAI?: boolean;
 }
@@ -83,6 +113,7 @@ interface ResolvedTextureRecipe {
   roughness: number;
   metallic: number;
   normalStrength: number;
+  materialPreset?: string;
   scale: number;
   seed: number;
   hasAlpha: boolean;
@@ -232,13 +263,19 @@ export class AITextureGenerator {
         const normalStrength = typeof options.normalStrength === 'number' ? options.normalStrength : 2.2;
         const cleanBaseName = this.sanitizeName(options.name || this.deriveNameFromPrompt(prompt, 'stone'));
         const uniqueName = `${cleanBaseName}_${this.counter++}`;
+        const resolvedStyle = (options.style && options.style !== 'auto' ? options.style : 'stone') as Exclude<TextureStylePreset, 'auto'>;
+        const isDecal = resolvedStyle === 'decal';
 
-        // Compute normal map from the generated AI image canvas
+        // Compute de-lit albedo + Normal + ORM + Cavity AO maps when AI image decodes in browser
+        let finalAlbedoDataUrl = genResult.dataUrl;
         let normalDataUrl: string | undefined;
+        let ormDataUrl: string | undefined;
+        let aoDataUrl: string | undefined;
+        let roughnessDataUrl: string | undefined;
         let actualWidth = size;
         let actualHeight = size;
 
-        if (generateNormal && typeof document !== 'undefined') {
+        if ((generateNormal || options.delight !== false) && typeof document !== 'undefined') {
           try {
             const img = new Image();
             img.crossOrigin = 'anonymous';
@@ -262,7 +299,26 @@ export class AITextureGenerator {
             const ctx = canvas.getContext('2d');
             if (ctx) {
               ctx.drawImage(img, 0, 0);
-              normalDataUrl = this.renderNormalMap(canvas, normalStrength);
+              if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                const maps = extractPbrMapsFromCanvas(canvas, {
+                  delight: !isDecal && options.delight !== false,
+                  delightStrength: 0.72,
+                  baseRoughness: options.roughness ?? 0.68,
+                  roughnessVariation: options.roughnessVariation ?? 0.2,
+                  metallic: options.metallic ?? 0.08,
+                  normalStrength,
+                  aoStrength: options.aoStrength ?? 0.72,
+                });
+                if (!isDecal && options.delight !== false && maps.albedoDataUrl !== FALLBACK_1X1_PNG) {
+                  finalAlbedoDataUrl = maps.albedoDataUrl;
+                }
+                if (generateNormal) normalDataUrl = maps.normalDataUrl;
+                ormDataUrl = maps.ormDataUrl;
+                aoDataUrl = maps.aoDataUrl;
+                roughnessDataUrl = maps.roughnessDataUrl;
+              } else if (generateNormal) {
+                normalDataUrl = this.renderNormalMap(canvas, normalStrength);
+              }
             }
           } catch {
             normalDataUrl = undefined;
@@ -273,15 +329,19 @@ export class AITextureGenerator {
           id: `ai_tex_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
           name: uniqueName,
           prompt,
-          style: (options.style && options.style !== 'auto' ? options.style : 'stone') as any,
+          style: resolvedStyle,
           size: Math.max(actualWidth, actualHeight),
           seed: options.seed ?? 0,
           seamless,
-          albedoDataUrl: genResult.dataUrl,
+          albedoDataUrl: finalAlbedoDataUrl,
           normalDataUrl,
+          ormDataUrl,
+          aoDataUrl,
+          roughnessDataUrl,
           roughness: options.roughness ?? 0.7,
           metallic: options.metallic ?? 0.1,
           normalStrength,
+          materialPreset: options.materialPreset,
           primaryColor: options.primaryColor || '#888888',
           secondaryColor: options.secondaryColor || '#444444',
           accentColor: options.accentColor || '#222222',
@@ -292,13 +352,23 @@ export class AITextureGenerator {
 
         if (options.embedInScene !== false) {
           const albedoEmbedName = `${uniqueName}_albedo.png`;
-          this.service.addTextureFromDataUrl(albedoEmbedName, genResult.dataUrl);
+          this.service.addTextureFromDataUrl(albedoEmbedName, finalAlbedoDataUrl);
           item.embeddedAlbedoName = albedoEmbedName;
 
           if (normalDataUrl) {
             const normalEmbedName = `${uniqueName}_normal.png`;
             this.service.addTextureFromDataUrl(normalEmbedName, normalDataUrl);
             item.embeddedNormalName = normalEmbedName;
+          }
+          if (ormDataUrl) {
+            const ormEmbedName = `${uniqueName}_orm.png`;
+            this.service.addTextureFromDataUrl(ormEmbedName, ormDataUrl);
+            item.embeddedOrmName = ormEmbedName;
+          }
+          if (aoDataUrl) {
+            const aoEmbedName = `${uniqueName}_ao.png`;
+            this.service.addTextureFromDataUrl(aoEmbedName, aoDataUrl);
+            item.embeddedAoName = aoEmbedName;
           }
         }
 
@@ -322,13 +392,69 @@ export class AITextureGenerator {
     const cleanBaseName = this.sanitizeName(options.name || this.deriveNameFromPrompt(prompt, recipe.style));
     const uniqueName = `${cleanBaseName}_${this.counter++}`;
 
-    // Render Albedo Canvas & Data URL
-    const { canvas: albedoCanvas, dataUrl: albedoDataUrl } = this.renderProceduralTexture(size, recipe, seamless);
+    // Use multi-band 4-map synthesizer for dedicated organic/PBR surface styles or palette arrays,
+    // and pair custom Voronoi/glyph procedural renderer with full 4-map PBR extraction for legacy styles.
+    const multiBandStyles = new Set<string>([
+      'skin',
+      'leather',
+      'velvet',
+      'fur',
+      'hair',
+      'ceramic',
+      'foliage',
+      'bone',
+      'painted_metal',
+      'candy_coat',
+      'bark',
+    ]);
 
-    // Render Normal Map if enabled
+    let albedoDataUrl: string;
     let normalDataUrl: string | undefined;
-    if (generateNormal) {
-      normalDataUrl = this.renderNormalMap(albedoCanvas, recipe.normalStrength);
+    let ormDataUrl: string | undefined;
+    let aoDataUrl: string | undefined;
+    let roughnessDataUrl: string | undefined;
+
+    if (multiBandStyles.has(recipe.style) || (options.palette && options.palette.length >= 2)) {
+      const pbrSet = generatePbrTextureSet({
+        type: recipe.style as ProceduralTextureType,
+        size,
+        primaryColor: recipe.primaryHex,
+        secondaryColor: recipe.secondaryHex,
+        accentColor: recipe.accentHex,
+        palette: options.palette,
+        baseRoughness: recipe.roughness,
+        roughnessVariation: options.roughnessVariation ?? 0.18,
+        metallic: recipe.metallic,
+        normalStrength: recipe.normalStrength,
+        aoStrength: options.aoStrength ?? 0.72,
+        seed: recipe.seed,
+      });
+      albedoDataUrl = pbrSet.albedoDataUrl;
+      normalDataUrl = generateNormal ? pbrSet.normalDataUrl : undefined;
+      ormDataUrl = pbrSet.ormDataUrl;
+      aoDataUrl = pbrSet.aoDataUrl;
+      roughnessDataUrl = pbrSet.roughnessDataUrl;
+    } else {
+      const rendered = this.renderProceduralTexture(size, recipe, seamless);
+      albedoDataUrl = rendered.dataUrl;
+      if (rendered.canvas) {
+        const maps = extractPbrMapsFromCanvas(rendered.canvas, {
+          delight: false,
+          baseRoughness: recipe.roughness,
+          roughnessVariation: options.roughnessVariation ?? 0.18,
+          metallic: recipe.metallic,
+          normalStrength: recipe.normalStrength,
+          aoStrength: options.aoStrength ?? 0.72,
+        });
+        if (generateNormal) {
+          normalDataUrl = maps.normalDataUrl !== FALLBACK_1X1_PNG ? maps.normalDataUrl : this.renderNormalMap(rendered.canvas, recipe.normalStrength);
+        }
+        if (recipe.style !== 'decal') {
+          ormDataUrl = maps.ormDataUrl;
+          aoDataUrl = maps.aoDataUrl;
+          roughnessDataUrl = maps.roughnessDataUrl;
+        }
+      }
     }
 
     const item: GeneratedTextureItem = {
@@ -341,9 +467,13 @@ export class AITextureGenerator {
       seamless,
       albedoDataUrl,
       normalDataUrl,
+      ormDataUrl,
+      aoDataUrl,
+      roughnessDataUrl,
       roughness: recipe.roughness,
       metallic: recipe.metallic,
       normalStrength: recipe.normalStrength,
+      materialPreset: recipe.materialPreset,
       primaryColor: recipe.primaryHex,
       secondaryColor: recipe.secondaryHex,
       accentColor: recipe.accentHex,
@@ -362,6 +492,16 @@ export class AITextureGenerator {
         const normalEmbedName = `${uniqueName}_normal.png`;
         this.service.addTextureFromDataUrl(normalEmbedName, normalDataUrl);
         item.embeddedNormalName = normalEmbedName;
+      }
+      if (ormDataUrl) {
+        const ormEmbedName = `${uniqueName}_orm.png`;
+        this.service.addTextureFromDataUrl(ormEmbedName, ormDataUrl);
+        item.embeddedOrmName = ormEmbedName;
+      }
+      if (aoDataUrl) {
+        const aoEmbedName = `${uniqueName}_ao.png`;
+        this.service.addTextureFromDataUrl(aoEmbedName, aoDataUrl);
+        item.embeddedAoName = aoEmbedName;
       }
     }
 
@@ -554,6 +694,58 @@ export class AITextureGenerator {
       pbr.bumpTexture = normalTex;
     }
 
+    if (!isDecal && item.ormDataUrl) {
+      let ormTex = this.service.scene.textures.find(
+        (t): t is Texture => t instanceof Texture && !(t as any).isRenderTarget && t.url === item.ormDataUrl
+      );
+      if (!ormTex) {
+        ormTex = new Texture(
+          item.ormDataUrl,
+          this.service.scene,
+          false,
+          false,
+          Texture.TRILINEAR_SAMPLINGMODE,
+        );
+        ormTex.name = item.embeddedOrmName || `${item.name}_orm.png`;
+      }
+      ormTex.uScale = uvScale;
+      ormTex.vScale = uvScale;
+      ormTex.hasAlpha = false;
+      pbr.metallicTexture = ormTex;
+      pbr.useRoughnessFromMetallicTextureGreen = true;
+      pbr.useMetallnessFromMetallicTextureBlue = false;
+      pbr.useAmbientOcclusionFromMetallicTextureRed = false;
+    }
+
+    if (!isDecal && item.aoDataUrl) {
+      let aoTex = this.service.scene.textures.find(
+        (t): t is Texture => t instanceof Texture && !(t as any).isRenderTarget && t.url === item.aoDataUrl
+      );
+      if (!aoTex) {
+        aoTex = new Texture(
+          item.aoDataUrl,
+          this.service.scene,
+          false,
+          false,
+          Texture.TRILINEAR_SAMPLINGMODE,
+        );
+        aoTex.name = item.embeddedAoName || `${item.name}_ao.png`;
+      }
+      aoTex.uScale = uvScale;
+      aoTex.vScale = uvScale;
+      aoTex.hasAlpha = false;
+      pbr.ambientTexture = aoTex;
+      pbr.useAmbientInGrayScale = true;
+      pbr.ambientTextureStrength = 0.72;
+    }
+
+    if (item.materialPreset) {
+      applyCanonicalPbrPreset(pbr, item.materialPreset, {
+        roughness: item.roughness,
+        metallic: item.metallic,
+      });
+    }
+
     const appliedTo: string[] = [];
     for (const mesh of meshes) {
       mesh.material = pbr;
@@ -673,11 +865,33 @@ export class AITextureGenerator {
       style = options.style;
     } else if (/(decal|sticker|badge|splatter|bullet|emblem|graffiti|stain|crack\s+overlay)/i.test(lower)) {
       style = 'decal';
+    } else if (/\b(skin|flesh|epiderm|complexion|pores|cheek)\b/i.test(lower)) {
+      style = 'skin';
+    } else if (/\b(leather|hide|suede|saddle|boot)\b/i.test(lower)) {
+      style = 'leather';
+    } else if (/\b(velvet|plush|felt)\b/i.test(lower)) {
+      style = 'velvet';
+    } else if (/\b(fur|pelage|coat|fluffy|mane)\b/i.test(lower)) {
+      style = 'fur';
+    } else if (/\b(hair|strands|locks)\b/i.test(lower)) {
+      style = 'hair';
+    } else if (/\b(ceramic|porcelain|glaze|pottery)\b/i.test(lower)) {
+      style = 'ceramic';
+    } else if (/\b(leaf|leaves|foliage|canopy|fern)\b/i.test(lower)) {
+      style = 'foliage';
+    } else if (/\b(bone|horn|antler|ivory|tusk|chitin)\b/i.test(lower)) {
+      style = 'bone';
+    } else if (/\b(candy\s*coat|car\s*paint|metallic\s*paint)\b/i.test(lower)) {
+      style = 'candy_coat';
+    } else if (/\b(painted\s*metal|lacquer|enamel)\b/i.test(lower)) {
+      style = 'painted_metal';
+    } else if (/\b(bark|tree\s*trunk)\b/i.test(lower)) {
+      style = 'bark';
     } else if (/(cobble|paver|flagstone|dungeon\s+floor|pavement)/i.test(lower)) {
       style = 'cobblestone';
     } else if (/(brick|masonry|terracotta\s+wall)/i.test(lower)) {
       style = 'brick';
-    } else if (/(wood|plank|timber|oak|pine|mahogany|bark|birch|walnut|board)/i.test(lower)) {
+    } else if (/(wood|plank|timber|oak|pine|mahogany|birch|walnut|board)/i.test(lower)) {
       style = 'wood';
     } else if (/(lava|magma|volcan|molten|hellfire|ember)/i.test(lower)) {
       style = 'lava';
@@ -693,9 +907,9 @@ export class AITextureGenerator {
       style = 'marble';
     } else if (/(scale|dragon|reptil|snake|fish\s+scale|chainmail)/i.test(lower)) {
       style = 'scales';
-    } else if (/(fabric|cloth|linen|canvas|weave|carpet|velvet|leather|denim)/i.test(lower)) {
+    } else if (/(fabric|cloth|linen|canvas|weave|carpet|denim|silk|satin|wool)/i.test(lower)) {
       style = 'fabric';
-    } else if (/(moss|grass|lichen|jungle|forest\s+floor|turf|foliage|dirt|mud)/i.test(lower)) {
+    } else if (/(moss|grass|lichen|jungle|forest\s+floor|turf|dirt|mud)/i.test(lower)) {
       style = 'moss';
     } else {
       style = 'stone';
@@ -704,22 +918,33 @@ export class AITextureGenerator {
     // 2. Default palettes per style
     const defaultPalettes: Record<
       Exclude<TextureStylePreset, 'auto'>,
-      { primary: string; secondary: string; accent: string; roughness: number; metallic: number; normalStrength: number }
+      { primary: string; secondary: string; accent: string; roughness: number; metallic: number; normalStrength: number; preset?: string }
     > = {
-      stone: { primary: '#6e737b', secondary: '#3d4147', accent: '#9aa0a8', roughness: 0.85, metallic: 0.05, normalStrength: 2.2 },
-      cobblestone: { primary: '#5e6368', secondary: '#25282c', accent: '#4b6043', roughness: 0.82, metallic: 0.05, normalStrength: 2.8 },
-      brick: { primary: '#9c4132', secondary: '#3b3532', accent: '#c4bfb6', roughness: 0.85, metallic: 0.02, normalStrength: 2.5 },
-      wood: { primary: '#8b5a2b', secondary: '#4a2e14', accent: '#b87d4b', roughness: 0.68, metallic: 0.0, normalStrength: 1.6 },
-      metal: { primary: '#8c969e', secondary: '#495159', accent: '#c4cdd6', roughness: 0.32, metallic: 0.88, normalStrength: 1.5 },
+      stone: { primary: '#6e737b', secondary: '#3d4147', accent: '#9aa0a8', roughness: 0.78, metallic: 0.0, normalStrength: 2.2, preset: 'natural_stone' },
+      cobblestone: { primary: '#5e6368', secondary: '#25282c', accent: '#4b6043', roughness: 0.82, metallic: 0.0, normalStrength: 2.8, preset: 'natural_stone' },
+      brick: { primary: '#9c4132', secondary: '#3b3532', accent: '#c4bfb6', roughness: 0.85, metallic: 0.0, normalStrength: 2.5, preset: 'natural_stone' },
+      wood: { primary: '#8b5a2b', secondary: '#4a2e14', accent: '#b87d4b', roughness: 0.68, metallic: 0.0, normalStrength: 1.6, preset: 'unfinished_wood' },
+      metal: { primary: '#8c969e', secondary: '#495159', accent: '#c4cdd6', roughness: 0.32, metallic: 0.92, normalStrength: 1.5, preset: 'brushed_steel' },
       rust: { primary: '#5a6065', secondary: '#8c3b1b', accent: '#c85a24', roughness: 0.72, metallic: 0.55, normalStrength: 2.4 },
       scifi: { primary: '#2b323b', secondary: '#14181d', accent: '#00e5ff', roughness: 0.35, metallic: 0.8, normalStrength: 2.2 },
-      marble: { primary: '#eceae4', secondary: '#b8b4ac', accent: '#6d6a63', roughness: 0.2, metallic: 0.05, normalStrength: 0.9 },
+      marble: { primary: '#e8e5dd', secondary: '#b8b4ac', accent: '#6d6a63', roughness: 0.24, metallic: 0.0, normalStrength: 0.9, preset: 'marble' },
       lava: { primary: '#232023', secondary: '#110f12', accent: '#ff5500', roughness: 0.78, metallic: 0.08, normalStrength: 2.6 },
-      moss: { primary: '#3e6b2c', secondary: '#283618', accent: '#6a994e', roughness: 0.9, metallic: 0.0, normalStrength: 2.3 },
-      fabric: { primary: '#3d5a80', secondary: '#293241', accent: '#98c1d9', roughness: 0.88, metallic: 0.0, normalStrength: 1.4 },
-      scales: { primary: '#2d6a4f', secondary: '#1b4332', accent: '#d4af37', roughness: 0.42, metallic: 0.35, normalStrength: 2.4 },
+      moss: { primary: '#3e6b2c', secondary: '#283618', accent: '#6a994e', roughness: 0.88, metallic: 0.0, normalStrength: 2.3, preset: 'foliage' },
+      fabric: { primary: '#3d5a80', secondary: '#293241', accent: '#98c1d9', roughness: 0.86, metallic: 0.0, normalStrength: 1.4, preset: 'fabric' },
+      scales: { primary: '#2d6a4f', secondary: '#1b4332', accent: '#d4af37', roughness: 0.42, metallic: 0.25, normalStrength: 2.4, preset: 'glazed_ceramic' },
       runes: { primary: '#2b2836', secondary: '#16141c', accent: '#a855f7', roughness: 0.65, metallic: 0.2, normalStrength: 2.4 },
       decal: { primary: '#4a4e54', secondary: '#22252a', accent: '#d97706', roughness: 0.7, metallic: 0.1, normalStrength: 2.0 },
+      skin: { primary: '#e2ad8d', secondary: '#c98d6b', accent: '#ecc2a6', roughness: 0.54, metallic: 0.0, normalStrength: 1.2, preset: 'skin' },
+      leather: { primary: '#6d4129', secondary: '#4c2b1a', accent: '#8a583c', roughness: 0.62, metallic: 0.0, normalStrength: 1.9, preset: 'leather' },
+      velvet: { primary: '#7a2849', secondary: '#4e192f', accent: '#993e63', roughness: 0.72, metallic: 0.0, normalStrength: 1.3, preset: 'velvet' },
+      fur: { primary: '#8b6647', secondary: '#5c422c', accent: '#b58d67', roughness: 0.78, metallic: 0.0, normalStrength: 2.1, preset: 'fur' },
+      hair: { primary: '#4e3525', secondary: '#2e2017', accent: '#73513a', roughness: 0.4, metallic: 0.0, normalStrength: 2.2, preset: 'hair' },
+      ceramic: { primary: '#dfd9cc', secondary: '#c7c1b4', accent: '#ece7dd', roughness: 0.26, metallic: 0.0, normalStrength: 0.9, preset: 'glazed_ceramic' },
+      foliage: { primary: '#4c7835', secondary: '#2c4f22', accent: '#74a152', roughness: 0.62, metallic: 0.0, normalStrength: 1.8, preset: 'foliage' },
+      bone: { primary: '#d6cab2', secondary: '#b5a589', accent: '#e8decb', roughness: 0.52, metallic: 0.0, normalStrength: 1.7, preset: 'bone_horn' },
+      painted_metal: { primary: '#3d6ea3', secondary: '#2c517a', accent: '#5689bd', roughness: 0.45, metallic: 0.0, normalStrength: 1.2, preset: 'painted_metal' },
+      candy_coat: { primary: '#b8283c', secondary: '#8e1e2e', accent: '#d94558', roughness: 0.28, metallic: 0.12, normalStrength: 0.8, preset: 'candy_coat' },
+      bark: { primary: '#5e4431', secondary: '#402e20', accent: '#7d5f47', roughness: 0.88, metallic: 0.0, normalStrength: 2.8, preset: 'unfinished_wood' },
     };
 
     const base = { ...defaultPalettes[style] };
@@ -787,6 +1012,7 @@ export class AITextureGenerator {
       roughness,
       metallic,
       normalStrength,
+      materialPreset: options.materialPreset ?? base.preset,
       scale: 8,
       seed,
       hasAlpha: style === 'decal',
@@ -1129,9 +1355,18 @@ export class AITextureGenerator {
           }
         }
 
-        data[idx] = Math.max(0, Math.min(255, Math.round(rgb[0] + microNoise * 14)));
-        data[idx + 1] = Math.max(0, Math.min(255, Math.round(rgb[1] + microNoise * 14)));
-        data[idx + 2] = Math.max(0, Math.min(255, Math.round(rgb[2] + microNoise * 14)));
+        const rVal = rgb[0] + microNoise * 14;
+        const gVal = rgb[1] + microNoise * 14;
+        const bVal = rgb[2] + microNoise * 14;
+        if (style === 'lava' || style === 'decal') {
+          data[idx] = Math.max(0, Math.min(255, Math.round(rVal)));
+          data[idx + 1] = Math.max(0, Math.min(255, Math.round(gVal)));
+          data[idx + 2] = Math.max(0, Math.min(255, Math.round(bVal)));
+        } else {
+          data[idx] = clampAlbedoByte(rVal);
+          data[idx + 1] = clampAlbedoByte(gVal);
+          data[idx + 2] = clampAlbedoByte(bVal);
+        }
         data[idx + 3] = alpha;
       }
     }

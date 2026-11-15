@@ -24,6 +24,8 @@ import {
 } from '@babylonjs/core';
 import { MeshEditorService } from '../MeshEditorService';
 import { ModelCompressor } from '../compression/ModelCompressor';
+import { applyRootTipGradient, buildTaperedSweepVertexData } from '../geometry/organicGeometry';
+import { applyCanonicalPbrPreset } from '../tools/textureUtils';
 
 export type SculptBrushType =
   | 'clay'
@@ -973,7 +975,7 @@ export class SculptController {
       hip.position.set(hipX, 0.88, 0);
       parts.push(hip);
 
-      // Thigh (Oberschenkel)
+      // Thigh
       const thigh = MeshBuilder.CreateCylinder(`h_thigh_${sName}`, { height: 0.42, diameterTop: 0.16, diameterBottom: 0.12, tessellation: 14 }, this.scene);
       thigh.position.set(hipX, 0.66, 0);
       parts.push(thigh);
@@ -983,12 +985,12 @@ export class SculptController {
       knee.position.set(hipX, 0.45, 0.02);
       parts.push(knee);
 
-      // Calf / Shin (Unterschenkel)
+      // Calf / Shin
       const calf = MeshBuilder.CreateCylinder(`h_calf_${sName}`, { height: 0.40, diameterTop: 0.12, diameterBottom: 0.09, tessellation: 14 }, this.scene);
       calf.position.set(hipX, 0.24, -0.01);
       parts.push(calf);
 
-      // Foot (Fuß)
+      // Foot
       const foot = MeshBuilder.CreateBox(`h_foot_${sName}`, { width: 0.10, height: 0.07, depth: 0.24 }, this.scene);
       foot.position.set(hipX, 0.035, 0.05);
       parts.push(foot);
@@ -1036,30 +1038,22 @@ export class SculptController {
 
     if (materialStyle === 'colored') {
       const pbrSkin = new PBRMaterial('pbr_chibi_skin', this.scene);
-      pbrSkin.albedoColor = Color3.FromHexString('#f5c59e');
-      pbrSkin.roughness = 0.6;
-      pbrSkin.metallic = 0.0;
+      applyCanonicalPbrPreset(pbrSkin, 'skin', { baseColorHex: '#f0c09a', roughness: 0.54 });
       pbrSkin.backFaceCulling = false;
       skinMat = pbrSkin;
 
       const pbrShorts = new PBRMaterial('pbr_chibi_shorts', this.scene);
-      pbrShorts.albedoColor = Color3.FromHexString('#0033cc');
-      pbrShorts.roughness = 0.45;
-      pbrShorts.metallic = 0.05;
+      applyCanonicalPbrPreset(pbrShorts, 'fabric', { baseColorHex: '#1f49c7', roughness: 0.66 });
       pbrShorts.backFaceCulling = false;
       shortsMat = pbrShorts;
 
       const pbrGloves = new PBRMaterial('pbr_chibi_gloves', this.scene);
-      pbrGloves.albedoColor = Color3.FromHexString('#f5f5f5');
-      pbrGloves.roughness = 0.4;
-      pbrGloves.metallic = 0.0;
+      applyCanonicalPbrPreset(pbrGloves, 'leather', { baseColorHex: '#e8e8ec', roughness: 0.36 });
       pbrGloves.backFaceCulling = false;
       glovesMat = pbrGloves;
 
       const pbrBoots = new PBRMaterial('pbr_chibi_boots', this.scene);
-      pbrBoots.albedoColor = Color3.FromHexString('#5a2a18');
-      pbrBoots.roughness = 0.7;
-      pbrBoots.metallic = 0.0;
+      applyCanonicalPbrPreset(pbrBoots, 'leather', { baseColorHex: '#5a2a18', roughness: 0.46 });
       pbrBoots.backFaceCulling = false;
       bootsMat = pbrBoots;
     }
@@ -1126,29 +1120,38 @@ export class SculptController {
       const armY = 0.74;
 
       if (!isMannequin) {
-        // Organic continuous curved tube arms without joint ball seams
-        const armPath = pose === 't_pose' ? [
-          new Vector3(side * 0.12, armY, 0),
-          new Vector3(side * 0.36, armY, 0),
-          new Vector3(side * 0.54, armY, 0),
-        ] : [
-          new Vector3(side * 0.12, armY, 0),
-          new Vector3(side * 0.32, armY - 0.12, 0),
-          new Vector3(side * 0.42, armY - 0.28, 0),
-        ];
+        // Organic continuous tapered elliptical sweep arms without joint ball seams
+        const armStations =
+          pose === 't_pose'
+            ? [
+                { x: side * 0.12, y: armY, z: 0, rx: 0.082, rz: 0.078 },
+                { x: side * 0.24, y: armY + 0.01, z: 0.005, rx: 0.072, rz: 0.068 },
+                { x: side * 0.39, y: armY, z: 0.01, rx: 0.064, rz: 0.060 },
+                { x: side * 0.54, y: armY, z: 0, rx: 0.055, rz: 0.052 },
+              ]
+            : [
+                { x: side * 0.12, y: armY, z: 0, rx: 0.082, rz: 0.078 },
+                { x: side * 0.23, y: armY - 0.05, z: 0.01, rx: 0.072, rz: 0.068 },
+                { x: side * 0.33, y: armY - 0.15, z: 0.015, rx: 0.064, rz: 0.060 },
+                { x: side * 0.42, y: armY - 0.28, z: 0.01, rx: 0.055, rz: 0.052 },
+              ];
 
-        const arm = MeshBuilder.CreateTube(`c_arm_${sName}`, {
-          path: armPath,
-          radiusFunction: (i) => i === 0 ? 0.075 : (i === 1 ? 0.065 : 0.055),
-          tessellation: 16,
-          cap: Mesh.CAP_ALL,
-        }, this.scene);
+        const arm = new Mesh(`c_arm_${sName}`, this.scene);
+        buildTaperedSweepVertexData({
+          stations: armStations,
+          tubularSegments: 20,
+          radialSegments: 16,
+          smoothPath: true,
+          capStart: true,
+          capEnd: true,
+        }).applyToMesh(arm);
         if (skinMat) arm.material = skinMat;
         parts.push(arm);
 
         // Glove cuff
+        const armEnd = armStations[armStations.length - 1];
         const cuff = MeshBuilder.CreateCylinder(`c_cuff_${sName}`, { height: 0.05, diameter: 0.13, tessellation: 14 }, this.scene);
-        cuff.position.copyFrom(armPath[2]);
+        cuff.position.set(armEnd.x, armEnd.y, armEnd.z);
         if (pose === 't_pose') cuff.rotation.z = side * (Math.PI / 2);
         if (glovesMat) cuff.material = glovesMat;
         parts.push(cuff);
@@ -1228,18 +1231,21 @@ export class SculptController {
       const legX = side * 0.1;
 
       if (!isMannequin) {
-        // Organic continuous curved tube legs
-        const legPath = [
-          new Vector3(legX, 0.52, 0),
-          new Vector3(legX, 0.28, 0.015),
-          new Vector3(legX, 0.14, 0),
-        ];
-        const leg = MeshBuilder.CreateTube(`c_leg_${sName}`, {
-          path: legPath,
-          radiusFunction: (i) => i === 0 ? 0.09 : (i === 1 ? 0.08 : 0.07),
-          tessellation: 16,
-          cap: Mesh.CAP_ALL,
-        }, this.scene);
+        // Organic continuous tapered elliptical sweep legs
+        const leg = new Mesh(`c_leg_${sName}`, this.scene);
+        buildTaperedSweepVertexData({
+          stations: [
+            { x: legX, y: 0.52, z: 0, rx: 0.095, rz: 0.092 },
+            { x: legX, y: 0.38, z: 0.012, rx: 0.086, rz: 0.084 },
+            { x: legX, y: 0.25, z: 0.015, rx: 0.078, rz: 0.076 },
+            { x: legX, y: 0.14, z: 0, rx: 0.070, rz: 0.068 },
+          ],
+          tubularSegments: 18,
+          radialSegments: 16,
+          smoothPath: true,
+          capStart: true,
+          capEnd: true,
+        }).applyToMesh(leg);
         if (shortsMat) leg.material = shortsMat;
         parts.push(leg);
 
@@ -1268,6 +1274,18 @@ export class SculptController {
         boot.position.set(legX, 0.065, 0.04);
         if (bootsMat) boot.material = bootsMat;
         parts.push(boot);
+      }
+    }
+
+    // Ensure consistent vertex ColorKind attribute across parts before MergeMeshes
+    if (parts.some((p) => p.isVerticesDataPresent(VertexBuffer.ColorKind))) {
+      for (const part of parts) {
+        if (!part.isVerticesDataPresent(VertexBuffer.ColorKind)) {
+          const vertCount = part.getTotalVertices();
+          const whiteColors = new Float32Array(vertCount * 4);
+          whiteColors.fill(1);
+          part.setVerticesData(VertexBuffer.ColorKind, whiteColors);
+        }
       }
     }
 
@@ -1310,41 +1328,37 @@ export class SculptController {
 
     let skinMat: Material | null = null;
     let darkMat: Material | null = null;
+    let hornMat: Material | null = null;
     let eyeMat: Material | null = null;
     let pupilMat: Material | null = null;
     let whiteMat: Material | null = null;
 
     if (materialStyle === 'colored') {
       const pbrSkin = new PBRMaterial('pbr_creature_skin', this.scene);
-      pbrSkin.albedoColor = Color3.FromHexString('#c9182b');
-      pbrSkin.roughness = 0.38;
-      pbrSkin.metallic = 0.02;
+      applyCanonicalPbrPreset(pbrSkin, 'skin', { baseColorHex: '#c9182b', roughness: 0.42 });
       pbrSkin.backFaceCulling = false;
       skinMat = pbrSkin;
 
       const pbrDark = new PBRMaterial('pbr_creature_dark', this.scene);
-      pbrDark.albedoColor = Color3.FromHexString('#202024');
-      pbrDark.roughness = 0.45;
-      pbrDark.metallic = 0.1;
+      applyCanonicalPbrPreset(pbrDark, 'leather', { baseColorHex: '#24242a', roughness: 0.42 });
       pbrDark.backFaceCulling = false;
       darkMat = pbrDark;
 
+      const pbrHorn = new PBRMaterial('pbr_creature_horn', this.scene);
+      applyCanonicalPbrPreset(pbrHorn, 'bone_horn', { baseColorHex: '#ece4d8', roughness: 0.40 });
+      pbrHorn.backFaceCulling = false;
+      hornMat = pbrHorn;
+
       const pbrEye = new PBRMaterial('pbr_creature_eye', this.scene);
-      pbrEye.albedoColor = Color3.FromHexString('#f0f0f5');
-      pbrEye.roughness = 0.25;
-      pbrEye.metallic = 0.0;
+      applyCanonicalPbrPreset(pbrEye, 'glazed_ceramic', { baseColorHex: '#ececf0', roughness: 0.14 });
       eyeMat = pbrEye;
 
       const pbrPupil = new PBRMaterial('pbr_creature_pupil', this.scene);
-      pbrPupil.albedoColor = Color3.FromHexString('#111114');
-      pbrPupil.roughness = 0.5;
-      pbrPupil.metallic = 0.0;
+      applyCanonicalPbrPreset(pbrPupil, 'glazed_ceramic', { baseColorHex: '#1e1e24', roughness: 0.22 });
       pupilMat = pbrPupil;
 
       const pbrWhite = new PBRMaterial('pbr_creature_white', this.scene);
-      pbrWhite.albedoColor = Color3.FromHexString('#ffffff');
-      pbrWhite.roughness = 0.3;
-      pbrWhite.metallic = 0.0;
+      applyCanonicalPbrPreset(pbrWhite, 'bone_horn', { baseColorHex: '#e8e2d6', roughness: 0.34 });
       whiteMat = pbrWhite;
     }
 
@@ -1355,20 +1369,23 @@ export class SculptController {
     if (skinMat) body.material = skinMat;
     parts.push(body);
 
-    // 2. Arms (Continuous curved tubes flowing seamlessly down and forward)
+    // 2. Arms (Continuous tapered elliptical sweeps flowing smoothly down and forward)
     for (const side of [-1, 1]) {
       const sName = side === 1 ? 'r' : 'l';
-      const armPath = [
-        new Vector3(side * 0.18, 0.65, 0.02),
-        new Vector3(side * 0.32, 0.50, 0.07),
-        new Vector3(side * 0.42, 0.35, 0.13),
-      ];
-      const arm = MeshBuilder.CreateTube(`cr_arm_${sName}`, {
-        path: armPath,
-        radiusFunction: (i) => i === 0 ? 0.07 : (i === 1 ? 0.055 : 0.045),
-        tessellation: 16,
-        cap: Mesh.CAP_ALL,
-      }, this.scene);
+      const arm = new Mesh(`cr_arm_${sName}`, this.scene);
+      buildTaperedSweepVertexData({
+        stations: [
+          { x: side * 0.17, y: 0.66, z: 0.02, rx: 0.074, rz: 0.070 },
+          { x: side * 0.25, y: 0.58, z: 0.045, rx: 0.062, rz: 0.058 },
+          { x: side * 0.34, y: 0.46, z: 0.085, rx: 0.052, rz: 0.048 },
+          { x: side * 0.42, y: 0.35, z: 0.13, rx: 0.045, rz: 0.042 },
+        ],
+        tubularSegments: 20,
+        radialSegments: 16,
+        smoothPath: true,
+        capStart: true,
+        capEnd: true,
+      }).applyToMesh(arm);
       if (skinMat) arm.material = skinMat;
       parts.push(arm);
 
@@ -1389,20 +1406,23 @@ export class SculptController {
       }
     }
 
-    // 3. Legs (Continuous digitigrade curved tubes with backward knee bend)
+    // 3. Legs (Continuous digitigrade tapered sweeps with backward knee bend)
     for (const side of [-1, 1]) {
       const sName = side === 1 ? 'r' : 'l';
-      const legPath = [
-        new Vector3(side * 0.13, 0.38, 0.01),
-        new Vector3(side * 0.15, 0.23, -0.05),
-        new Vector3(side * 0.13, 0.10, 0.03),
-      ];
-      const leg = MeshBuilder.CreateTube(`cr_leg_${sName}`, {
-        path: legPath,
-        radiusFunction: (i) => i === 0 ? 0.075 : (i === 1 ? 0.06 : 0.045),
-        tessellation: 16,
-        cap: Mesh.CAP_ALL,
-      }, this.scene);
+      const leg = new Mesh(`cr_leg_${sName}`, this.scene);
+      buildTaperedSweepVertexData({
+        stations: [
+          { x: side * 0.13, y: 0.39, z: 0.01, rx: 0.080, rz: 0.085 },
+          { x: side * 0.15, y: 0.28, z: -0.025, rx: 0.065, rz: 0.068 },
+          { x: side * 0.15, y: 0.20, z: -0.05, rx: 0.056, rz: 0.054 },
+          { x: side * 0.13, y: 0.10, z: 0.03, rx: 0.046, rz: 0.044 },
+        ],
+        tubularSegments: 20,
+        radialSegments: 16,
+        smoothPath: true,
+        capStart: true,
+        capEnd: true,
+      }).applyToMesh(leg);
       if (skinMat) leg.material = skinMat;
       parts.push(leg);
 
@@ -1413,21 +1433,31 @@ export class SculptController {
       parts.push(foot);
     }
 
-    // 4. Stylized Curved Horns
+    // 4. Stylized Curved Horns with Single-Vertex Tip Convergence & Root-Tip Gradient
     for (const side of [-1, 1]) {
       const sName = side === 1 ? 'r' : 'l';
-      const hornPath = [
-        new Vector3(side * 0.12, 0.88, 0.04),
-        new Vector3(side * 0.18, 0.98, 0.02),
-        new Vector3(side * 0.20, 1.08, -0.05),
-      ];
-      const horn = MeshBuilder.CreateTube(`cr_horn_${sName}`, {
-        path: hornPath,
-        radiusFunction: (i) => i === 0 ? 0.048 : (i === 1 ? 0.032 : 0.005),
-        tessellation: 14,
-        cap: Mesh.CAP_ALL,
-      }, this.scene);
-      if (darkMat) horn.material = darkMat;
+      const horn = new Mesh(`cr_horn_${sName}`, this.scene);
+      buildTaperedSweepVertexData({
+        stations: [
+          { x: side * 0.115, y: 0.87, z: 0.04, rx: 0.050, rz: 0.050 },
+          { x: side * 0.165, y: 0.96, z: 0.03, rx: 0.036, rz: 0.036 },
+          { x: side * 0.195, y: 1.04, z: -0.01, rx: 0.020, rz: 0.020 },
+          { x: side * 0.20, y: 1.10, z: -0.06, rx: 0, rz: 0 },
+        ],
+        tubularSegments: 20,
+        radialSegments: 16,
+        smoothPath: true,
+        capStart: true,
+        capEnd: true,
+      }).applyToMesh(horn);
+      applyRootTipGradient(horn, {
+        rootColor: '#262024',
+        tipColor: '#dfd3be',
+        axis: 'y',
+        power: 1.2,
+        blendStrength: 1.0,
+      });
+      if (hornMat) horn.material = hornMat;
       parts.push(horn);
     }
 
@@ -1500,6 +1530,18 @@ export class SculptController {
     if (darkMat) staff.material = darkMat;
     parts.push(staff);
 
+    // Ensure consistent vertex ColorKind attribute across parts before MergeMeshes
+    if (parts.some((p) => p.isVerticesDataPresent(VertexBuffer.ColorKind))) {
+      for (const part of parts) {
+        if (!part.isVerticesDataPresent(VertexBuffer.ColorKind)) {
+          const vertCount = part.getTotalVertices();
+          const whiteColors = new Float32Array(vertCount * 4);
+          whiteColors.fill(1);
+          part.setVerticesData(VertexBuffer.ColorKind, whiteColors);
+        }
+      }
+    }
+
     // Merge meshes preserving MultiMaterial if colored
     const baseMesh = Mesh.MergeMeshes(parts, true, true, undefined, true, materialStyle === 'colored');
     if (!baseMesh) {
@@ -1533,13 +1575,13 @@ export class SculptController {
     const locomotion = options.locomotion || 'digitigrade';
     const parts: Mesh[] = [];
 
-    // 1. Ribcage Barrel (Brustkorb: Z-axis aligned)
+    // 1. Ribcage Barrel (Z-axis aligned)
     const ribcage = MeshBuilder.CreateCylinder('q_ribcage', { height: 0.60, diameterTop: 0.42, diameterBottom: 0.38, tessellation: 16 }, this.scene);
     ribcage.rotation.x = Math.PI / 2;
     ribcage.position.set(0, 0.75, 0.15);
     parts.push(ribcage);
 
-    // 2. Hindquarters & Pelvis (Hüfte/Kruppe)
+    // 2. Hindquarters & Pelvis
     const hindquarters = MeshBuilder.CreateCylinder('q_hind', { height: 0.45, diameterTop: 0.36, diameterBottom: 0.34, tessellation: 16 }, this.scene);
     hindquarters.rotation.x = Math.PI / 2;
     hindquarters.position.set(0, 0.72, -0.32);
@@ -1551,7 +1593,7 @@ export class SculptController {
     neck.position.set(0, 0.95, 0.48);
     parts.push(neck);
 
-    // 4. Cranium & Snout (Kopf mit Schnauze)
+    // 4. Cranium & Snout
     const cranium = MeshBuilder.CreateSphere('q_cranium', { diameterX: 0.22, diameterY: 0.20, diameterZ: 0.24, segments: 14 }, this.scene);
     cranium.position.set(0, 1.10, 0.65);
     parts.push(cranium);
@@ -1585,7 +1627,7 @@ export class SculptController {
       const sName = side === 1 ? 'r' : 'l';
       const hx = side * 0.17;
 
-      // Femur (Oberschenkel angled forward)
+      // Femur (Thigh angled forward)
       const femur = MeshBuilder.CreateCylinder(`q_femur_${sName}`, { height: 0.35, diameter: 0.16, tessellation: 14 }, this.scene);
       femur.rotation.x = -Math.PI / 6;
       femur.position.set(hx, 0.58, -0.28);
@@ -1602,7 +1644,7 @@ export class SculptController {
       tibia.position.set(hx, (0.44 + hockHeight) / 2, -0.30);
       parts.push(tibia);
 
-      // Hock (Sprunggelenk elevated off ground)
+      // Hock (Ankle joint elevated off ground)
       const hock = MeshBuilder.CreateSphere(`q_hock_${sName}`, { diameter: 0.09, segments: 12 }, this.scene);
       hock.position.set(hx, hockHeight, -0.40);
       parts.push(hock);
@@ -1649,7 +1691,7 @@ export class SculptController {
     cranium.position.set(0, 1.25, -0.02);
     parts.push(cranium);
 
-    // Facial Wedge (Wangen & Kiefer)
+    // Facial Wedge (Cheeks & Jaw)
     const jaw = MeshBuilder.CreateCylinder('hb_jaw', { height: 0.32, diameterTop: 0.38, diameterBottom: 0.22, tessellation: 18 }, this.scene);
     jaw.position.set(0, 1.05, 0.08);
     parts.push(jaw);
@@ -1706,9 +1748,7 @@ export class SculptController {
 
   private applyDefaultCharacterMaterial(mesh: Mesh): void {
     const pbr = new PBRMaterial(`${mesh.name}_ClayMat`, this.scene);
-    pbr.albedoColor = new Color3(0.82, 0.76, 0.70); // Sculptor clay tone
-    pbr.roughness = 0.75;
-    pbr.metallic = 0.05;
+    applyCanonicalPbrPreset(pbr, 'clay', { baseColorHex: '#d1c2b3', roughness: 0.75 });
     pbr.backFaceCulling = false;
     mesh.material = pbr;
   }

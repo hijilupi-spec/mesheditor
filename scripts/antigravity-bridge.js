@@ -167,7 +167,8 @@ function execProcess(bin, args, options = {}) {
         (stdout.includes('"status":"SUCCESS"') || stdout.includes('"status":"ERROR"'))
       ) {
         setTimeout(() => {
-          finish({ code: 0, stdout, stderr });
+          const earlyCode = stdout.includes('"status":"ERROR"') ? 1 : 0;
+          finish({ code: earlyCode, stdout, stderr });
         }, 60);
       }
     });
@@ -224,19 +225,120 @@ async function listAgyModels() {
   return DEFAULT_AGY_MODELS;
 }
 
+const BABYLON_CODE_PATTERN =
+  /\b(?:MeshBuilder\.|new\s+(?:BABYLON\.)?(?:PBRMaterial|StandardMaterial|Mesh)|registerMesh\s*\(|ExtrudePolygon|CreateRibbon|CSG2?\.FromMesh)\b/;
+
+function createBabylonFallbackCall(code, description) {
+  return [
+    {
+      name: 'modeler_execute_babylon_code',
+      arguments: {
+        description: description || 'Execute generated Babylon.js script in the scene',
+        code,
+      },
+    },
+  ];
+}
+
+function isAllowedTempScriptPath(filePath) {
+  if (!filePath || !filePath.endsWith('.js')) return false;
+  const resolved = path.resolve(filePath);
+  const tmpDir = path.resolve(os.tmpdir());
+  return (
+    resolved.startsWith(tmpDir + path.sep) ||
+    resolved.startsWith('/tmp/') ||
+    resolved.startsWith('/private/tmp/') ||
+    resolved.startsWith('/var/folders/') ||
+    resolved.startsWith('/private/var/folders/')
+  );
+}
+
+function recoverBabylonScriptFromText(text) {
+  const source = String(text || '');
+  if (!source) return [];
+
+  // 1. Check fenced JS/TS/Babylon code blocks inside response text
+  const codeFenceRegex = /```(?:javascript|js|typescript|ts|babylon)\s*([\s\S]*?)```/gi;
+  let match;
+  while ((match = codeFenceRegex.exec(source)) !== null) {
+    const code = match[1].trim();
+    if (BABYLON_CODE_PATTERN.test(code)) {
+      return createBabylonFallbackCall(code, 'Execute Babylon.js code block returned by assistant');
+    }
+  }
+
+  // 2. Check referenced temp .js script files written by CLI assistants
+  const candidates = [];
+  const fileUrlRegex = /file:\/\/(\/[^\s)"'<>]+\.js)/gi;
+  while ((match = fileUrlRegex.exec(source)) !== null) {
+    try {
+      candidates.push(decodeURIComponent(match[1]));
+    } catch {
+      candidates.push(match[1]);
+    }
+  }
+  const unixTmpRegex = /(?:\/(?:private\/)?(?:var\/folders|tmp)\/[^\s)"'<>]+\.js)/gi;
+  while ((match = unixTmpRegex.exec(source)) !== null) {
+    candidates.push(match[0]);
+  }
+
+  for (const candidatePath of Array.from(new Set(candidates))) {
+    if (!isAllowedTempScriptPath(candidatePath)) continue;
+    try {
+      if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
+        const diskCode = fs.readFileSync(candidatePath, 'utf8').trim();
+        if (diskCode && BABYLON_CODE_PATTERN.test(diskCode)) {
+          return createBabylonFallbackCall(
+            diskCode,
+            `Execute Babylon.js script from ${path.basename(candidatePath)}`
+          );
+        }
+      }
+    } catch {
+      // ignore unreadable candidate path
+    }
+  }
+
+  return [];
+}
+
 /**
  * Extracts a structured `{ content, tool_calls }` payload from the model's text response.
  */
-function parseStructuredAgentResponse(rawText) {
+function parseStructuredAgentResponse(rawText, options = {}) {
   const trimmed = String(rawText || '').trim();
+  const allowCodeFallback = options.allowCodeFallback !== false;
   if (!trimmed) {
     return { content: '', toolCalls: [] };
   }
 
+  const normalizeCallItem = (item) => {
+    if (!item || typeof item !== 'object') return null;
+    const name = item.name || item.tool || item.function?.name;
+    if (typeof name !== 'string' || !name.trim()) return null;
+    return {
+      name: name.trim(),
+      arguments: item.arguments ?? item.args ?? item.parameters ?? item.function?.arguments ?? {},
+    };
+  };
+
   const tryParseObj = (candidate) => {
     try {
       const obj = JSON.parse(candidate);
+      if (Array.isArray(obj)) {
+        const calls = obj.map(normalizeCallItem).filter(Boolean);
+        if (calls.length > 0) {
+          return { content: '', toolCalls: calls };
+        }
+      }
       if (obj && typeof obj === 'object') {
+        const single = normalizeCallItem(obj);
+        if (single) {
+          return {
+            content: typeof obj.content === 'string' ? obj.content : '',
+            toolCalls: [single],
+          };
+        }
         const toolCalls = Array.isArray(obj.tool_calls)
           ? obj.tool_calls
           : Array.isArray(obj.toolCalls)
@@ -258,25 +360,49 @@ function parseStructuredAgentResponse(rawText) {
     return null;
   };
 
-  // 1. Direct JSON object
-  const direct = tryParseObj(trimmed);
-  if (direct) return direct;
+  let parsed = null;
+
+  // 1. Direct JSON object / array
+  parsed = tryParseObj(trimmed);
 
   // 2. ```json ... ``` fenced block
-  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
-  let match;
-  while ((match = fenceRegex.exec(trimmed)) !== null) {
-    const parsed = tryParseObj(match[1].trim());
-    if (parsed) return parsed;
+  if (!parsed) {
+    const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+    let match;
+    while ((match = fenceRegex.exec(trimmed)) !== null) {
+      const candidate = tryParseObj(match[1].trim());
+      if (candidate) {
+        parsed = candidate;
+        break;
+      }
+    }
   }
 
   // 3. First { ... } block in text
-  const firstBrace = trimmed.indexOf('{');
-  const lastBrace = trimmed.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const sub = trimmed.slice(firstBrace, lastBrace + 1);
-    const parsed = tryParseObj(sub);
-    if (parsed) return parsed;
+  if (!parsed) {
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const sub = trimmed.slice(firstBrace, lastBrace + 1);
+      parsed = tryParseObj(sub);
+    }
+  }
+
+  if (parsed) {
+    if (parsed.toolCalls.length === 0 && allowCodeFallback) {
+      const recovered = recoverBabylonScriptFromText(parsed.content || trimmed);
+      if (recovered.length > 0) {
+        return { content: parsed.content, toolCalls: recovered };
+      }
+    }
+    return parsed;
+  }
+
+  if (allowCodeFallback) {
+    const recovered = recoverBabylonScriptFromText(trimmed);
+    if (recovered.length > 0) {
+      return { content: trimmed, toolCalls: recovered };
+    }
   }
 
   return { content: trimmed, toolCalls: [] };
@@ -299,6 +425,16 @@ function buildAgyPromptFromOpenAI(messages, tools) {
           parameters: fn.parameters,
         }))
     : [];
+
+  sections.push(`=== CRITICAL ANTIGRAVITY BRIDGE PROTOCOL (READ FIRST) ===
+You are running inside the Antigravity CLI behind the Mesh Editor HTTP-to-CLI Bridge (scripts/antigravity-bridge.js).
+- The 3D scene modeling tools listed under AVAILABLE 3D MODELER TOOLS (all "modeler_*" tools, including "modeler_execute_babylon_code") are VIRTUAL BROWSER-SIDE TOOLS hosted in the live Mesh Editor web app.
+- Because you are bridged via stdio/JSON, "modeler_*" tools will NEVER appear as native Antigravity CLI tool declarations in your tool schema. That is completely expected!
+- How to call them: Output a single JSON object on stdout containing "tool_calls": [{ "name": "modeler_...", "arguments": { ... } }]. The bridge automatically forwards every entry in "tool_calls" to the live Mesh Editor browser scene, executes it, and feeds the results back to you in the next turn.
+- NEVER claim that "modeler_*" tools are unavailable.
+- NEVER write ".js" script files to disk or /tmp using write_file/run_command, and NEVER ask the user to manually paste or run code.
+- Whenever you write a custom procedural Babylon.js script, pass the script string directly in:
+  "tool_calls": [{ "name": "modeler_execute_babylon_code", "arguments": { "description": "...", "code": "..." } }]`);
 
   for (const msg of messages || []) {
     if (!msg) continue;
@@ -374,9 +510,10 @@ Instead, respond ONLY with a single valid JSON object (no markdown prose outside
   ]
 }
 Rules for "tool_calls":
-1. To create or modify 3D meshes in the scene, populate "tool_calls" with one or more calls to the AVAILABLE 3D MODELER TOOLS listed above (e.g. "modeler_plan_model", "modeler_create_sdf_mesh", "modeler_create_rounded_box", "modeler_create_wall", "modeler_create_arch", "modeler_create_column", "modeler_create_molding", "modeler_create_stairs", "modeler_create_roof", "modeler_sculpt_mesh", "modeler_create_primitive", "modeler_extrude_polygon", "modeler_create_lathe", "modeler_boolean_operation", "modeler_create_material", "modeler_build_voxel_mesh", "modeler_execute_babylon_code", etc.).
-2. You can emit multiple tool_calls in a single turn to build all parts of the requested 3D model at once, or inspect results across turns.
-3. If all required TOOL EXECUTION RESULTS are already present above and the 3D model is complete (including any VISUAL CRITIQUE self-corrections), set "tool_calls": [] and provide a concise final summary in "content".`);
+1. To create or modify 3D meshes in the scene, populate "tool_calls" with one or more calls to the VIRTUAL AVAILABLE 3D MODELER TOOLS listed above (e.g. "modeler_plan_model", "modeler_create_sdf_mesh", "modeler_create_rounded_box", "modeler_create_wall", "modeler_create_arch", "modeler_create_column", "modeler_create_molding", "modeler_create_stairs", "modeler_create_roof", "modeler_sculpt_mesh", "modeler_create_primitive", "modeler_extrude_polygon", "modeler_create_lathe", "modeler_boolean_operation", "modeler_create_material", "modeler_build_voxel_mesh", "modeler_execute_babylon_code", etc.).
+2. IMPORTANT: Even though "modeler_*" tools do not appear in your CLI runtime tool list, they ARE live via this JSON "tool_calls" bridge! Never say they are unavailable, and NEVER save scripts to /tmp or ask the user to copy/paste code into "modeler_execute_babylon_code" — emit the "modeler_execute_babylon_code" JSON tool call directly.
+3. You can emit multiple tool_calls in a single turn to build all parts of the requested 3D model at once, or inspect results across turns.
+4. If all required TOOL EXECUTION RESULTS are already present above and the 3D model is complete (including any VISUAL CRITIQUE self-corrections), set "tool_calls": [] and provide a concise final summary in "content".`);
 
   return {
     prompt: sections.join('\n\n'),
@@ -486,7 +623,7 @@ async function runAgyChatCompletion(body) {
       }
     }
 
-    if (code !== 0 && (!agyResult || agyResult.status === 'ERROR')) {
+    if (agyResult?.status === 'ERROR' || agyResult?.finished_reason === 'error' || (code !== 0 && !agyResult)) {
       const errDetails = extractBridgeErrorDetails(new Error(agyResult?.error || ''), stdout, stderr, code);
       const bridgeErr = new Error(errDetails.message);
       (bridgeErr).statusCode = errDetails.statusCode;
@@ -494,7 +631,12 @@ async function runAgyChatCompletion(body) {
     }
 
     const rawResponseText = agyResult ? agyResult.response || '' : stdout;
-    const { content, toolCalls } = parseStructuredAgentResponse(rawResponseText);
+    const hasExecutedBabylonCode = (body?.messages || []).some(
+      (m) => m && m.role === 'tool' && m.name === 'modeler_execute_babylon_code'
+    );
+    const { content, toolCalls } = parseStructuredAgentResponse(rawResponseText, {
+      allowCodeFallback: !hasExecutedBabylonCode,
+    });
 
     const formattedToolCalls = (toolCalls || [])
       .filter((tc) => tc && typeof (tc.name || tc.function?.name) === 'string')
@@ -510,6 +652,10 @@ async function runAgyChatCompletion(body) {
           },
         };
       });
+
+    if (!String(content || '').trim() && formattedToolCalls.length === 0) {
+      throw new Error(agyResult?.error || 'Antigravity CLI returned an empty response with no tool calls or content.');
+    }
 
     return {
       id: `chatcmpl_agy_${agyResult?.conversation_id || Date.now()}`,
@@ -790,6 +936,9 @@ module.exports = {
   resolveAgyBinary,
   normalizeAgyModel,
   listAgyModels,
+  buildAgyPromptFromOpenAI,
+  parseStructuredAgentResponse,
+  extractBridgeErrorDetails,
   runAgyChatCompletion,
   setupAntigravityBridgeRoutes,
   startStandaloneBridgeServer,

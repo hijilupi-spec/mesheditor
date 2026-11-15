@@ -2,6 +2,7 @@ import { Color3, PBRMaterial, Texture } from '@babylonjs/core';
 import { AbstractTool } from '../AbstractTool';
 import { ToolExecutionContext } from '../ToolExecutionContext';
 import { TextureStylePreset } from '../../textures/AITextureGenerator';
+import { applyCanonicalPbrPreset, CANONICAL_MATERIAL_PRESETS } from '../textureUtils';
 
 export class GenerateTextureTool extends AbstractTool {
   public readonly name = 'modeler_generate_texture';
@@ -43,8 +44,33 @@ export class GenerateTextureTool extends AbstractTool {
           'scales',
           'runes',
           'decal',
+          'skin',
+          'leather',
+          'velvet',
+          'fur',
+          'hair',
+          'ceramic',
+          'foliage',
+          'bone',
+          'painted_metal',
+          'candy_coat',
+          'bark',
         ],
         description: 'Optional pattern style override (defaults to "auto" inferred from prompt).',
+      },
+      materialPreset: {
+        type: 'string',
+        enum: Object.keys(CANONICAL_MATERIAL_PRESETS),
+        description: 'Optional canonical PBR preset (skin, hair, fur, velvet, fabric, leather, painted_metal, candy_coat, ceramic, etc.) to configure clearcoat, sheen, anisotropy, and subsurface.',
+      },
+      palette: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Optional 2-5 hex color stops for multi-stop procedural palette mixing.',
+      },
+      delight: {
+        type: 'boolean',
+        description: 'When using AI/image generation, automatically remove directional shadows/highlights from albedo and clamp into PBR-safe range [30, 240] (default: true).',
       },
       size: {
         type: 'number',
@@ -129,6 +155,9 @@ export class GenerateTextureTool extends AbstractTool {
         prompt,
         name: args.name,
         style: (args.style as TextureStylePreset) || 'auto',
+        materialPreset: args.materialPreset,
+        palette: Array.isArray(args.palette) ? args.palette : undefined,
+        delight: typeof args.delight === 'boolean' ? args.delight : true,
         size: typeof args.size === 'number' ? args.size : 512,
         seamless: args.seamless !== false,
         generateNormalMap: args.generateNormalMap !== false,
@@ -219,6 +248,58 @@ export class GenerateTextureTool extends AbstractTool {
       normTex.hasAlpha = false;
       normTex.level = Math.max(0.1, Math.min(3.0, item.normalStrength / 2.0));
       mat.bumpTexture = normTex;
+    }
+
+    if (!isDecal && item.ormDataUrl) {
+      let ormTex = context.scene.textures.find(
+        (t): t is Texture => t instanceof Texture && !(t as any).isRenderTarget && t.url === item.ormDataUrl
+      );
+      if (!ormTex) {
+        ormTex = new Texture(
+          item.ormDataUrl,
+          context.scene,
+          false,
+          false,
+          Texture.TRILINEAR_SAMPLINGMODE,
+        );
+        ormTex.name = item.embeddedOrmName || `${item.name}_orm.png`;
+      }
+      ormTex.uScale = uvScale;
+      ormTex.vScale = uvScale;
+      ormTex.hasAlpha = false;
+      mat.metallicTexture = ormTex;
+      mat.useRoughnessFromMetallicTextureGreen = true;
+      mat.useMetallnessFromMetallicTextureBlue = false;
+      mat.useAmbientOcclusionFromMetallicTextureRed = false;
+    }
+
+    if (!isDecal && item.aoDataUrl) {
+      let aoTex = context.scene.textures.find(
+        (t): t is Texture => t instanceof Texture && !(t as any).isRenderTarget && t.url === item.aoDataUrl
+      );
+      if (!aoTex) {
+        aoTex = new Texture(
+          item.aoDataUrl,
+          context.scene,
+          false,
+          false,
+          Texture.TRILINEAR_SAMPLINGMODE,
+        );
+        aoTex.name = item.embeddedAoName || `${item.name}_ao.png`;
+      }
+      aoTex.uScale = uvScale;
+      aoTex.vScale = uvScale;
+      aoTex.hasAlpha = false;
+      mat.ambientTexture = aoTex;
+      mat.useAmbientInGrayScale = true;
+      mat.ambientTextureStrength = 0.72;
+    }
+
+    if (item.materialPreset || args.materialPreset) {
+      applyCanonicalPbrPreset(mat, args.materialPreset || item.materialPreset, {
+        roughness: item.roughness,
+        metallic: item.metallic,
+      });
     }
 
     let appliedMeshes: string[] = [];

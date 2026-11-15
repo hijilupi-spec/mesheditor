@@ -292,9 +292,13 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
       selectedOnly: false,
     });
 
-    // Test closing via cancel button
+    // Test that clicking the modal backdrop does not close the export dialog
     app.openExportDialog();
     expect(exportModal.classList.contains('active')).toBe(true);
+    exportModal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(exportModal.classList.contains('active')).toBe(true);
+
+    // Test closing via cancel button
     const btnCancel = container.querySelector('#btnCancelExport') as HTMLButtonElement;
     btnCancel.click();
     expect(exportModal.classList.contains('active')).toBe(false);

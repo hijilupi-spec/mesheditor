@@ -1,16 +1,25 @@
 import { Color3, Mesh } from '@babylonjs/core';
 import {
+  applyRootTipGradient,
+  applyStandProudOffset,
+  applyVertexPaintRegions,
+  StandProudOptions,
+  subdivideCatmullClarkMesh,
+  VertexPaintRegion,
+} from '../../geometry/organicGeometry';
+import {
   compileSdfParts,
   extractSdfSurfaceNets,
   SdfPartDefinition,
 } from '../../sdf';
 import { AbstractTool } from '../AbstractTool';
 import { ToolExecutionContext } from '../ToolExecutionContext';
+import { applyCanonicalPbrPreset, CANONICAL_MATERIAL_PRESETS } from '../textureUtils';
 
 export class CreateSdfMeshTool extends AbstractTool {
   public readonly name = 'modeler_create_sdf_mesh';
   public readonly description =
-    'Creates a seamless, watertight organic 3D clay/metaball mesh using Signed Distance Fields (SDF) and smooth polynomial blending (smooth union, smooth subtract, smooth intersect). Ideal for characters, heads, torsos, limbs, muscles, creatures, soft cushions, boulders, and clay sculpting workflows without harsh seams between parts.';
+    'Creates a seamless, watertight organic 3D clay/metaball mesh using Signed Distance Fields (SDF), smooth polynomial blending, optional quad-aware Catmull-Clark subdivision, canonical PBR material presets, root-to-tip gradients, 3D vertex paint regions, and standProud surface clearance.';
 
   public readonly parameters = {
     type: 'object',
@@ -123,6 +132,13 @@ export class CreateSdfMeshTool extends AbstractTool {
         description:
           'Voxel grid resolution along the longest axis (e.g. 40 for low/mid-poly props, 64 for detailed organic characters, 84 for high detail). Automatically scaled to the polygon budget if omitted.',
       },
+      subdivide: {
+        type: 'integer',
+        minimum: 0,
+        maximum: 2,
+        description:
+          'Optional quad-aware Catmull-Clark subdivision passes (0..2) after Surface Nets extraction for silky organic silhouette smoothing.',
+      },
       targetTriangles: {
         type: 'integer',
         minimum: 200,
@@ -151,6 +167,58 @@ export class CreateSdfMeshTool extends AbstractTool {
       materialName: {
         type: 'string',
         description: 'Optional existing material name.',
+      },
+      materialPreset: {
+        type: 'string',
+        enum: Object.keys(CANONICAL_MATERIAL_PRESETS),
+        description:
+          'Canonical PBR preset (e.g. "skin", "fur", "velvet", "fabric", "foliage", "bone_horn", "glazed_ceramic", "clay").',
+      },
+      rootTipGradient: {
+        type: 'object',
+        description: 'Optional root-to-tip vertex color gradient along local axis.',
+        properties: {
+          rootColor: { type: 'string' },
+          tipColor: { type: 'string' },
+          axis: { type: 'string', enum: ['x', 'y', 'z'] },
+          power: { type: 'number' },
+        },
+        required: ['rootColor', 'tipColor'],
+      },
+      vertexPaintRegions: {
+        type: 'array',
+        description:
+          '3D signed-distance paint regions (axis_band, ellipsoid, tapered_capsule, sphere) blended onto vertices for organic markings without seams.',
+        items: {
+          type: 'object',
+          properties: {
+            shape: { type: 'string', enum: ['axis_band', 'ellipsoid', 'tapered_capsule', 'sphere'] },
+            color: { type: 'string' },
+            center: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } },
+            radii: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } },
+            radius: { type: 'number' },
+            start: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } },
+            end: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } },
+            r1: { type: 'number' },
+            r2: { type: 'number' },
+            axis: { type: 'string', enum: ['x', 'y', 'z'] },
+            min: { type: 'number' },
+            max: { type: 'number' },
+            softness: { type: 'number' },
+            mirrorX: { type: 'boolean' },
+          },
+          required: ['shape', 'color'],
+        },
+      },
+      standProud: {
+        type: 'object',
+        description:
+          'Optional clearance envelope { center, radii, clearance } ensuring conforming SDF shells (hair caps, armor) stay outside an inner ellipsoid.',
+        properties: {
+          center: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } },
+          radii: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' } } },
+          clearance: { type: 'number' },
+        },
       },
       position: {
         type: 'object',
@@ -205,14 +273,47 @@ export class CreateSdfMeshTool extends AbstractTool {
     const mesh = new Mesh(uniqueName, context.scene);
     extracted.vertexData.applyToMesh(mesh, true);
 
+    if (args.standProud) {
+      applyStandProudOffset(mesh, args.standProud as StandProudOptions);
+    }
+
+    const subdividePasses = args.subdivide !== undefined ? Math.max(0, Math.min(2, Math.round(Number(args.subdivide)))) : 0;
+    if (subdividePasses > 0) {
+      subdivideCatmullClarkMesh(mesh, subdividePasses, true);
+    }
+
+    const hasGradient = !!(args.rootTipGradient && args.rootTipGradient.rootColor && args.rootTipGradient.tipColor);
+    const hasPaintRegions = Array.isArray(args.vertexPaintRegions) && args.vertexPaintRegions.length > 0;
+    const hasVertexColors = extracted.hasVertexColors || hasGradient || hasPaintRegions;
+
+    if (hasGradient) {
+      applyRootTipGradient(mesh, {
+        rootColor: String(args.rootTipGradient.rootColor),
+        tipColor: String(args.rootTipGradient.tipColor),
+        axis: args.rootTipGradient.axis || 'y',
+        power: args.rootTipGradient.power,
+      });
+    }
+
+    if (hasPaintRegions) {
+      applyVertexPaintRegions(mesh, args.vertexPaintRegions as VertexPaintRegion[], defaultHex);
+    }
+
     const mat = context.getOrCreateMaterial(
       args.materialName,
-      extracted.hasVertexColors ? '#ffffff' : defaultHex,
+      hasVertexColors ? '#ffffff' : defaultHex,
       args.roughness ?? 0.6,
       args.metallic ?? 0.05,
       uniqueName
     );
-    if (extracted.hasVertexColors) {
+    if (args.materialPreset) {
+      applyCanonicalPbrPreset(mat, args.materialPreset, {
+        baseColorHex: hasVertexColors ? undefined : defaultHex,
+        roughness: args.roughness !== undefined ? Number(args.roughness) : undefined,
+        metallic: args.metallic !== undefined ? Number(args.metallic) : undefined,
+      });
+    }
+    if (hasVertexColors) {
       mesh.useVertexColors = true;
       mat.albedoColor = Color3.White();
     }
@@ -245,9 +346,10 @@ export class CreateSdfMeshTool extends AbstractTool {
       meshName: mesh.name,
       partCount: compiledParts.length,
       resolution: extracted.resolution.nx,
+      subdivided: subdividePasses,
       vertices: mesh.getTotalVertices(),
       triangles: Math.floor(mesh.getTotalIndices() / 3),
-      hasVertexColors: extracted.hasVertexColors,
+      hasVertexColors,
       decimated,
       bounds: {
         min: {
@@ -269,4 +371,3 @@ export class CreateSdfMeshTool extends AbstractTool {
     });
   }
 }
-
