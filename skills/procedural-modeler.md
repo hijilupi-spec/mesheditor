@@ -20,7 +20,7 @@ Use this skill whenever requested to create or extend 3D models, assets, or geom
    - Create base meshes (`modeler_create_primitive`, `modeler_extrude_polygon`, `modeler_extrude_shape`, `modeler_create_lathe`, `modeler_create_tube`).
    - Refine with Box-Modeling & Topology edits (`modeler_facet_extrude`, `modeler_facet_inset`, `modeler_facet_arc`, `modeler_facet_cut_through`).
    - Apply wall thickness (`modeler_solidify_mesh`) or organic curvature (`modeler_subd_smooth`).
-   - Apply materials before or after CSG operations (`modeler_create_material`, `modeler_apply_material`).
+   - Apply double-sided materials before or after CSG operations (`modeler_create_material`, `modeler_apply_material`). Always ensure `backFaceCulling: false` and `twoSidedLighting: true`.
    - Combine or carve shapes using CSG (`modeler_boolean_operation`: `union`, `subtract`, `intersect` with `nonDestructive: true` and optional `bevelWidth` / `bevelProfile` for rounded intersection edges).
    - Unwrap UVs with Smart Seams, uniform Texel Density (`px/m`), and 2D Island Bin-Packing (`modeler_uv_unwrap`) or quick triplanar projection (`modeler_auto_uv_mapping`).
    - Bake High-Poly detail into Tangent-Space Normal & Ambient Occlusion maps (`modeler_bake_textures`) or rig/skin characters (`modeler_rig_and_weight`).
@@ -172,6 +172,8 @@ When working offline or when mathematical procedural textures are preferred:
    const mat = new PBRMaterial("customMat", scene);
    mat.albedoTexture = dt;
    mat.roughness = 0.85;
+   mat.backFaceCulling = false;
+   mat.twoSidedLighting = true;
    ```
 
 3. **PBR Physical Properties + Triplanar UVs (`modeler_auto_uv_mapping`)**:
@@ -181,6 +183,22 @@ When working offline or when mathematical procedural textures are preferred:
    - **Brushed Metal / Steel**: `roughness: 0.25-0.35`, `metallic: 0.85-0.95`.
    - **Gold / Brass**: `albedoColor: "#ffd700"`, `roughness: 0.2`, `metallic: 0.95`.
    - Always run `modeler_auto_uv_mapping` with `scale: 1.0` to `2.0` on boolean or modified meshes to eliminate texture stretching across corners.
+
+### D. Mandatory Double-Sided Materials & Geometries Rule
+
+Single-sided materials (`backFaceCulling = true`) are a frequent cause of broken 3D visual rendering in web engines. Whenever geometry is viewed from behind, from inside an open cavity (such as hollow bowls, room interiors, vehicle cabs, cups, vases), on thin sheets (blades, leaves, hair, clothing, wings), or where polygon normal winding is flipped, single-sided faces are culled and become completely invisible, creating gaping holes or missing meshes.
+
+**Strict Rules**:
+1. **All Materials MUST Be Double-Sided**:
+   - Always ensure materials have backface culling disabled and two-sided lighting enabled:
+     ```javascript
+     material.backFaceCulling = false;
+     material.twoSidedLighting = true;
+     ```
+   - All built-in tools (`modeler_create_material`, `modeler_generate_texture`, `modeler_apply_material`) configure this automatically. When writing custom Babylon.js code via `modeler_execute_babylon_code`, you must explicitly set both flags.
+2. **All Custom Meshes MUST Be Double-Sided**:
+   - When using `MeshBuilder` to generate meshes in `modeler_execute_babylon_code`, always pass `{ sideOrientation: Mesh.DOUBLESIDE }` (or `BABYLON.Mesh.DOUBLESIDE`).
+   - This is critical for planes, discs, grounds, ribbons, tubes, lathes, sliced spheres/cylinders, roofs, and custom extruded profiles.
 
 ### C. Normal Maps & Micro-Surface Relief
 

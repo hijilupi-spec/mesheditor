@@ -140,6 +140,9 @@ A finished character must **NEVER be left as a single uncolored clay lump**. Eve
 | **Cartoon Gloves**      | `#f5f5f5`               | 0.40      | 0.00     | Soft white fabric with rolled wrist cuffs               |
 | **Boots / Shoes**       | `#5c2c16`               | 0.70      | 0.00     | Deep leather brown                                      |
 
+### Mandatory Double-Sided Materials for Figures
+All character materials (skin, garments, shorts, cloaks, hair cards, wings, horns, ears) **MUST be double-sided** (`backFaceCulling = false; twoSidedLighting = true;`). Single-sided materials cause thin garments, bat wings, hair strands, and interior mouth/eye cavities to disappear into transparent holes when the camera orbits around the model.
+
 ---
 
 ## 6. Recipe: Stylized Organic Creature / Chibi Demon (Soft Contours)

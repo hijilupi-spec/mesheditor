@@ -5523,6 +5523,8 @@ export class MeshEditorService {
     mat.albedoColor = color;
     mat.roughness = 0.5;
     mat.metallic = 0.0;
+    mat.backFaceCulling = false;
+    mat.twoSidedLighting = true;
 
     const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const { newFaceId, isQuad } = this.applyMaterialToTargetFacet(mesh, target.faceIds, mat);
@@ -5712,6 +5714,8 @@ export class MeshEditorService {
     mat.albedoColor = new Color3(0.9, 0.9, 0.9);
     mat.roughness = 0.5;
     mat.metallic = 0.0;
+    mat.backFaceCulling = false;
+    mat.twoSidedLighting = true;
 
     this.selectedMesh.material = mat;
     this.events.onSceneModified?.();

@@ -182,7 +182,8 @@ export class GenerateTextureTool extends AbstractTool {
 
     mat.useAlphaFromAlbedoTexture = isDecal;
     mat.transparencyMode = isDecal ? PBRMaterial.PBRMATERIAL_ALPHABLEND : PBRMaterial.PBRMATERIAL_OPAQUE;
-    mat.backFaceCulling = !isDecal;
+    mat.backFaceCulling = false;
+    mat.twoSidedLighting = true;
     mat.albedoTexture = albedoTex;
 
     // Prevent blinding white flash while texture is decoding asynchronously

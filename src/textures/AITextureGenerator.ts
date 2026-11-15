@@ -513,7 +513,8 @@ export class AITextureGenerator {
 
     pbr.useAlphaFromAlbedoTexture = isDecal;
     pbr.transparencyMode = isDecal ? PBRMaterial.PBRMATERIAL_ALPHABLEND : PBRMaterial.PBRMATERIAL_OPAQUE;
-    pbr.backFaceCulling = !isDecal;
+    pbr.backFaceCulling = false;
+    pbr.twoSidedLighting = true;
     pbr.albedoTexture = albedoTex;
 
     // Prevent blinding white flash while texture is decoding asynchronously

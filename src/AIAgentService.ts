@@ -945,7 +945,8 @@ ${textureRule}
    - Target Polygon Budget: **${minPoly.toLocaleString()} to ${maxPoly.toLocaleString()} triangles**.
    - **Proportional Density Rule**: Primary volumes (torso, head, main walls, roof) must receive **50–65%** of the polygon budget; Secondary parts (limbs, columns, arches) **25–35%**; Tertiary details (eyes, pupils, buttons, bolts, rivets, fingers) **< 10–15%**. NEVER give a small detail (such as an eye) more triangles than the torso or main body! Use \`detailTier: "tertiary"\` or low \`segments\` (6–8) on small spheres/cylinders.
    - **Minimum Polygons (${minPoly.toLocaleString()})**: Ensure the asset has sufficient geometric definition, bevels, segments, or facets to meet or exceed this baseline.
-   - **Maximum Polygons (${maxPoly.toLocaleString()})**: Do NOT exceed this limit! Use \`modeler_retopologize_mesh\` if a high-poly sculpt or SDF mesh exceeds the budget.`;
+   - **Maximum Polygons (${maxPoly.toLocaleString()})**: Do NOT exceed this limit! Use \`modeler_retopologize_mesh\` if a high-poly sculpt or SDF mesh exceeds the budget.
+7. **Double-Sided Materials & Geometries Mandate**: ALWAYS ensure materials and meshes are double-sided (\`backFaceCulling = false\` and \`twoSidedLighting = true\` on materials, \`sideOrientation: Mesh.DOUBLESIDE\` on meshes). Single-sided materials lead to backface culling artifacts where thin geometries, clothing, leaves, wings, cavities, or inverted face normal patches render as missing or hollow holes.`;
   }
 
   /* =========================================================================
@@ -999,6 +1000,7 @@ ${textureRule}
     mat.roughness = roughness !== undefined ? roughness : 0.45;
     mat.metallic = metallic !== undefined ? metallic : 0.1;
     mat.backFaceCulling = false;
+    mat.twoSidedLighting = true;
     this.materialRegistry.set(name, mat);
     return mat;
   }
@@ -1086,6 +1088,9 @@ ${textureRule}
     mesh.isPickable = true;
     if (mesh.material) {
       mesh.material.backFaceCulling = false;
+      if ('twoSidedLighting' in mesh.material) {
+        (mesh.material as any).twoSidedLighting = true;
+      }
     }
     if (!this.service.importedMeshes.includes(mesh)) {
       this.service.importedMeshes.push(mesh);

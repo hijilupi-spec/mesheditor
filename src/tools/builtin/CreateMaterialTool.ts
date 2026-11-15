@@ -126,6 +126,7 @@ export class CreateMaterialTool extends AbstractTool {
       mat.parallaxScaleBias = Number(args.parallaxScaleBias);
     }
     mat.backFaceCulling = false;
+    mat.twoSidedLighting = true;
 
     const createTexturesEnabled = context.aiAgent?.config?.createTextures !== false;
     const createNormalMapsEnabled = context.aiAgent?.config?.createNormalMaps !== false && createTexturesEnabled;

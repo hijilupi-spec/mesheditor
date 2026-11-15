@@ -447,7 +447,7 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
   const fluteDepth = Math.max(0, Number(opts.fluteDepth ?? baseRadius * 0.065));
   const radialSegs = Math.max(
     16,
-    Math.min(96, flutes > 0 ? flutes * 4 : Math.round(opts.radialSegments ?? 28))
+    Math.min(48, flutes > 0 ? flutes * 2 : Math.round(opts.radialSegments ?? 24))
   );
 
   const parts: Mesh[] = [];
@@ -455,8 +455,9 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
   const hasPlinth = order !== 'modern';
   const baseHeight = hasPlinth ? totalHeight * 0.09 : 0;
   const capHeight = order !== 'modern' ? totalHeight * 0.1 : 0;
-  const shaftY0 = baseHeight;
-  const shaftY1 = totalHeight - capHeight;
+  const overlap = 0.025; // 2.5cm physical overlap prevents non-manifold zero-thickness tear artifacts under decimation
+  const shaftY0 = Math.max(0, baseHeight - overlap);
+  const shaftY1 = Math.min(totalHeight, totalHeight - capHeight + overlap);
   const shaftHeight = Math.max(0.1, shaftY1 - shaftY0);
 
   // 1. Plinth & Molded Base
@@ -473,22 +474,24 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
     parts.push(plinth);
 
     const torusBaseProfile: Vector3[] = [
+      new Vector3(0, plinthH, 0),
       new Vector3(baseRadius * 1.25, plinthH, 0),
       new Vector3(baseRadius * 1.32, plinthH + baseHeight * 0.2, 0),
       new Vector3(baseRadius * 1.15, plinthH + baseHeight * 0.4, 0),
       new Vector3(baseRadius * 1.20, plinthH + baseHeight * 0.65, 0),
-      new Vector3(baseRadius, shaftY0, 0),
+      new Vector3(baseRadius, baseHeight, 0),
+      new Vector3(0, baseHeight, 0),
     ];
     const baseLathe = MeshBuilder.CreateLathe(
       `${name}_base_torus`,
-      { shape: torusBaseProfile, tessellation: Math.min(36, radialSegs), sideOrientation: Mesh.FRONTSIDE },
+      { shape: torusBaseProfile, tessellation: radialSegs, sideOrientation: Mesh.DOUBLESIDE },
       scene
     );
     parts.push(baseLathe);
   }
 
   // 2. Parametric Fluted & Entasis Shaft
-  const vSegs = 24;
+  const vSegs = 12;
   const shaftPos: number[] = [];
   const shaftNorm: number[] = [];
   const shaftUV: number[] = [];
@@ -539,6 +542,23 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
     }
   }
 
+  // Bottom solid cap (Y = shaftY0) so shaft is a watertight manifold solid
+  const bottomCenterIdx = shaftPos.length / 3;
+  shaftPos.push(0, shaftY0, 0);
+  shaftUV.push(0.5, 0.5);
+  for (let iu = 0; iu < radialSegs; iu++) {
+    shaftIdx.push(bottomCenterIdx, iu + 1, iu);
+  }
+
+  // Top solid cap (Y = shaftY1) so shaft is a watertight manifold solid
+  const topCenterIdx = shaftPos.length / 3;
+  shaftPos.push(0, shaftY1, 0);
+  shaftUV.push(0.5, 0.5);
+  const topRingStart = vSegs * stride;
+  for (let iu = 0; iu < radialSegs; iu++) {
+    shaftIdx.push(topCenterIdx, topRingStart + iu, topRingStart + iu + 1);
+  }
+
   const shaftMesh = new Mesh(`${name}_shaft`, scene);
   const shaftVD = new VertexData();
   const shaftNormalsComputed = new Float32Array(shaftPos.length);
@@ -557,14 +577,16 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
     const echinusTopY = totalHeight - abacusH;
 
     const capProfile: Vector3[] = [
-      new Vector3(topR * 1.05, shaftY1, 0),
-      new Vector3(topR * 1.02, shaftY1 + capHeight * 0.15, 0),
-      new Vector3(topR * 1.25, shaftY1 + capHeight * 0.45, 0),
+      new Vector3(0, totalHeight - capHeight, 0),
+      new Vector3(topR * 1.05, totalHeight - capHeight, 0),
+      new Vector3(topR * 1.02, totalHeight - capHeight + capHeight * 0.15, 0),
+      new Vector3(topR * 1.25, totalHeight - capHeight + capHeight * 0.45, 0),
       new Vector3(topR * (order === 'corinthian' ? 1.45 : 1.35), echinusTopY, 0),
+      new Vector3(0, echinusTopY, 0),
     ];
     const echinus = MeshBuilder.CreateLathe(
       `${name}_echinus`,
-      { shape: capProfile, tessellation: Math.min(36, radialSegs), sideOrientation: Mesh.FRONTSIDE },
+      { shape: capProfile, tessellation: radialSegs, sideOrientation: Mesh.DOUBLESIDE },
       scene
     );
     parts.push(echinus);
@@ -912,7 +934,8 @@ export function buildStairsMesh(scene: Scene, name: string, opts: StairsBuildOpt
 
     // Riser / step body
     if (includeSolidSteps) {
-      const bodyH = yTop - treadThickness;
+      const overlap = 0.015; // 1.5cm physical overlap prevents non-manifold coplanar tear artifacts under decimation
+      const bodyH = yTop - treadThickness + overlap;
       if (bodyH > 0.01) {
         const riserBox = MeshBuilder.CreateBox(
           `${name}_riser_${i}`,
