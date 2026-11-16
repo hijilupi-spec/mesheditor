@@ -329,13 +329,24 @@ test.describe('Mesh Editor E2E Tests', () => {
     expect(sceneText).not.toContain('Camera Speed');
     expect(sceneText).not.toContain('Move Snap');
 
-    // Open Settings modal
+    // Open Settings modal and verify 70vw width + Editing / AI tabs
     const settingsModal = page.locator('#settingsModal');
     await expect(settingsModal).not.toBeVisible();
+    await expect(page.locator('#btnAISettingsToggle')).toHaveCount(0);
     await btnSettings.click();
     await expect(settingsModal).toBeVisible();
 
-    // Update settings
+    const viewport = page.viewportSize()!;
+    await expect(async () => {
+      const modalBox = (await settingsModal.boundingBox())!;
+      expect(modalBox.width).toBeGreaterThan(viewport.width * 0.68);
+      expect(modalBox.width).toBeLessThanOrEqual(viewport.width * 0.72);
+    }).toPass();
+
+    await expect(page.locator('#settingsTabBtnEditing')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#settingsTabBtnAI')).toHaveAttribute('aria-selected', 'false');
+
+    // Update Editing settings
     await page.locator('#settingGridVisible').uncheck();
     await page.locator('#settingGridSizeNum').fill('60');
     await page.locator('#settingGridSizeNum').dispatchEvent('change');
@@ -346,10 +357,28 @@ test.describe('Mesh Editor E2E Tests', () => {
     await page.locator('#settingRotateSnapNum').fill('15');
     await page.locator('#settingRotateSnapNum').dispatchEvent('change');
 
+    // Switch to AI tab, verify scrollable body, and update AI settings
+    await page.locator('#settingsTabBtnAI').click();
+    await expect(page.locator('#settingsTabBtnAI')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#aiEndpointUrlInput')).toBeVisible();
+
+    const scrollMetrics = await page.locator('#settingsModalBody').evaluate((el) => ({
+      overflowY: getComputedStyle(el).overflowY,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    expect(scrollMetrics.overflowY).toBe('auto');
+    expect(scrollMetrics.scrollHeight).toBeGreaterThanOrEqual(scrollMetrics.clientHeight);
+
+    await page.locator('#aiEndpointUrlInput').fill('https://e2e-llm.example.com/v1');
+    await page.locator('#aiEndpointUrlInput').dispatchEvent('change');
+    await page.locator('#aiApiKeyInput').fill('sk-e2e-key');
+    await page.locator('#aiApiKeyInput').dispatchEvent('change');
+
     await page.locator('#btnSettingsDone').click();
     await expect(settingsModal).not.toBeVisible();
 
-    // Reload page and confirm persistence from localStorage
+    // Reload page and confirm persistence from localStorage for both Editing and AI tabs
     await page.reload();
     await page.locator('#btnSettings').click();
     await expect(settingsModal).toBeVisible();
@@ -359,6 +388,10 @@ test.describe('Mesh Editor E2E Tests', () => {
     await expect(page.locator('#settingCameraSpeedNum')).toHaveValue('1.1');
     await expect(page.locator('#settingMoveSnapNum')).toHaveValue('0.25');
     await expect(page.locator('#settingRotateSnapNum')).toHaveValue('15');
+
+    await page.locator('#settingsTabBtnAI').click();
+    await expect(page.locator('#aiEndpointUrlInput')).toHaveValue('https://e2e-llm.example.com/v1');
+    await expect(page.locator('#aiApiKeyInput')).toHaveValue('sk-e2e-key');
   });
 });
 

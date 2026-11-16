@@ -3650,42 +3650,6 @@ progress.loading-spinner:indeterminate {
 /* =========================================================================
    AI MESH AGENT PANEL & SETTINGS
    ========================================================================= */
-.ai-settings-panel {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  max-height: calc(100vh - 120px);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(0, 0, 0, 0.2);
-}
-
-.ai-settings-panel::-webkit-scrollbar,
-#aiSettingsPanel::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.ai-settings-panel::-webkit-scrollbar-track,
-#aiSettingsPanel::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 3px;
-}
-
-.ai-settings-panel::-webkit-scrollbar-thumb,
-#aiSettingsPanel::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.22);
-  border-radius: 3px;
-}
-
-.ai-settings-panel::-webkit-scrollbar-thumb:hover,
-#aiSettingsPanel::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.38);
-}
-
 .ai-settings-title-row {
   display: flex;
   flex-direction: column;
@@ -6730,7 +6694,8 @@ progress.loading-spinner:indeterminate {
    Settings Modal Dialog
    ========================================================================= */
 dialog#settingsModal {
-  width: 480px;
+  width: 70vw;
+  min-width: min(320px, 92vw);
   max-width: 92vw;
   max-height: 85vh;
   margin: auto;
@@ -6763,15 +6728,148 @@ dialog#settingsModal::backdrop {
 
 .settings-modal-header {
   background: var(--bg-panel);
-  padding: 14px 18px;
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+
+.settings-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.settings-tab-btn {
+  position: relative;
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 10px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: color 0.15s ease;
+}
+
+.settings-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.settings-tab-btn[aria-selected="true"] {
+  color: var(--accent-color);
+}
+
+.settings-tab-btn[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 2px solid var(--accent-color);
+}
+
+.settings-tab-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 
 .settings-modal-body {
   padding: 18px 20px;
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(0, 0, 0, 0.2);
+}
+
+.settings-modal-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.settings-modal-body::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+}
+
+.settings-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+}
+
+.settings-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.settings-tab-panel {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.settings-tab-panel-inner {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow-y: auto;
+}
+
+.settings-section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-settings-status {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.settings-ai-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.settings-ai-toggles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.settings-ai-skills-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px !important;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.settings-ai-neural-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px !important;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ai-neural-provider-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .settings-section {
@@ -7001,7 +7099,62 @@ dialog#settingsModal::backdrop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.settings-inline-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 6px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.35;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  user-select: text;
+  word-break: break-word;
+}
+
+.settings-inline-feedback .app-icon {
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.settings-inline-feedback.is-info {
+  border-color: rgba(88, 166, 255, 0.45);
+  background: rgba(88, 166, 255, 0.1);
+  color: #a5d6ff;
+}
+
+.settings-inline-feedback.is-success {
+  border-color: rgba(63, 185, 80, 0.5);
+  background: rgba(63, 185, 80, 0.12);
+  color: #7ee787;
+}
+
+.settings-inline-feedback.is-warning {
+  border-color: rgba(210, 153, 34, 0.55);
+  background: rgba(210, 153, 34, 0.12);
+  color: #f2cc60;
+}
+
+.settings-inline-feedback.is-error {
+  border-color: rgba(248, 81, 73, 0.55);
+  background: rgba(248, 81, 73, 0.12);
+  color: #ffa198;
+}
+
+.settings-footer-feedback {
+  margin-top: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 10px;
+  align-items: center;
 }
 
 

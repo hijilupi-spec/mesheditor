@@ -649,7 +649,7 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(createNormalMapsCheck?.checked).toBe(true);
       expect(createNormalMapsCheckQuick?.checked).toBe(true);
 
-      // Change sliders and save settings
+      // Change sliders and checkboxes — changes persist immediately to config & localStorage
       minPolyInput!.value = '400';
       minPolyInput!.dispatchEvent(new Event('input'));
       expect(minPolyVal?.textContent).toBe('400');
@@ -659,16 +659,21 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(maxPolyVal?.textContent).toBe('8,000');
 
       createTexturesCheck!.checked = false;
+      createTexturesCheck!.dispatchEvent(new Event('change'));
       createNormalMapsCheck!.checked = false;
-      const btnSave = container.querySelector('#btnSaveAISettings') as HTMLButtonElement | null;
-      btnSave?.click();
+      createNormalMapsCheck!.dispatchEvent(new Event('change'));
 
-      // Check updated config
+      // Check updated config & localStorage persistence
       const updatedCfg = app.service.aiAgent.getConfig();
       expect(updatedCfg.minPolygons).toBe(400);
       expect(updatedCfg.maxPolygons).toBe(8000);
       expect(updatedCfg.createTextures).toBe(false);
       expect(updatedCfg.createNormalMaps).toBe(false);
+      const persisted = JSON.parse(localStorage.getItem('mesheditor_ai_agent_config') || '{}');
+      expect(persisted.minPolygons).toBe(400);
+      expect(persisted.maxPolygons).toBe(8000);
+      expect(persisted.createTextures).toBe(false);
+      expect(persisted.createNormalMaps).toBe(false);
 
       // Check updated prompt
       const updatedPrompt = app.service.aiAgent.buildSystemPrompt();
@@ -690,41 +695,43 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       container.remove();
     });
 
-    it('toggles exclusively between Settings panel and Operative Agent GUI and displays all skills without scrollbox limit', async () => {
+    it('removes inline AI settings drawer/button and opens AI tab in central Settings modal with all skills', async () => {
       const container = document.createElement('div');
       document.body.appendChild(container);
       const nullEngine = new NullEngine();
       const app = new MeshEditorApp({ container, engine: nullEngine });
 
-      const settingsPanel = container.querySelector('#aiSettingsPanel') as HTMLElement | null;
-      const agentBody = container.querySelector('#aiAgentBody') as HTMLElement | null;
-      const btnToggle = container.querySelector('#btnAISettingsToggle') as HTMLButtonElement | null;
-      const btnCancel = container.querySelector('#btnCancelAISettings') as HTMLButtonElement | null;
-      const titleText = container.querySelector('#aiDialogTitleText') as HTMLElement | null;
+      const settingsModal = container.querySelector('#settingsModal') as HTMLDialogElement | null;
+      const tabBtnEditing = container.querySelector('#settingsTabBtnEditing') as HTMLButtonElement | null;
+      const tabBtnAI = container.querySelector('#settingsTabBtnAI') as HTMLButtonElement | null;
+      const tabPanelEditing = container.querySelector('#settingsTabPanelEditing') as HTMLElement | null;
+      const tabPanelAI = container.querySelector('#settingsTabPanelAI') as HTMLElement | null;
       const skillsList = container.querySelector('#aiSkillsList') as HTMLElement | null;
 
-      expect(settingsPanel).not.toBeNull();
-      expect(agentBody).not.toBeNull();
-      expect(btnToggle).not.toBeNull();
-      expect(btnCancel).not.toBeNull();
+      // Old inline settings drawer & header gear button are removed from AI Agent panel
+      expect(container.querySelector('#aiSettingsPanel')).toBeNull();
+      expect(container.querySelector('#btnAISettingsToggle')).toBeNull();
+      expect(settingsModal).not.toBeNull();
+      expect(tabBtnEditing?.textContent?.trim()).toBe('Editing');
+      expect(tabBtnAI?.textContent?.trim()).toBe('AI');
+      expect(tabBtnEditing?.getAttribute('aria-selected')).toBe('true');
+      expect(tabBtnAI?.getAttribute('aria-selected')).toBe('false');
+      expect(tabPanelEditing?.hidden).toBe(false);
+      expect(tabPanelAI?.hidden).toBe(true);
 
-      // Initially: operative GUI is shown, settings are hidden
-      expect(settingsPanel?.style.display).toBe('none');
-      expect(agentBody?.style.display).not.toBe('none');
-      expect(titleText?.textContent).toBe('AI Mesh Agent');
-
-      // 1. Switch to Settings
-      btnToggle?.click();
-      expect(settingsPanel?.style.display).toBe('flex');
-      expect(agentBody?.style.display).toBe('none');
-      expect(titleText?.textContent).toBe('AI Agent Settings');
+      // 1. Inline "Configure" link opens central Settings modal directly on the "AI" tab
+      const btnConfigureInline = container.querySelector('#btnOpenAISettingsInline') as HTMLButtonElement | null;
+      btnConfigureInline?.click();
+      expect(settingsModal?.hasAttribute('open')).toBe(true);
+      expect(tabBtnAI?.getAttribute('aria-selected')).toBe('true');
+      expect(tabPanelAI?.hidden).toBe(false);
+      expect(tabPanelEditing?.hidden).toBe(true);
 
       // Verify all built-in skills are rendered with name and description
       const skillItems = skillsList?.querySelectorAll('.ai-skill-item');
       expect(skillItems?.length).toBe(app.service.aiAgent.getSkills().length);
       expect(skillItems?.length).toBeGreaterThanOrEqual(4);
 
-      // Verify each skill item contains name and description text
       skillItems?.forEach((item) => {
         const nameEl = item.querySelector('.ai-skill-name');
         const descEl = item.querySelector('.ai-skill-desc');
@@ -732,42 +739,38 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
         expect(descEl?.textContent).toBeTruthy();
       });
 
-      // 2. Click Cancel/Back to switch back to operative GUI
-      btnCancel?.click();
-      expect(settingsPanel?.style.display).toBe('none');
-      expect(agentBody?.style.display).toBe('flex');
-      expect(titleText?.textContent).toBe('AI Mesh Agent');
+      // 2. Switch between Editing and AI tabs
+      tabBtnEditing?.click();
+      expect(tabBtnEditing?.getAttribute('aria-selected')).toBe('true');
+      expect(tabPanelEditing?.hidden).toBe(false);
+      expect(tabPanelAI?.hidden).toBe(true);
 
-      // 3. Test inline "Configure" link opens settings exclusively
-      const btnConfigureInline = container.querySelector('#btnOpenAISettingsInline') as HTMLButtonElement | null;
-      btnConfigureInline?.click();
-      expect(settingsPanel?.style.display).toBe('flex');
-      expect(agentBody?.style.display).toBe('none');
+      tabBtnAI?.click();
+      expect(tabBtnAI?.getAttribute('aria-selected')).toBe('true');
+      expect(tabPanelAI?.hidden).toBe(false);
 
-      // 4. Test Maximum Polygons up to 1,000,000 and budget chips
+      // 3. Test Maximum Polygons up to 1,000,000 and budget chips (persists immediately)
       const maxPolyInput = container.querySelector('#aiMaxPolyInput') as HTMLInputElement | null;
       const maxPolyVal = container.querySelector('#aiMaxPolyVal') as HTMLElement | null;
       expect(maxPolyInput?.max).toBe('1000000');
 
-      // Test preset chip for 1M (1,000,000)
       const chip1M = container.querySelector('#aiMaxPolyChips button[data-poly="1000000"]') as HTMLButtonElement | null;
       expect(chip1M).toBeTruthy();
       chip1M?.click();
       expect(maxPolyInput?.value).toBe('1000000');
       expect(maxPolyVal?.textContent).toContain('1');
-
-      // 5. Save settings closes settings exclusively and persists 1,000,000 max polygons
-      const btnSave = container.querySelector('#btnSaveAISettings') as HTMLButtonElement | null;
-      btnSave?.click();
-      expect(settingsPanel?.style.display).toBe('none');
-      expect(agentBody?.style.display).toBe('flex');
       expect(app.service.aiAgent.getConfig().maxPolygons).toBe(1000000);
+
+      // 4. Close central Settings modal via Done button
+      const btnDone = container.querySelector('#btnSettingsDone') as HTMLButtonElement | null;
+      btnDone?.click();
+      expect(settingsModal?.hasAttribute('open')).toBe(false);
 
       // Verify endpoint summary badge reflects 1Mp ceiling
       const endpointSummary = container.querySelector('#aiEndpointSummaryBar') as HTMLElement | null;
       expect(endpointSummary?.textContent).toContain('1Mp');
 
-      // 6. Test Model selector dropdown and custom input toggle
+      // 5. Test Model selector dropdown and custom input toggle
       const modelSelect = container.querySelector('#aiModelSelect') as HTMLSelectElement | null;
       const modelInput = container.querySelector('#aiModelInput') as HTMLInputElement | null;
       const btnToggleCustom = container.querySelector('#btnToggleCustomModel') as HTMLButtonElement | null;
@@ -775,7 +778,6 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(modelInput).toBeTruthy();
       expect(btnToggleCustom).toBeTruthy();
 
-      // Test changing model in select updates config and modelInput
       if (modelSelect) {
         modelSelect.value = 'gemini-4-argon-medium';
         modelSelect.dispatchEvent(new Event('change'));
@@ -783,7 +785,6 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
         expect(app.service.aiAgent.getConfig().model).toBe('gemini-4-argon-medium');
       }
 
-      // Test toggling custom input view
       btnToggleCustom?.click();
       expect(modelInput?.style.display).toBe('inline-block');
       expect(modelSelect?.style.display).toBe('none');
@@ -872,9 +873,9 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       const engine1 = new NullEngine();
       const app1 = new MeshEditorApp({ container: container1, engine: engine1 });
 
-      // Open AI Agent Settings
-      const btnToggle1 = container1.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
-      btnToggle1.click();
+      // Open central Settings modal on AI tab
+      (container1.querySelector('#btnSettings') as HTMLButtonElement).click();
+      (container1.querySelector('#settingsTabBtnAI') as HTMLButtonElement).click();
 
       const voxelCheckbox = container1.querySelector(
         '#aiSkillsList input[type="checkbox"][data-skill-id="voxel-painter"]'
@@ -886,13 +887,11 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(sculptorCheckbox).not.toBeNull();
       expect(voxelCheckbox.checked).toBe(true);
 
-      // Toggle voxel-painter off via change event and figure-sculptor off before Save
+      // Toggle both skills off via change event — persists immediately to localStorage
       voxelCheckbox.checked = false;
       voxelCheckbox.dispatchEvent(new Event('change'));
       sculptorCheckbox.checked = false;
-
-      const btnSave = container1.querySelector('#btnSaveAISettings') as HTMLButtonElement;
-      btnSave.click();
+      sculptorCheckbox.dispatchEvent(new Event('change'));
 
       const savedConfig = JSON.parse(localStorage.getItem('mesheditor_ai_agent_config') || '{}');
       expect(savedConfig.skillStates?.['voxel-painter']).toBe(false);
@@ -934,8 +933,8 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
         await app2.service.aiAgent.fetchSkillsFromApi();
         app2.service.aiAgent.reloadSkills();
 
-        const btnToggle2 = container2.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
-        btnToggle2.click();
+        (container2.querySelector('#btnSettings') as HTMLButtonElement).click();
+        (container2.querySelector('#settingsTabBtnAI') as HTMLButtonElement).click();
 
         const restoredVoxel = container2.querySelector(
           '#aiSkillsList input[type="checkbox"][data-skill-id="voxel-painter"]'
@@ -961,15 +960,14 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       }
     });
 
-    it('persists and restores external image generator selection and credentials in AI Agent Settings', async () => {
+    it('persists and restores external image generator selection and credentials in AI tab of central Settings', async () => {
       localStorage.clear();
       const container1 = document.createElement('div');
       document.body.appendChild(container1);
       const engine1 = new NullEngine();
       const app1 = new MeshEditorApp({ container: container1, engine: engine1 });
 
-      const btnToggle1 = container1.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
-      btnToggle1.click();
+      (container1.querySelector('#btnOpenAISettingsInline') as HTMLButtonElement).click();
 
       const backendSelect1 = container1.querySelector('#aiImageGenBackendSelect') as HTMLSelectElement;
       const modelInput1 = container1.querySelector('#aiImageGenModel') as HTMLInputElement;
@@ -980,15 +978,15 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(backendSelect1).not.toBeNull();
       expect(enabledCheck1.checked).toBe(true);
 
-      // Switch external image generator to OpenAI and set custom fields
+      // Switch external image generator to OpenAI and set custom fields (persists on change)
       backendSelect1.value = 'openai';
       backendSelect1.dispatchEvent(new Event('change'));
       modelInput1.value = 'gpt-image-1';
+      modelInput1.dispatchEvent(new Event('change'));
       urlInput1.value = 'https://api.openai.com/v1/images/generations';
+      urlInput1.dispatchEvent(new Event('change'));
       keyInput1.value = 'sk-persisted-img-key';
-
-      const btnSave1 = container1.querySelector('#btnSaveAISettings') as HTMLButtonElement;
-      btnSave1.click();
+      keyInput1.dispatchEvent(new Event('change'));
 
       expect(app1.service.aiAgent.getConfig().imageGeneratorActiveBackend).toBe('openai');
       expect(app1.service.externalImageGenerator.getActiveBackend()).toBe('openai');
@@ -1003,8 +1001,7 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       const engine2 = new NullEngine();
       const app2 = new MeshEditorApp({ container: container2, engine: engine2 });
 
-      const btnToggle2 = container2.querySelector('#btnAISettingsToggle') as HTMLButtonElement;
-      btnToggle2.click();
+      (container2.querySelector('#btnOpenAISettingsInline') as HTMLButtonElement).click();
 
       const backendSelect2 = container2.querySelector('#aiImageGenBackendSelect') as HTMLSelectElement;
       const modelInput2 = container2.querySelector('#aiImageGenModel') as HTMLInputElement;

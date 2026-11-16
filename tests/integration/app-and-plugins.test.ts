@@ -1,8 +1,10 @@
 import { NullEngine } from '@babylonjs/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AI_AGENT_STORAGE_KEY, DEFAULT_AI_AGENT_CONFIG } from '../../src/AIAgentService';
 import { HostAppAdapter } from '../../src/adapters/HostAppAdapter';
 import { DEFAULT_MESH_EDITOR_SETTINGS, MeshEditorApp, SETTINGS_STORAGE_KEY } from '../../src/MeshEditorApp';
 import { MeshEditorPlugin } from '../../src/plugin';
+import { MESH_EDITOR_CSS } from '../../src/styles';
 import { MeshEditorElement, registerMeshEditorElement } from '../../src/web-component';
 
 describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () => {
@@ -877,5 +879,159 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     expect(app.service.sceneParams.translateSnap).toBe(DEFAULT_MESH_EDITOR_SETTINGS.translateSnap);
     expect(app.service.sceneParams.rotateSnap).toBe(DEFAULT_MESH_EDITOR_SETTINGS.rotateSnap);
     expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}')).toEqual(DEFAULT_MESH_EDITOR_SETTINGS);
+  });
+
+  it('uses 70vw scrollable Settings dialog with Editing and AI tabs and persists AI settings in localStorage', () => {
+    expect(MESH_EDITOR_CSS).toContain('dialog#settingsModal {\n  width: 70vw;');
+    expect(MESH_EDITOR_CSS).toMatch(/\.settings-modal-body\s*\{[^}]*overflow-y:\s*auto;/);
+
+    app = new MeshEditorApp({
+      container,
+      engine,
+    });
+
+    // AI Agent panel no longer has its own Settings toggle button or inline settings panel
+    expect(container.querySelector('#btnAISettingsToggle')).toBeNull();
+    expect(container.querySelector('#aiSettingsPanel')).toBeNull();
+
+    const btnSettings = container.querySelector('#btnSettings') as HTMLButtonElement;
+    btnSettings.click();
+
+    const tabEditing = container.querySelector('#settingsTabBtnEditing') as HTMLButtonElement;
+    const tabAI = container.querySelector('#settingsTabBtnAI') as HTMLButtonElement;
+    const panelEditing = container.querySelector('#settingsTabPanelEditing') as HTMLElement;
+    const panelAI = container.querySelector('#settingsTabPanelAI') as HTMLElement;
+
+    expect(tabEditing.textContent?.trim()).toBe('Editing');
+    expect(tabAI.textContent?.trim()).toBe('AI');
+    expect(tabEditing.getAttribute('aria-selected')).toBe('true');
+    expect(panelEditing.hidden).toBe(false);
+    expect(panelAI.hidden).toBe(true);
+
+    // Switch to AI tab
+    tabAI.click();
+    expect(tabAI.getAttribute('aria-selected')).toBe('true');
+    expect(tabEditing.getAttribute('aria-selected')).toBe('false');
+    expect(panelAI.hidden).toBe(false);
+    expect(panelEditing.hidden).toBe(true);
+
+    // Modify AI Endpoint, API Key, Model, Polygon bounds, and Neural 3D provider
+    const endpointInput = container.querySelector('#aiEndpointUrlInput') as HTMLInputElement;
+    const apiKeyInput = container.querySelector('#aiApiKeyInput') as HTMLInputElement;
+    const modelSelect = container.querySelector('#aiModelSelect') as HTMLSelectElement;
+    const minPolyInput = container.querySelector('#aiMinPolyInput') as HTMLInputElement;
+    const trellisCheck = container.querySelector('#aiNeuralEnabled_trellis') as HTMLInputElement;
+
+    endpointInput.value = 'https://custom-llm.example.com/v1';
+    endpointInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    apiKeyInput.value = 'sk-test-12345';
+    apiKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    modelSelect.value = 'gpt-4o';
+    modelSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    minPolyInput.value = '500';
+    minPolyInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    trellisCheck.checked = true;
+    trellisCheck.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const storedAI = JSON.parse(localStorage.getItem(AI_AGENT_STORAGE_KEY) || '{}');
+    expect(storedAI.baseUrl).toBe('https://custom-llm.example.com/v1');
+    expect(storedAI.apiKey).toBe('sk-test-12345');
+    expect(storedAI.model).toBe('gpt-4o');
+    expect(storedAI.minPolygons).toBe(500);
+    expect(storedAI.neural3DProviders?.trellis?.enabled).toBe(true);
+
+    // Re-instantiate MeshEditorApp and verify AI settings restore from localStorage
+    app.dispose();
+    container.innerHTML = '';
+    const secondEngine = new NullEngine();
+    app = new MeshEditorApp({
+      container,
+      engine: secondEngine,
+    });
+
+    (container.querySelector('#btnSettings') as HTMLButtonElement).click();
+    (container.querySelector('#settingsTabBtnAI') as HTMLButtonElement).click();
+
+    expect((container.querySelector('#aiEndpointUrlInput') as HTMLInputElement).value).toBe(
+      'https://custom-llm.example.com/v1'
+    );
+    expect((container.querySelector('#aiApiKeyInput') as HTMLInputElement).value).toBe('sk-test-12345');
+    expect((container.querySelector('#aiModelSelect') as HTMLSelectElement).value).toBe('gpt-4o');
+    expect((container.querySelector('#aiMinPolyInput') as HTMLInputElement).value).toBe('500');
+    expect((container.querySelector('#aiNeuralEnabled_trellis') as HTMLInputElement).checked).toBe(true);
+
+    // Reset Defaults while on AI tab restores AI defaults without wiping Editing settings
+    (container.querySelector('#btnResetSettings') as HTMLButtonElement).click();
+    expect(app.service.aiAgent.getConfig().baseUrl).toBe(DEFAULT_AI_AGENT_CONFIG.baseUrl);
+    expect(app.service.aiAgent.getConfig().apiKey).toBe(DEFAULT_AI_AGENT_CONFIG.apiKey);
+    expect(app.service.aiAgent.getConfig().minPolygons).toBe(DEFAULT_AI_AGENT_CONFIG.minPolygons);
+    expect(app.service.aiAgent.getEnabledNeural3DProviders()).toEqual([]);
+
+    const footerFeedback = container.querySelector('#settingsFooterFeedback') as HTMLElement;
+    expect(footerFeedback.style.display).toBe('flex');
+    expect(footerFeedback.textContent).toContain('AI settings reset to defaults.');
+  });
+
+  it('displays /models fetch and Test results inline inside Settings modal instead of backdrop-covered toasts', async () => {
+    app = new MeshEditorApp({
+      container,
+      engine,
+    });
+
+    (container.querySelector('#btnSettings') as HTMLButtonElement).click();
+    (container.querySelector('#settingsTabBtnAI') as HTMLButtonElement).click();
+
+    const toastEl = container.querySelector('#toast') as HTMLElement;
+    toastEl.className = '';
+
+    const fetchSpy = vi
+      .spyOn(app.service.aiAgent, 'fetchAvailableModels')
+      .mockResolvedValueOnce(['model-a', 'model-b'])
+      .mockRejectedValueOnce(new Error('Endpoint unreachable'));
+
+    const btnFetchModels = container.querySelector('#btnFetchAIModels') as HTMLButtonElement;
+    btnFetchModels.click();
+    await vi.waitFor(() => {
+      const fb = container.querySelector('#aiEndpointFeedback') as HTMLElement;
+      expect(fb.classList.contains('is-success')).toBe(true);
+      expect(fb.textContent).toContain('Loaded 2 models from endpoint.');
+    });
+
+    btnFetchModels.click();
+    await vi.waitFor(() => {
+      const fb = container.querySelector('#aiEndpointFeedback') as HTMLElement;
+      expect(fb.classList.contains('is-warning')).toBe(true);
+      expect(fb.textContent).toContain('Endpoint unreachable');
+    });
+
+    const neuralTestSpy = vi
+      .spyOn(app.service.aiAgent, 'testNeural3DProvider')
+      .mockResolvedValueOnce({ ok: true, message: 'TRELLIS reachable on localhost' });
+    (container.querySelector('#btnTestNeural_trellis') as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      const fb = container.querySelector('#aiNeuralTestResult_trellis') as HTMLElement;
+      expect(fb.classList.contains('is-success')).toBe(true);
+      expect(fb.textContent).toContain('TRELLIS reachable on localhost');
+    });
+
+    const imgTestSpy = vi
+      .spyOn(app.service.externalImageGenerator, 'testProvider')
+      .mockResolvedValueOnce({ ok: false, message: 'API key missing for OpenAI' });
+    (container.querySelector('#btnTestImageGenGlobal') as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      const fb = container.querySelector('#aiImageGenTestResult') as HTMLElement;
+      expect(fb.classList.contains('is-warning')).toBe(true);
+      expect(fb.textContent).toContain('API key missing for OpenAI');
+    });
+
+    // None of the modal actions should trigger the backdrop-covered #toast element
+    expect(toastEl.classList.contains('show')).toBe(false);
+    fetchSpy.mockRestore();
+    neuralTestSpy.mockRestore();
+    imgTestSpy.mockRestore();
   });
 });

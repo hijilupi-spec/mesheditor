@@ -717,82 +717,431 @@
             <i class="app-icon" data-lucide="x"></i>
           </button>
         </div>
-        <div class="modal-body settings-modal-body">
-          <div class="settings-section">
-            <h4 class="settings-section-title"><i class="app-icon" data-lucide="grid-3x3"></i> Ground Grid</h4>
-            <div class="setting-item setting-item-toggle">
-              <div class="setting-info">
-                <label class="setting-label" for="settingGridVisible">Grid visible</label>
-                <span class="setting-desc">Show or hide the reference ground grid in the 3D viewport</span>
-              </div>
-              <input type="checkbox" switch id="settingGridVisible" class="setting-switch" autofocus />
-            </div>
 
-            <div class="setting-item">
-              <div class="setting-header">
-                <div class="setting-info">
-                  <label class="setting-label" for="settingGridSizeRange">Grid Size</label>
-                  <span class="setting-desc">Dimensions of the ground plane reference grid</span>
+        <div class="settings-tabs" role="tablist" focusgroup="tablist nomemory" aria-label="Settings Categories">
+          <button
+            type="button"
+            role="tab"
+            class="settings-tab-btn active"
+            id="settingsTabBtnEditing"
+            data-settings-tab="editing"
+            aria-selected="true"
+            focusgroupstart
+          >
+            <i class="app-icon" data-lucide="sliders"></i> Editing
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="settings-tab-btn"
+            id="settingsTabBtnAI"
+            data-settings-tab="ai"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            <i class="app-icon" data-lucide="bot"></i> AI
+          </button>
+        </div>
+
+        <div class="modal-body settings-modal-body" id="settingsModalBody">
+          <!-- Tab 1: Editing -->
+          <div
+            class="settings-tab-panel"
+            id="settingsTabPanelEditing"
+            role="tabpanel"
+            aria-labelledby="settingsTabBtnEditing"
+          >
+            <div class="settings-tab-panel-inner">
+              <div class="settings-section">
+                <h4 class="settings-section-title"><i class="app-icon" data-lucide="grid-3x3"></i> Ground Grid</h4>
+                <div class="setting-item setting-item-toggle">
+                  <div class="setting-info">
+                    <label class="setting-label" for="settingGridVisible">Grid visible</label>
+                    <span class="setting-desc">Show or hide the reference ground grid in the 3D viewport</span>
+                  </div>
+                  <input type="checkbox" switch id="settingGridVisible" class="setting-switch" autofocus />
                 </div>
-                <div class="setting-value-group">
-                  <input type="number" id="settingGridSizeNum" class="tool-number setting-number" min="5" max="200" step="5" value="20" aria-label="Grid Size" />
-                  <span class="setting-unit">units</span>
+
+                <div class="setting-item">
+                  <div class="setting-header">
+                    <div class="setting-info">
+                      <label class="setting-label" for="settingGridSizeRange">Grid Size</label>
+                      <span class="setting-desc">Dimensions of the ground plane reference grid</span>
+                    </div>
+                    <div class="setting-value-group">
+                      <input type="number" id="settingGridSizeNum" class="tool-number setting-number" min="5" max="200" step="5" value="20" aria-label="Grid Size" />
+                      <span class="setting-unit">units</span>
+                    </div>
+                  </div>
+                  <input type="range" id="settingGridSizeRange" class="setting-range" min="5" max="200" step="5" value="20" />
                 </div>
               </div>
-              <input type="range" id="settingGridSizeRange" class="setting-range" min="5" max="200" step="5" value="20" />
+
+              <div class="settings-section">
+                <h4 class="settings-section-title"><i class="app-icon" data-lucide="camera"></i> Navigation &amp; Snapping</h4>
+                <div class="setting-item">
+                  <div class="setting-header">
+                    <div class="setting-info">
+                      <label class="setting-label" for="settingCameraSpeedRange">Camera Speed</label>
+                      <span class="setting-desc">Movement multiplier for WASD / Arrow fly navigation</span>
+                    </div>
+                    <div class="setting-value-group">
+                      <input type="number" id="settingCameraSpeedNum" class="tool-number setting-number" min="0.1" max="2.0" step="0.05" value="0.4" aria-label="Camera Speed" />
+                      <span class="setting-unit">x</span>
+                    </div>
+                  </div>
+                  <input type="range" id="settingCameraSpeedRange" class="setting-range" min="0.1" max="2.0" step="0.05" value="0.4" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-header">
+                    <div class="setting-info">
+                      <label class="setting-label" for="settingMoveSnapRange">Move Snap</label>
+                      <span class="setting-desc">Position increment when holding Cmd / Ctrl during gizmo drag</span>
+                    </div>
+                    <div class="setting-value-group">
+                      <input type="number" id="settingMoveSnapNum" class="tool-number setting-number" min="0.01" max="50" step="any" value="0.1" aria-label="Move Snap" />
+                      <span class="setting-unit">units</span>
+                    </div>
+                  </div>
+                  <input type="range" id="settingMoveSnapRange" class="setting-range" min="0.01" max="50" step="0.01" value="0.1" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-header">
+                    <div class="setting-info">
+                      <label class="setting-label" for="settingRotateSnapRange">Rotate Snap</label>
+                      <span class="setting-desc">Angle increment when holding Cmd / Ctrl during rotation</span>
+                    </div>
+                    <div class="setting-value-group">
+                      <input type="number" id="settingRotateSnapNum" class="tool-number setting-number" min="1" max="90" step="1" value="5" aria-label="Rotate Snap" />
+                      <span class="setting-unit">°</span>
+                    </div>
+                  </div>
+                  <input type="range" id="settingRotateSnapRange" class="setting-range" min="1" max="90" step="1" value="5" />
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="settings-section">
-            <h4 class="settings-section-title"><i class="app-icon" data-lucide="camera"></i> Navigation &amp; Snapping</h4>
-            <div class="setting-item">
-              <div class="setting-header">
-                <div class="setting-info">
-                  <label class="setting-label" for="settingCameraSpeedRange">Camera Speed</label>
-                  <span class="setting-desc">Movement multiplier for WASD / Arrow fly navigation</span>
+          <!-- Tab 2: AI -->
+          <div
+            class="settings-tab-panel"
+            id="settingsTabPanelAI"
+            role="tabpanel"
+            aria-labelledby="settingsTabBtnAI"
+            hidden="until-found"
+          >
+            <div class="settings-tab-panel-inner">
+              <!-- Section 1: OpenAI-Compatible Endpoint -->
+              <div class="settings-section">
+                <div class="settings-section-header-row">
+                  <h4 class="settings-section-title"><i class="app-icon" data-lucide="cpu"></i> OpenAI-Compatible Endpoint</h4>
+                  <span id="aiSettingsStatus" class="ai-settings-status"></span>
                 </div>
-                <div class="setting-value-group">
-                  <input type="number" id="settingCameraSpeedNum" class="tool-number setting-number" min="0.1" max="2.0" step="0.05" value="0.4" aria-label="Camera Speed" />
-                  <span class="setting-unit">x</span>
-                </div>
-              </div>
-              <input type="range" id="settingCameraSpeedRange" class="setting-range" min="0.1" max="2.0" step="0.05" value="0.4" />
-            </div>
 
-            <div class="setting-item">
-              <div class="setting-header">
-                <div class="setting-info">
-                  <label class="setting-label" for="settingMoveSnapRange">Move Snap</label>
-                  <span class="setting-desc">Position increment when holding Cmd / Ctrl during gizmo drag</span>
-                </div>
-                <div class="setting-value-group">
-                  <input type="number" id="settingMoveSnapNum" class="tool-number setting-number" min="0.01" max="50" step="any" value="0.1" aria-label="Move Snap" />
-                  <span class="setting-unit">units</span>
-                </div>
-              </div>
-              <input type="range" id="settingMoveSnapRange" class="setting-range" min="0.01" max="50" step="0.01" value="0.1" />
-            </div>
+                <div class="setting-item">
+                  <div class="ai-preset-chips" id="aiPresetChips">
+                    <button type="button" class="ai-chip-btn" data-preset="antigravity">Antigravity</button>
+                    <button type="button" class="ai-chip-btn" data-preset="gemini">Gemini Flash</button>
+                    <button type="button" class="ai-chip-btn" data-preset="gemini-pro">Gemini Pro</button>
+                    <button type="button" class="ai-chip-btn" data-preset="openai">OpenAI</button>
+                    <button type="button" class="ai-chip-btn" data-preset="openrouter">OpenRouter</button>
+                    <button type="button" class="ai-chip-btn" data-preset="omlx">oMLX</button>
+                    <button type="button" class="ai-chip-btn" data-preset="ollama">Ollama</button>
+                    <button type="button" class="ai-chip-btn" data-preset="lmstudio">LM Studio</button>
+                  </div>
 
-            <div class="setting-item">
-              <div class="setting-header">
-                <div class="setting-info">
-                  <label class="setting-label" for="settingRotateSnapRange">Rotate Snap</label>
-                  <span class="setting-desc">Angle increment when holding Cmd / Ctrl during rotation</span>
-                </div>
-                <div class="setting-value-group">
-                  <input type="number" id="settingRotateSnapNum" class="tool-number setting-number" min="1" max="90" step="1" value="5" aria-label="Rotate Snap" />
-                  <span class="setting-unit">°</span>
+                  <div class="settings-ai-grid">
+                    <div class="ai-form-group">
+                      <label for="aiEndpointUrlInput">Base URL</label>
+                      <input
+                        type="text"
+                        id="aiEndpointUrlInput"
+                        class="ai-input"
+                        placeholder="https://api.openai.com/v1"
+                        autocomplete="off"
+                      />
+                    </div>
+
+                    <div class="ai-form-group">
+                      <label for="aiApiKeyInput">API Key</label>
+                      <div class="ai-input-row">
+                        <input
+                          type="password"
+                          id="aiApiKeyInput"
+                          class="ai-input"
+                          placeholder="sk-... (optional for local Ollama / LM Studio)"
+                          autocomplete="off"
+                        />
+                        <button type="button" class="ai-icon-btn" id="btnToggleApiKeyVis" title="Show/Hide API Key">
+                          <i class="app-icon" data-lucide="eye"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ai-form-group">
+                    <div class="ai-slider-header" style="margin-bottom: 2px;">
+                      <label for="aiModelSelect">Model</label>
+                      <button type="button" class="ai-link-btn" id="btnToggleCustomModel" style="font-size: 10.5px; color: var(--accent-hover);">Custom ID...</button>
+                    </div>
+                    <div class="ai-input-row">
+                      <select id="aiModelSelect" class="ai-select tool-select" style="flex: 1; min-width: 0;">
+                        <option value="gemini-3.8-flash-medium">gemini-3.8-flash-medium</option>
+                        <option value="gemini-3.8-flash-high">gemini-3.8-flash-high</option>
+                        <option value="gemini-3.8-flash-low">gemini-3.8-flash-low</option>
+                        <option value="gemini-4-argon-medium">gemini-4-argon-medium</option>
+                        <option value="gemini-4-argon-high">gemini-4-argon-high</option>
+                        <option value="gemini-4-argon-low">gemini-4-argon-low</option>
+                        <option value="claude-sonnet-5-5-medium">claude-sonnet-5-5-medium</option>
+                        <option value="claude-sonnet-5-5-high">claude-sonnet-5-5-high</option>
+                        <option value="claude-sonnet-5-5-low">claude-sonnet-5-5-low</option>
+                        <option value="claude-opus-5-5-medium">claude-opus-5-5-medium</option>
+                        <option value="claude-opus-5-5-high">claude-opus-5-5-high</option>
+                        <option value="claude-opus-5-5-low">claude-opus-5-5-low</option>
+                        <option value="gpt-oss-120b-medium">gpt-oss-120b-medium</option>
+                        <option value="gpt-4o">gpt-4o</option>
+                        <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                        <option value="qwen2.5-coder:14b">qwen2.5-coder:14b</option>
+                      </select>
+                      <input
+                        type="text"
+                        id="aiModelInput"
+                        class="ai-input"
+                        placeholder="gpt-4o"
+                        autocomplete="off"
+                        style="display: none; flex: 1; min-width: 0;"
+                      />
+                      <button type="button" class="ai-icon-btn" id="btnFetchAIModels" title="Load available models from endpoint (/models)">
+                        <i class="app-icon" data-lucide="refresh-cw"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div id="aiEndpointFeedback" class="settings-inline-feedback" role="status" aria-live="polite" style="display: none;"></div>
                 </div>
               </div>
-              <input type="range" id="settingRotateSnapRange" class="setting-range" min="1" max="90" step="1" value="5" />
+
+              <!-- Section 2: Built-in Agent Skills -->
+              <div class="settings-section">
+                <h4 class="settings-section-title"><i class="app-icon" data-lucide="sparkles"></i> Built-in Agent Skills</h4>
+                <div id="aiSkillsList" class="ai-skills-list settings-ai-skills-grid"></div>
+              </div>
+
+              <!-- Section 3: Mesh Generation & Asset Budget -->
+              <div class="settings-section">
+                <h4 class="settings-section-title"><i class="app-icon" data-lucide="box"></i> Mesh Generation &amp; Asset Budget</h4>
+
+                <div class="settings-ai-grid">
+                  <div class="setting-item">
+                    <div class="ai-slider-header">
+                      <label class="setting-label" for="aiMinPolyInput">Minimum Polygons</label>
+                      <span class="ai-slider-value" id="aiMinPolyVal">200</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="aiMinPolyInput"
+                      class="ai-slider setting-range"
+                      min="50"
+                      max="5000"
+                      step="50"
+                      value="200"
+                    />
+                    <div class="ai-slider-subtext">Ensures sufficient geometric definition for game models.</div>
+                  </div>
+
+                  <div class="setting-item">
+                    <div class="ai-slider-header">
+                      <label class="setting-label" for="aiMaxPolyInput">Maximum Polygons</label>
+                      <span class="ai-slider-value" id="aiMaxPolyVal">5,000</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="aiMaxPolyInput"
+                      class="ai-slider setting-range"
+                      min="500"
+                      max="1000000"
+                      step="500"
+                      value="5000"
+                    />
+                    <div class="ai-preset-chips" id="aiMaxPolyChips" style="margin-top: 2px;">
+                      <button type="button" class="ai-chip-btn" data-poly="2500">2.5k</button>
+                      <button type="button" class="ai-chip-btn" data-poly="5000">5k (Default)</button>
+                      <button type="button" class="ai-chip-btn" data-poly="25000">25k</button>
+                      <button type="button" class="ai-chip-btn" data-poly="100000">100k</button>
+                      <button type="button" class="ai-chip-btn" data-poly="500000">500k</button>
+                      <button type="button" class="ai-chip-btn" data-poly="1000000">1M</button>
+                    </div>
+                    <div class="ai-slider-subtext">Target geometric complexity ceiling (500 to 1,000,000 polygons).</div>
+                  </div>
+                </div>
+
+                <div class="settings-ai-toggles-grid">
+                  <div class="setting-item">
+                    <label class="ai-checkbox-label" for="aiCreateTexturesCheck" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                      <input type="checkbox" id="aiCreateTexturesCheck" checked />
+                      <span><strong>Create Textures</strong></span>
+                    </label>
+                    <div class="ai-slider-subtext">AI creates PBR textures when checked, otherwise solid PBR colors are used.</div>
+                  </div>
+
+                  <div class="setting-item">
+                    <label class="ai-checkbox-label" for="aiCreateNormalMapsCheck" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                      <input type="checkbox" id="aiCreateNormalMapsCheck" checked />
+                      <span><strong>Create Normal Maps</strong></span>
+                    </label>
+                    <div class="ai-slider-subtext">AI generates normal/bump maps for surface depth and relief when checked.</div>
+                  </div>
+
+                  <div class="setting-item">
+                    <label class="ai-checkbox-label" for="aiVisualCritiqueCheck" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                      <input type="checkbox" id="aiVisualCritiqueCheck" />
+                      <span><strong>Multi-View Visual Critique</strong></span>
+                    </label>
+                    <div class="ai-slider-subtext">Renders a 4-view + wireframe inspection sheet after modeling so the AI verifies and self-corrects proportions and polygon density.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 4: Neural 3D Generators (Optional BYO 3D) -->
+              <div class="settings-section">
+                <h4 class="settings-section-title"><i class="app-icon" data-lucide="boxes"></i> Neural 3D Generators (Optional BYO 3D)</h4>
+                <div class="ai-slider-subtext">
+                  Enable one or more external 3D generators (via local oMLX / Gradio / FastAPI or cloud API) so the AI Agent can delegate complex organic assets or subtasks.
+                </div>
+
+                <div id="aiNeural3DProvidersList" class="ai-skills-list settings-ai-neural-grid">
+                  <!-- 1. TRELLIS 2 / TRELLIS -->
+                  <div class="ai-neural-provider-card" data-provider-id="trellis">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                      <label class="ai-checkbox-label" for="aiNeuralEnabled_trellis" style="cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0;">
+                        <input type="checkbox" id="aiNeuralEnabled_trellis" data-neural-enable="trellis" />
+                        <span><strong>TRELLIS 2 / TRELLIS</strong></span>
+                      </label>
+                      <button type="button" class="ai-chip-btn" id="btnTestNeural_trellis" data-neural-test="trellis" title="Test TRELLIS Endpoint Connection">Test</button>
+                    </div>
+                    <div class="ai-slider-subtext" style="margin-top: 2px;">Clean SLAT mesh structure &amp; high-fidelity Image/Text-to-3D.</div>
+                    <div id="aiNeuralTestResult_trellis" class="settings-inline-feedback" role="status" aria-live="polite" style="display: none;"></div>
+                    <div id="aiNeuralConfigBody_trellis" style="display: none; margin-top: 8px; flex-direction: column; gap: 6px;">
+                      <div class="ai-input-row" style="gap: 6px;">
+                        <select id="aiNeuralProtocol_trellis" class="ai-select tool-select" data-neural-protocol="trellis" style="width: 130px;">
+                          <option value="omlx">oMLX (Local)</option>
+                          <option value="local_rest">Local REST</option>
+                          <option value="gradio">Gradio WebUI</option>
+                          <option value="fal">Fal.ai (Cloud)</option>
+                          <option value="replicate">Replicate</option>
+                        </select>
+                        <input type="text" id="aiNeuralModel_trellis" class="ai-input" placeholder="mlx-community/TRELLIS.2-4B" style="flex: 1; min-width: 0;" />
+                      </div>
+                      <input type="text" id="aiNeuralUrl_trellis" class="ai-input" placeholder="http://localhost:8000/v1/3d/generations" />
+                      <input type="password" id="aiNeuralKey_trellis" class="ai-input" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" />
+                    </div>
+                  </div>
+
+                  <!-- 2. Hunyuan3D -->
+                  <div class="ai-neural-provider-card" data-provider-id="hunyuan3d">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                      <label class="ai-checkbox-label" for="aiNeuralEnabled_hunyuan3d" style="cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0;">
+                        <input type="checkbox" id="aiNeuralEnabled_hunyuan3d" data-neural-enable="hunyuan3d" />
+                        <span><strong>Hunyuan3D</strong></span>
+                      </label>
+                      <button type="button" class="ai-chip-btn" id="btnTestNeural_hunyuan3d" data-neural-test="hunyuan3d" title="Test Hunyuan3D Endpoint Connection">Test</button>
+                    </div>
+                    <div class="ai-slider-subtext" style="margin-top: 2px;">Fast Tencent open-source textured 3D object generation.</div>
+                    <div id="aiNeuralTestResult_hunyuan3d" class="settings-inline-feedback" role="status" aria-live="polite" style="display: none;"></div>
+                    <div id="aiNeuralConfigBody_hunyuan3d" style="display: none; margin-top: 8px; flex-direction: column; gap: 6px;">
+                      <div class="ai-input-row" style="gap: 6px;">
+                        <select id="aiNeuralProtocol_hunyuan3d" class="ai-select tool-select" data-neural-protocol="hunyuan3d" style="width: 130px;">
+                          <option value="omlx">oMLX (Local)</option>
+                          <option value="local_rest">Local REST</option>
+                          <option value="gradio">Gradio WebUI</option>
+                          <option value="fal">Fal.ai (Cloud)</option>
+                          <option value="replicate">Replicate</option>
+                        </select>
+                        <input type="text" id="aiNeuralModel_hunyuan3d" class="ai-input" placeholder="mlx-community/Hunyuan3D-2.1" style="flex: 1; min-width: 0;" />
+                      </div>
+                      <input type="text" id="aiNeuralUrl_hunyuan3d" class="ai-input" placeholder="http://localhost:8000/v1/3d/generations" />
+                      <input type="password" id="aiNeuralKey_hunyuan3d" class="ai-input" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" />
+                    </div>
+                  </div>
+
+                  <!-- 3. Hi3D (V1.0 to V3.0) -->
+                  <div class="ai-neural-provider-card" data-provider-id="hi3d">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                      <label class="ai-checkbox-label" for="aiNeuralEnabled_hi3d" style="cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0;">
+                        <input type="checkbox" id="aiNeuralEnabled_hi3d" data-neural-enable="hi3d" />
+                        <span><strong>Hi3D (V1.0–V3.0)</strong></span>
+                      </label>
+                      <button type="button" class="ai-chip-btn" id="btnTestNeural_hi3d" data-neural-test="hi3d" title="Test Hi3D Endpoint Connection">Test</button>
+                    </div>
+                    <div class="ai-slider-subtext" style="margin-top: 2px;">High-resolution 2K watertight meshes optimized for 3D printing.</div>
+                    <div id="aiNeuralTestResult_hi3d" class="settings-inline-feedback" role="status" aria-live="polite" style="display: none;"></div>
+                    <div id="aiNeuralConfigBody_hi3d" style="display: none; margin-top: 8px; flex-direction: column; gap: 6px;">
+                      <div class="ai-input-row" style="gap: 6px;">
+                        <select id="aiNeuralProtocol_hi3d" class="ai-select tool-select" data-neural-protocol="hi3d" style="width: 130px;">
+                          <option value="omlx">oMLX (Local)</option>
+                          <option value="local_rest">Local REST</option>
+                          <option value="gradio">Gradio WebUI</option>
+                          <option value="fal">Fal.ai (Cloud)</option>
+                          <option value="replicate">Replicate</option>
+                        </select>
+                        <input type="text" id="aiNeuralModel_hi3d" class="ai-input" placeholder="mlx-community/Hi3D-V3.0" style="flex: 1; min-width: 0;" />
+                      </div>
+                      <input type="text" id="aiNeuralUrl_hi3d" class="ai-input" placeholder="http://localhost:8000/v1/3d/generations" />
+                      <input type="password" id="aiNeuralKey_hi3d" class="ai-input" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 5: External Image Generator (AI Textures) -->
+              <div class="settings-section">
+                <h4 class="settings-section-title"><i class="app-icon" data-lucide="image"></i> External Image Generator (AI Textures)</h4>
+                <div class="ai-slider-subtext">
+                  Connect an external image generator (Pollinations, OpenAI DALL-E, Stable Diffusion WebUI, Fal.ai, Replicate) for synthesizing AI texture maps.
+                </div>
+
+                <div class="ai-neural-provider-card">
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                    <label class="ai-checkbox-label" for="aiImageGenEnabled" style="cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0;">
+                      <input type="checkbox" id="aiImageGenEnabled" checked />
+                      <span><strong>Enable AI Image Generator</strong></span>
+                    </label>
+                    <button type="button" class="ai-chip-btn" id="btnTestImageGenGlobal" title="Test Generator Endpoint Connection">Test</button>
+                  </div>
+                  <div class="ai-slider-subtext" style="margin-top: 2px;">When enabled, textures created by the AI Agent and the AI Texture Generator use this image model.</div>
+                  <div id="aiImageGenTestResult" class="settings-inline-feedback" role="status" aria-live="polite" style="display: none;"></div>
+                  <div id="aiImageGenConfigBody" style="display: none; margin-top: 8px; flex-direction: column; gap: 6px;">
+                    <div class="ai-input-row" style="gap: 6px;">
+                      <select id="aiImageGenBackendSelect" class="ai-select tool-select" style="width: 170px;">
+                        <option value="pollinations">Pollinations (Free)</option>
+                        <option value="openai">OpenAI DALL-E</option>
+                        <option value="imagen">Google Imagen / Banana</option>
+                        <option value="fal">Fal.ai Flux</option>
+                        <option value="replicate">Replicate</option>
+                        <option value="sd_webui">SD WebUI / Draw Things (Local)</option>
+                        <option value="custom">Custom REST</option>
+                      </select>
+                      <input type="text" id="aiImageGenModel" class="ai-input" placeholder="Model ID" style="flex: 1; min-width: 0;" />
+                    </div>
+                    <div class="settings-ai-grid">
+                      <input type="text" id="aiImageGenUrl" class="ai-input" placeholder="Endpoint URL" />
+                      <input type="password" id="aiImageGenKey" class="ai-input" placeholder="API Key (optional for Pollinations / Local)" autocomplete="off" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
         <div class="modal-footer settings-modal-footer">
           <button type="button" class="tool-btn" id="btnResetSettings">
             <span class="btn-icon"><i class="app-icon" data-lucide="rotate-ccw"></i></span>
             <span class="btn-label">Reset Defaults</span>
           </button>
+          <div id="settingsFooterFeedback" class="settings-inline-feedback settings-footer-feedback" role="status" aria-live="polite" style="display: none;"></div>
           <button type="button" class="tool-btn btn-primary" id="btnSettingsDone">Done</button>
         </div>
       </dialog>

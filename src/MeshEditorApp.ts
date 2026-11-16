@@ -2,7 +2,9 @@ import { Color3, Engine, Mesh, Node, PBRMaterial, StandardMaterial, Texture, Tra
 import * as dat from 'dat.gui';
 import { marked } from 'marked';
 import { createDefaultPlatformAdapter, MeshEditorPlatformAdapter } from './adapters';
-import { AI_ENDPOINT_PRESETS, NEURAL_3D_PROTOCOL_DEFAULTS } from './AIAgentService';
+import { AI_ENDPOINT_PRESETS, DEFAULT_AI_AGENT_CONFIG, NEURAL_3D_PROTOCOL_DEFAULTS } from './AIAgentService';
+import { createDefaultNeural3DProviders } from './Neural3DGeneratorService';
+import { createDefaultImageGeneratorProviders } from './textures/ExternalImageGeneratorService';
 import { MeshEditorService } from './MeshEditorService';
 import { MenuItemDefinition, MeshEditorPlugin, PluginManager, ToolbarButtonDefinition } from './plugin';
 import { ensureMeshEditorStyles } from './styles';
@@ -104,6 +106,7 @@ import {
   Compass,
   Copy,
   CornerDownLeft,
+  Cpu,
   createIcons,
   Crosshair,
   Download,
@@ -227,6 +230,7 @@ export const editorIcons = {
   Compass,
   Copy,
   CornerDownLeft,
+  Cpu,
   Crosshair,
   Download,
   Eraser,
@@ -466,7 +470,9 @@ export class MeshEditorApp {
   private speechRecognition: any = null;
   private isRecordingSpeech: boolean = false;
   private speechInitialPrompt: string = '';
+  private activeSettingsTab: 'editing' | 'ai' = 'editing';
   private syncAIAgentImageGenUI: (() => void) | null = null;
+  private syncAISettingsControlsUI: (() => void) | null = null;
 
   // GUI parameter proxy objects
   private meshParams = {
@@ -2076,12 +2082,57 @@ export class MeshEditorApp {
         numEl.value = String(currentVal);
       }
     }
+
+    this.syncAISettingsControlsUI?.();
   }
 
   /**
-   * Resets all Settings dialog options back to their default values and persists them.
+   * Displays an inline feedback banner inside the Settings modal so status messages
+   * remain visible above the modal backdrop.
+   */
+  private setSettingsInlineFeedback(
+    elementId: string,
+    message: string,
+    type: 'info' | 'success' | 'warning' | 'error' = 'info'
+  ): void {
+    const el = this.getElement<HTMLElement>(elementId);
+    if (!el) return;
+    const cleanMsg = message.replace(/^[\s\p{Emoji}\p{Extended_Pictographic}]+/u, '').trim();
+    if (!cleanMsg) {
+      el.style.display = 'none';
+      el.textContent = '';
+      el.className =
+        elementId === 'settingsFooterFeedback'
+          ? 'settings-inline-feedback settings-footer-feedback'
+          : 'settings-inline-feedback';
+      return;
+    }
+
+    const iconMap: Record<'info' | 'success' | 'warning' | 'error', string> = {
+      info: 'info',
+      success: 'check-circle-2',
+      warning: 'alert-triangle',
+      error: 'alert-circle',
+    };
+    const baseClass =
+      elementId === 'settingsFooterFeedback'
+        ? 'settings-inline-feedback settings-footer-feedback'
+        : 'settings-inline-feedback';
+    el.className = `${baseClass} is-${type}`;
+    el.style.display = 'flex';
+    el.innerHTML = `<i class="app-icon" data-lucide="${iconMap[type]}"></i><span>${this.escapeHtml(cleanMsg)}</span>`;
+    this.refreshIcons();
+  }
+
+  /**
+   * Resets all Settings dialog options in the active tab back to their default values and persists them.
    */
   public resetSettingsToDefaults(): void {
+    if (this.activeSettingsTab === 'ai') {
+      this.resetAISettingsToDefaults();
+      return;
+    }
+
     this.service.setGridVisible(DEFAULT_MESH_EDITOR_SETTINGS.grid);
     this.service.setGridSize(DEFAULT_MESH_EDITOR_SETTINGS.gridSize);
     this.service.setCameraSpeed(DEFAULT_MESH_EDITOR_SETTINGS.cameraSpeed);
@@ -2091,14 +2142,111 @@ export class MeshEditorApp {
     this.syncSettingsUI();
     this.updatePanelButtonStates();
     this.saveSettingsToStorage();
-    this.showToast('Settings reset to defaults.', 'info');
+    this.setSettingsInlineFeedback('settingsFooterFeedback', 'Editing settings reset to defaults.', 'info');
   }
 
   /**
-   * Opens the Settings modal dialog.
+   * Resets AI Agent settings in the Settings dialog back to defaults and persists them to localStorage.
    */
-  public openSettingsModal(): void {
+  public resetAISettingsToDefaults(): void {
+    const defaultImageProviders = createDefaultImageGeneratorProviders();
+    for (const [id, prov] of Object.entries(defaultImageProviders)) {
+      this.service.externalImageGenerator.updateProvider(id as any, prov);
+    }
+    this.service.externalImageGenerator.setActiveBackend(
+      DEFAULT_AI_AGENT_CONFIG.imageGeneratorEnabled
+        ? ((DEFAULT_AI_AGENT_CONFIG.imageGeneratorActiveBackend as any) || 'pollinations')
+        : 'procedural'
+    );
+
+    this.service.aiAgent.saveConfig({
+      ...DEFAULT_AI_AGENT_CONFIG,
+      neural3DProviders: createDefaultNeural3DProviders(),
+      imageGeneratorProviders: defaultImageProviders,
+      skillStates: {},
+    });
+    this.service.aiAgent.reloadSkills();
+    this.renderAISkills();
+    this.syncAISettingsControlsUI?.();
+    this.refreshAIEndpointBadge();
+
+    const settingsStatus = this.getElement<HTMLElement>('aiSettingsStatus');
+    if (settingsStatus) settingsStatus.textContent = 'Defaults restored';
+    this.setSettingsInlineFeedback('aiEndpointFeedback', '', 'info');
+    this.setSettingsInlineFeedback('aiImageGenTestResult', '', 'info');
+    for (const id of ['trellis', 'hunyuan3d', 'hi3d']) {
+      this.setSettingsInlineFeedback(`aiNeuralTestResult_${id}`, '', 'info');
+    }
+    this.setSettingsInlineFeedback('settingsFooterFeedback', 'AI settings reset to defaults.', 'info');
+  }
+
+  /**
+   * Switches the active tab inside the Settings modal dialog.
+   */
+  public switchSettingsTab(tab: 'editing' | 'ai'): void {
+    this.activeSettingsTab = tab;
+    const modal = this.getElement<HTMLDialogElement>('settingsModal');
+    if (!modal) return;
+
+    const tabBtns = modal.querySelectorAll<HTMLButtonElement>('[data-settings-tab]');
+    tabBtns.forEach((btn) => {
+      const isTarget = btn.getAttribute('data-settings-tab') === tab;
+      btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+      btn.classList.toggle('active', isTarget);
+      btn.setAttribute('tabindex', isTarget ? '0' : '-1');
+      btn.toggleAttribute('focusgroupstart', isTarget);
+    });
+
+    const editingPanel = this.getElement<HTMLElement>('settingsTabPanelEditing');
+    const aiPanel = this.getElement<HTMLElement>('settingsTabPanelAI');
+    if (editingPanel) {
+      if (tab === 'editing') editingPanel.removeAttribute('hidden');
+      else editingPanel.setAttribute('hidden', 'until-found');
+    }
+    if (aiPanel) {
+      if (tab === 'ai') aiPanel.removeAttribute('hidden');
+      else aiPanel.setAttribute('hidden', 'until-found');
+    }
+
+    const modalBody = this.getElement<HTMLElement>('settingsModalBody');
+    if (modalBody) modalBody.scrollTop = 0;
+
+    if (tab === 'ai') {
+      this.service.aiAgent.reloadSkills();
+      this.renderAISkills();
+      this.syncAISettingsControlsUI?.();
+
+      const modelSelect = this.getElement<HTMLSelectElement>('aiModelSelect');
+      if (modelSelect && modelSelect.options.length <= 1) {
+        this.service.aiAgent
+          .fetchAvailableModels()
+          .then((models) => {
+            if (models.length > 0) {
+              const current = this.service.aiAgent.getConfig().model;
+              const unique = Array.from(new Set([current, ...models].filter(Boolean)));
+              modelSelect.innerHTML = unique
+                .map((m) => `<option value="${this.escapeHtml(m)}">${this.escapeHtml(m)}</option>`)
+                .join('');
+              modelSelect.value = current;
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Opens the Settings modal dialog, optionally selecting a specific tab.
+   */
+  public openSettingsModal(tab?: 'editing' | 'ai'): void {
     this.closeAllDropdowns();
+    this.setSettingsInlineFeedback('settingsFooterFeedback', '', 'info');
+    if (tab) {
+      this.switchSettingsTab(tab);
+    } else if (this.activeSettingsTab === 'ai') {
+      this.service.aiAgent.reloadSkills();
+      this.renderAISkills();
+    }
     this.syncSettingsUI();
     const settingsModal = this.getElement<HTMLDialogElement>('settingsModal');
     if (!settingsModal) return;
@@ -2146,6 +2294,40 @@ export class MeshEditorApp {
     if (settingsModal) {
       settingsModal.addEventListener('close', () => {
         settingsModal.returnValue = '';
+      });
+
+      const tabList = settingsModal.querySelector<HTMLElement>('.settings-tabs');
+      const tabBtns = Array.from(settingsModal.querySelectorAll<HTMLButtonElement>('[data-settings-tab]'));
+      tabBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const target = btn.getAttribute('data-settings-tab') as 'editing' | 'ai' | null;
+          if (target) this.switchSettingsTab(target);
+        });
+      });
+
+      tabList?.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (tabBtns.length < 2) return;
+        const currentIdx = tabBtns.findIndex((b) => b === document.activeElement);
+        if (currentIdx === -1) return;
+        let nextIdx = -1;
+        if (e.key === 'ArrowRight') nextIdx = (currentIdx + 1) % tabBtns.length;
+        else if (e.key === 'ArrowLeft') nextIdx = (currentIdx - 1 + tabBtns.length) % tabBtns.length;
+        else if (e.key === 'Home') nextIdx = 0;
+        else if (e.key === 'End') nextIdx = tabBtns.length - 1;
+        if (nextIdx >= 0) {
+          e.preventDefault();
+          const nextBtn = tabBtns[nextIdx];
+          const target = nextBtn.getAttribute('data-settings-tab') as 'editing' | 'ai' | null;
+          nextBtn.focus();
+          if (target) this.switchSettingsTab(target);
+        }
+      });
+
+      this.getElement('settingsTabPanelEditing')?.addEventListener('beforematch', () => {
+        this.switchSettingsTab('editing');
+      });
+      this.getElement('settingsTabPanelAI')?.addEventListener('beforematch', () => {
+        this.switchSettingsTab('ai');
       });
 
       // Fallback light-dismiss for browsers without native closedby support
@@ -2222,7 +2404,497 @@ export class MeshEditorApp {
       }
     }
 
+    this.initAISettingsUI();
     this.syncSettingsUI();
+  }
+
+  /**
+   * Initializes all AI settings controls inside the central Settings modal's "AI" tab
+   * and persists every change directly to localStorage.
+   */
+  private initAISettingsUI(): void {
+    const endpointInput = this.getElement<HTMLInputElement>('aiEndpointUrlInput');
+    const apiKeyInput = this.getElement<HTMLInputElement>('aiApiKeyInput');
+    const modelInput = this.getElement<HTMLInputElement>('aiModelInput');
+    const modelSelect = this.getElement<HTMLSelectElement>('aiModelSelect');
+    const btnToggleCustomModel = this.getElement<HTMLButtonElement>('btnToggleCustomModel');
+    const modelDatalist = this.getElement<HTMLDataListElement>('aiModelDatalist');
+    const settingsStatus = this.getElement<HTMLElement>('aiSettingsStatus');
+    const minPolyInput = this.getElement<HTMLInputElement>('aiMinPolyInput');
+    const minPolyVal = this.getElement<HTMLElement>('aiMinPolyVal');
+    const maxPolyInput = this.getElement<HTMLInputElement>('aiMaxPolyInput');
+    const maxPolyVal = this.getElement<HTMLElement>('aiMaxPolyVal');
+    const createTexturesCheck = this.getElement<HTMLInputElement>('aiCreateTexturesCheck');
+    const createTexturesCheckQuick = this.getElement<HTMLInputElement>('aiCreateTexturesCheckQuick');
+    const createNormalMapsCheck = this.getElement<HTMLInputElement>('aiCreateNormalMapsCheck');
+    const createNormalMapsCheckQuick = this.getElement<HTMLInputElement>('aiCreateNormalMapsCheckQuick');
+    const visualCritiqueCheck = this.getElement<HTMLInputElement>('aiVisualCritiqueCheck');
+    const visualCritiqueCheckQuick = this.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
+
+    const populateModelSelect = (models: string[], selectedModel?: string) => {
+      if (!modelSelect) return;
+      const targetModel = selectedModel || modelInput?.value || this.service.aiAgent.getConfig().model;
+      const existing = Array.from(modelSelect.options).map((o) => o.value);
+      const combined = Array.from(new Set([...models, ...existing, targetModel].filter(Boolean)));
+      modelSelect.innerHTML = combined
+        .map((m) => `<option value="${this.escapeHtml(m)}">${this.escapeHtml(m)}</option>`)
+        .join('');
+      if (targetModel) {
+        modelSelect.value = targetModel;
+      }
+      if (modelInput) {
+        modelInput.value = modelSelect.value || targetModel || '';
+      }
+    };
+
+    const neuralProviderIds: Neural3DBackendId[] = ['trellis', 'hunyuan3d', 'hi3d'];
+    const readNeuralProvidersFromDOM = (fallbackToPreset: boolean = true): Neural3DProvidersMap => {
+      const currentMap = this.service.aiAgent.getNeural3DProviders();
+      for (const id of neuralProviderIds) {
+        const enableEl = this.getElement<HTMLInputElement>(`aiNeuralEnabled_${id}`);
+        const protoEl = this.getElement<HTMLSelectElement>(`aiNeuralProtocol_${id}`);
+        const modelEl = this.getElement<HTMLInputElement>(`aiNeuralModel_${id}`);
+        const urlEl = this.getElement<HTMLInputElement>(`aiNeuralUrl_${id}`);
+        const keyEl = this.getElement<HTMLInputElement>(`aiNeuralKey_${id}`);
+
+        const protocol = (protoEl?.value || currentMap[id].protocol) as Neural3DProtocol;
+        const preset = NEURAL_3D_PROTOCOL_DEFAULTS[id][protocol] || NEURAL_3D_PROTOCOL_DEFAULTS[id].omlx;
+        const rawModel = modelEl ? modelEl.value.trim() : currentMap[id].modelId;
+        const rawUrl = urlEl ? urlEl.value.trim() : currentMap[id].endpointUrl;
+        currentMap[id] = {
+          ...currentMap[id],
+          enabled: enableEl ? !!enableEl.checked : currentMap[id].enabled,
+          protocol,
+          modelId: rawModel || (fallbackToPreset ? preset.modelId : ''),
+          endpointUrl: rawUrl || (fallbackToPreset ? preset.endpointUrl : ''),
+          apiKey: keyEl ? keyEl.value.trim() : currentMap[id].apiKey,
+        };
+      }
+      return currentMap;
+    };
+
+    const syncNeuralProvidersUI = () => {
+      const providers = this.service.aiAgent.getNeural3DProviders();
+      for (const id of neuralProviderIds) {
+        const p = providers[id];
+        const enableEl = this.getElement<HTMLInputElement>(`aiNeuralEnabled_${id}`);
+        const bodyEl = this.getElement<HTMLElement>(`aiNeuralConfigBody_${id}`);
+        const protoEl = this.getElement<HTMLSelectElement>(`aiNeuralProtocol_${id}`);
+        const modelEl = this.getElement<HTMLInputElement>(`aiNeuralModel_${id}`);
+        const urlEl = this.getElement<HTMLInputElement>(`aiNeuralUrl_${id}`);
+        const keyEl = this.getElement<HTMLInputElement>(`aiNeuralKey_${id}`);
+
+        if (enableEl) enableEl.checked = !!p.enabled;
+        if (bodyEl) bodyEl.style.display = p.enabled ? 'flex' : 'none';
+        if (protoEl) protoEl.value = p.protocol;
+        if (modelEl) modelEl.value = p.modelId || '';
+        if (urlEl) urlEl.value = p.endpointUrl || '';
+        if (keyEl) keyEl.value = p.apiKey || '';
+      }
+    };
+
+    // External Image Generator bindings (AI Textures)
+    const imgGenEnableEl = this.getElement<HTMLInputElement>('aiImageGenEnabled');
+    const imgGenBodyEl = this.getElement<HTMLElement>('aiImageGenConfigBody');
+    const imgGenBackendEl = this.getElement<HTMLSelectElement>('aiImageGenBackendSelect');
+    const imgGenModelEl = this.getElement<HTMLInputElement>('aiImageGenModel');
+    const imgGenUrlEl = this.getElement<HTMLInputElement>('aiImageGenUrl');
+    const imgGenKeyEl = this.getElement<HTMLInputElement>('aiImageGenKey');
+    const testImgGenBtn = this.getElement<HTMLButtonElement>('btnTestImageGenGlobal');
+
+    const syncImageGenUI = () => {
+      const imgGenService = this.service.externalImageGenerator;
+      const cfg = this.service.aiAgent.getConfig();
+      const isEnabled = cfg.imageGeneratorEnabled ?? true;
+      const currentActive = imgGenService.getActiveBackend();
+      const savedBackend = cfg.imageGeneratorActiveBackend;
+      const targetBackend = (
+        savedBackend && savedBackend !== 'procedural'
+          ? savedBackend
+          : currentActive && currentActive !== 'procedural'
+            ? currentActive
+            : 'pollinations'
+      ) as any;
+      const provider =
+        cfg.imageGeneratorProviders?.[targetBackend as keyof typeof cfg.imageGeneratorProviders] ||
+        imgGenService.getProvider(targetBackend);
+
+      if (imgGenEnableEl) imgGenEnableEl.checked = isEnabled;
+      if (imgGenBodyEl) imgGenBodyEl.style.display = isEnabled ? 'flex' : 'none';
+      if (imgGenBackendEl) imgGenBackendEl.value = targetBackend;
+      if (imgGenModelEl) imgGenModelEl.value = provider?.modelId || '';
+      if (imgGenUrlEl) imgGenUrlEl.value = provider?.endpointUrl || '';
+      if (imgGenKeyEl) imgGenKeyEl.value = provider?.apiKey || '';
+    };
+    this.syncAIAgentImageGenUI = syncImageGenUI;
+
+    const saveImageGenFromDOM = () => {
+      const isEnabled = !!imgGenEnableEl?.checked;
+      const backend = (imgGenBackendEl?.value || 'pollinations') as any;
+      this.service.externalImageGenerator.updateProvider(backend, {
+        modelId: imgGenModelEl?.value.trim(),
+        endpointUrl: imgGenUrlEl?.value.trim(),
+        apiKey: imgGenKeyEl?.value.trim(),
+      });
+      this.service.externalImageGenerator.setActiveBackend(isEnabled ? backend : 'procedural');
+      this.service.aiAgent.saveConfig({
+        imageGeneratorEnabled: isEnabled,
+        imageGeneratorActiveBackend: backend,
+        imageGeneratorProviders: this.service.externalImageGenerator.getProviders(),
+      });
+    };
+
+    const syncAllAIControls = () => {
+      const cfg = this.service.aiAgent.getConfig();
+      if (endpointInput) endpointInput.value = cfg.baseUrl;
+      if (apiKeyInput) apiKeyInput.value = cfg.apiKey;
+      if (modelInput) modelInput.value = cfg.model;
+      populateModelSelect([], cfg.model);
+
+      const minPolys = cfg.minPolygons ?? 200;
+      const maxPolys = cfg.maxPolygons ?? 5000;
+      if (minPolyInput) {
+        minPolyInput.value = String(minPolys);
+        this.syncSliderVisual(minPolyInput, minPolys, 'polys');
+      }
+      if (minPolyVal) minPolyVal.textContent = minPolys.toLocaleString();
+      if (maxPolyInput) {
+        maxPolyInput.value = String(maxPolys);
+        this.syncSliderVisual(maxPolyInput, maxPolys, 'polys');
+      }
+      if (maxPolyVal) maxPolyVal.textContent = maxPolys.toLocaleString();
+
+      const texturesOn = cfg.createTextures !== false;
+      if (createTexturesCheck) createTexturesCheck.checked = texturesOn;
+      if (createTexturesCheckQuick) createTexturesCheckQuick.checked = texturesOn;
+
+      const normalMapsOn = cfg.createNormalMaps !== false;
+      if (createNormalMapsCheck) createNormalMapsCheck.checked = normalMapsOn;
+      if (createNormalMapsCheckQuick) createNormalMapsCheckQuick.checked = normalMapsOn;
+
+      const critiqueOn = !!cfg.visualCritique;
+      if (visualCritiqueCheck) visualCritiqueCheck.checked = critiqueOn;
+      if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = critiqueOn;
+
+      syncNeuralProvidersUI();
+      syncImageGenUI();
+    };
+    this.syncAISettingsControlsUI = syncAllAIControls;
+
+    // Endpoint inputs (persist immediately to localStorage)
+    endpointInput?.addEventListener('input', () => {
+      const val = endpointInput.value.trim();
+      if (!val) return;
+      this.service.aiAgent.saveConfig({ baseUrl: val });
+      this.refreshAIEndpointBadge();
+    });
+    endpointInput?.addEventListener('change', () => {
+      const val = endpointInput.value.trim() || DEFAULT_AI_AGENT_CONFIG.baseUrl;
+      endpointInput.value = val;
+      this.service.aiAgent.saveConfig({ baseUrl: val });
+      this.refreshAIEndpointBadge();
+    });
+
+    apiKeyInput?.addEventListener('input', () => {
+      this.service.aiAgent.saveConfig({ apiKey: apiKeyInput.value.trim() });
+      this.refreshAIEndpointBadge();
+    });
+    apiKeyInput?.addEventListener('change', () => {
+      this.service.aiAgent.saveConfig({ apiKey: apiKeyInput.value.trim() });
+      this.refreshAIEndpointBadge();
+    });
+
+    modelSelect?.addEventListener('change', () => {
+      if (modelInput) modelInput.value = modelSelect.value;
+      this.service.aiAgent.saveConfig({ model: modelSelect.value });
+      this.refreshAIEndpointBadge();
+    });
+
+    modelInput?.addEventListener('input', () => {
+      const val = modelInput.value.trim();
+      if (!val) return;
+      populateModelSelect([val], val);
+      this.service.aiAgent.saveConfig({ model: val });
+      this.refreshAIEndpointBadge();
+    });
+    modelInput?.addEventListener('change', () => {
+      const val = modelInput.value.trim() || DEFAULT_AI_AGENT_CONFIG.model;
+      modelInput.value = val;
+      populateModelSelect([val], val);
+      this.service.aiAgent.saveConfig({ model: val });
+      this.refreshAIEndpointBadge();
+    });
+
+    btnToggleCustomModel?.addEventListener('click', () => {
+      if (!modelInput || !modelSelect) return;
+      const isCustomVisible = modelInput.style.display !== 'none';
+      if (isCustomVisible) {
+        modelInput.style.display = 'none';
+        modelSelect.style.display = 'inline-block';
+        btnToggleCustomModel.textContent = 'Custom ID...';
+        if (modelSelect.value) {
+          modelInput.value = modelSelect.value;
+          this.service.aiAgent.saveConfig({ model: modelSelect.value });
+          this.refreshAIEndpointBadge();
+        }
+      } else {
+        modelInput.style.display = 'inline-block';
+        modelSelect.style.display = 'none';
+        btnToggleCustomModel.textContent = 'Select...';
+        modelInput.focus();
+      }
+    });
+
+    // Polygon budget sliders & preset chips (persist immediately to localStorage)
+    const persistPolyBudget = () => {
+      const minVal = minPolyInput ? Math.max(50, Number(minPolyInput.value) || 200) : 200;
+      const maxVal = maxPolyInput ? Math.max(minVal, Number(maxPolyInput.value) || 5000) : 5000;
+      if (minPolyVal) minPolyVal.textContent = minVal.toLocaleString();
+      if (maxPolyVal) maxPolyVal.textContent = maxVal.toLocaleString();
+      if (minPolyInput) this.syncSliderVisual(minPolyInput, minVal, 'polys');
+      if (maxPolyInput) this.syncSliderVisual(maxPolyInput, maxVal, 'polys');
+      this.service.aiAgent.saveConfig({ minPolygons: minVal, maxPolygons: maxVal });
+      this.refreshAIEndpointBadge();
+    };
+
+    minPolyInput?.addEventListener('input', () => {
+      const val = Number(minPolyInput.value);
+      if (maxPolyInput && Number(maxPolyInput.value) < val) {
+        maxPolyInput.value = String(val);
+      }
+      persistPolyBudget();
+    });
+
+    maxPolyInput?.addEventListener('input', () => {
+      const val = Number(maxPolyInput.value);
+      if (minPolyInput && Number(minPolyInput.value) > val) {
+        minPolyInput.value = String(val);
+      }
+      persistPolyBudget();
+    });
+
+    this.getElement('aiMaxPolyChips')
+      ?.querySelectorAll<HTMLButtonElement>('[data-poly]')
+      .forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const poly = btn.getAttribute('data-poly');
+          if (poly && maxPolyInput) {
+            maxPolyInput.value = poly;
+            maxPolyInput.dispatchEvent(new Event('input'));
+          }
+        });
+      });
+
+    // Texture, Normal Map, Visual Critique checkboxes (synced with quick checkboxes & persisted)
+    createTexturesCheck?.addEventListener('change', () => {
+      const enabled = !!createTexturesCheck.checked;
+      if (createTexturesCheckQuick) createTexturesCheckQuick.checked = enabled;
+      this.service.aiAgent.saveConfig({ createTextures: enabled });
+      this.refreshAIEndpointBadge();
+    });
+
+    createNormalMapsCheck?.addEventListener('change', () => {
+      const enabled = !!createNormalMapsCheck.checked;
+      if (createNormalMapsCheckQuick) createNormalMapsCheckQuick.checked = enabled;
+      this.service.aiAgent.saveConfig({ createNormalMaps: enabled });
+      this.refreshAIEndpointBadge();
+    });
+
+    visualCritiqueCheck?.addEventListener('change', () => {
+      const enabled = !!visualCritiqueCheck.checked;
+      if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = enabled;
+      this.service.aiAgent.saveConfig({ visualCritique: enabled });
+      this.refreshAIEndpointBadge();
+    });
+
+    // Neural 3D Generators (TRELLIS 2, Hunyuan3D, Hi3D)
+    for (const id of neuralProviderIds) {
+      const enableEl = this.getElement<HTMLInputElement>(`aiNeuralEnabled_${id}`);
+      const bodyEl = this.getElement<HTMLElement>(`aiNeuralConfigBody_${id}`);
+      const protoEl = this.getElement<HTMLSelectElement>(`aiNeuralProtocol_${id}`);
+      const modelEl = this.getElement<HTMLInputElement>(`aiNeuralModel_${id}`);
+      const urlEl = this.getElement<HTMLInputElement>(`aiNeuralUrl_${id}`);
+      const keyEl = this.getElement<HTMLInputElement>(`aiNeuralKey_${id}`);
+      const testBtn = this.getElement<HTMLButtonElement>(`btnTestNeural_${id}`);
+
+      enableEl?.addEventListener('change', () => {
+        const enabled = !!enableEl.checked;
+        if (bodyEl) bodyEl.style.display = enabled ? 'flex' : 'none';
+        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM() });
+        this.refreshAIEndpointBadge();
+      });
+
+      protoEl?.addEventListener('change', () => {
+        const newProto = (protoEl.value || 'omlx') as Neural3DProtocol;
+        const preset = NEURAL_3D_PROTOCOL_DEFAULTS[id][newProto];
+        if (preset) {
+          if (urlEl) urlEl.value = preset.endpointUrl;
+          if (modelEl) modelEl.value = preset.modelId;
+        }
+        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM() });
+        this.refreshAIEndpointBadge();
+      });
+
+      const onFieldInput = () => {
+        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM(false) });
+        this.refreshAIEndpointBadge();
+      };
+      const onFieldChange = () => {
+        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM(true) });
+        syncNeuralProvidersUI();
+        this.refreshAIEndpointBadge();
+      };
+      modelEl?.addEventListener('input', onFieldInput);
+      urlEl?.addEventListener('input', onFieldInput);
+      keyEl?.addEventListener('input', onFieldInput);
+      modelEl?.addEventListener('change', onFieldChange);
+      urlEl?.addEventListener('change', onFieldChange);
+      keyEl?.addEventListener('change', onFieldChange);
+
+      testBtn?.addEventListener('click', async () => {
+        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM() });
+        if (testBtn) testBtn.disabled = true;
+        this.setSettingsInlineFeedback(`aiNeuralTestResult_${id}`, 'Testing connection...', 'info');
+        try {
+          const res = await this.service.aiAgent.testNeural3DProvider(id);
+          this.setSettingsInlineFeedback(`aiNeuralTestResult_${id}`, res.message, res.ok ? 'success' : 'warning');
+        } catch (err: any) {
+          this.setSettingsInlineFeedback(
+            `aiNeuralTestResult_${id}`,
+            err?.message || 'Connection test failed.',
+            'error'
+          );
+        } finally {
+          if (testBtn) testBtn.disabled = false;
+        }
+      });
+    }
+
+    // External Image Generator bindings
+    imgGenEnableEl?.addEventListener('change', () => {
+      const isEnabled = !!imgGenEnableEl.checked;
+      if (imgGenBodyEl) imgGenBodyEl.style.display = isEnabled ? 'flex' : 'none';
+      saveImageGenFromDOM();
+    });
+
+    imgGenBackendEl?.addEventListener('change', () => {
+      const backend = (imgGenBackendEl.value || 'pollinations') as any;
+      const provider = this.service.externalImageGenerator.getProvider(backend);
+      if (imgGenModelEl) imgGenModelEl.value = provider.modelId || '';
+      if (imgGenUrlEl) imgGenUrlEl.value = provider.endpointUrl || '';
+      if (imgGenKeyEl) imgGenKeyEl.value = provider.apiKey || '';
+      this.setSettingsInlineFeedback('aiImageGenTestResult', '', 'info');
+      saveImageGenFromDOM();
+    });
+
+    imgGenModelEl?.addEventListener('input', saveImageGenFromDOM);
+    imgGenUrlEl?.addEventListener('input', saveImageGenFromDOM);
+    imgGenKeyEl?.addEventListener('input', saveImageGenFromDOM);
+    imgGenModelEl?.addEventListener('change', saveImageGenFromDOM);
+    imgGenUrlEl?.addEventListener('change', saveImageGenFromDOM);
+    imgGenKeyEl?.addEventListener('change', saveImageGenFromDOM);
+
+    testImgGenBtn?.addEventListener('click', async () => {
+      saveImageGenFromDOM();
+      const backend = (imgGenBackendEl?.value || 'pollinations') as any;
+      if (testImgGenBtn) testImgGenBtn.disabled = true;
+      this.setSettingsInlineFeedback('aiImageGenTestResult', 'Testing generator endpoint...', 'info');
+      try {
+        const res = await this.service.externalImageGenerator.testProvider(backend);
+        this.setSettingsInlineFeedback('aiImageGenTestResult', res.message, res.ok ? 'success' : 'warning');
+      } catch (err: any) {
+        this.setSettingsInlineFeedback(
+          'aiImageGenTestResult',
+          err?.message || 'Generator connection test failed.',
+          'error'
+        );
+      } finally {
+        if (testImgGenBtn) testImgGenBtn.disabled = false;
+      }
+    });
+
+    // Endpoint presets
+    this.getElement('aiPresetChips')
+      ?.querySelectorAll('[data-preset]')
+      .forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const presetId = (btn as HTMLElement).getAttribute('data-preset');
+          const preset = AI_ENDPOINT_PRESETS.find((p) => p.id === presetId);
+          if (preset) {
+            if (endpointInput) endpointInput.value = preset.baseUrl;
+            if (modelInput) modelInput.value = preset.defaultModel;
+            populateModelSelect([preset.defaultModel], preset.defaultModel);
+            this.service.aiAgent.saveConfig({
+              baseUrl: preset.baseUrl,
+              model: preset.defaultModel,
+            });
+            this.refreshAIEndpointBadge();
+            if (settingsStatus) settingsStatus.textContent = `Preset: ${preset.label}`;
+            this.setSettingsInlineFeedback(
+              'aiEndpointFeedback',
+              `Switched to ${preset.label} (${preset.defaultModel}).`,
+              'info'
+            );
+
+            if (preset.baseUrl.includes('antigravity') || preset.baseUrl.includes('8787')) {
+              this.service.aiAgent
+                .fetchAvailableModels({ baseUrl: preset.baseUrl })
+                .then((models) => {
+                  if (models.length > 0) {
+                    populateModelSelect(models, preset.defaultModel);
+                  }
+                })
+                .catch(() => {});
+            }
+          }
+        });
+      });
+
+    // Toggle API key visibility
+    this.getElement('btnToggleApiKeyVis')?.addEventListener('click', () => {
+      if (!apiKeyInput) return;
+      apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
+    });
+
+    // Fetch available models from OpenAI-compatible /models endpoint
+    const btnFetchModels = this.getElement<HTMLButtonElement>('btnFetchAIModels');
+    btnFetchModels?.addEventListener('click', async () => {
+      if (btnFetchModels) btnFetchModels.disabled = true;
+      if (settingsStatus) settingsStatus.textContent = 'Fetching models...';
+      this.setSettingsInlineFeedback('aiEndpointFeedback', 'Fetching available models from /models...', 'info');
+      try {
+        const models = await this.service.aiAgent.fetchAvailableModels({
+          baseUrl: endpointInput?.value.trim(),
+          apiKey: apiKeyInput?.value.trim(),
+        });
+        populateModelSelect(models);
+        if (modelDatalist) {
+          modelDatalist.innerHTML = models.map((m) => `<option value="${m}"></option>`).join('');
+        }
+        if (settingsStatus) settingsStatus.textContent = `${models.length} models loaded`;
+        this.setSettingsInlineFeedback('aiEndpointFeedback', `Loaded ${models.length} models from endpoint.`, 'success');
+      } catch (err: any) {
+        if (settingsStatus) settingsStatus.textContent = 'Model fetch failed';
+        this.setSettingsInlineFeedback(
+          'aiEndpointFeedback',
+          err?.message || 'Failed to fetch models from endpoint.',
+          'warning'
+        );
+      } finally {
+        if (btnFetchModels) btnFetchModels.disabled = false;
+      }
+    });
+
+    syncAllAIControls();
+    this.renderAISkills();
+    this.refreshAIEndpointBadge();
+
+    // Refresh dynamic skills from local dev server/bridge if available
+    if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+      this.service.aiAgent.fetchSkillsFromApi().then(() => {
+        this.renderAISkills();
+      });
+    }
   }
 
   /**
@@ -6630,44 +7302,48 @@ export class MeshEditorApp {
     }
   }
 
-  public toggleAISettings(forceOpen?: boolean): void {
-    const settingsPanel = this.getElement<HTMLElement>('aiSettingsPanel');
-    const agentBody = this.getElement<HTMLElement>('aiAgentBody');
-    const dialogTitleText = this.getElement<HTMLElement>('aiDialogTitleText');
-    const btnSettingsToggle = this.getElement<HTMLButtonElement>('btnAISettingsToggle');
-    if (!settingsPanel) return;
-
-    const isHidden = settingsPanel.style.display === 'none' || settingsPanel.style.display === '';
-    const willOpen = forceOpen !== undefined ? forceOpen : isHidden;
-
-    if (willOpen) {
-      this.service.aiAgent.reloadSkills();
-      this.renderAISkills();
-      this.syncAIAgentImageGenUI?.();
-      settingsPanel.style.display = 'flex';
-      if (agentBody) agentBody.style.display = 'none';
-      btnSettingsToggle?.classList.add('active');
-      btnSettingsToggle?.setAttribute('title', 'Back to Chat & Generation');
-      if (dialogTitleText) dialogTitleText.textContent = 'AI Agent Settings';
-
-      // Auto-fetch endpoint models on first settings drawer open if not already loaded
-      const modelSelect = this.getElement<HTMLSelectElement>('aiModelSelect');
-      if (modelSelect && modelSelect.options.length <= 1) {
-        this.service.aiAgent.fetchAvailableModels().then((models) => {
-          if (models.length > 0) {
-            const current = this.service.aiAgent.getConfig().model;
-            const unique = Array.from(new Set([current, ...models].filter(Boolean)));
-            modelSelect.innerHTML = unique.map((m) => `<option value="${this.escapeHtml(m)}">${this.escapeHtml(m)}</option>`).join('');
-            modelSelect.value = current;
-          }
-        }).catch(() => {});
+  /**
+   * Refreshes the AI endpoint summary bar inside the AI Mesh Agent dialog.
+   */
+  public refreshAIEndpointBadge(): void {
+    const endpointBadge =
+      this.getElement<HTMLElement>('aiEndpointSummaryText') || this.getElement<HTMLElement>('aiEndpointBadge');
+    const endpointDot = this.getElement<HTMLElement>('aiEndpointStatusDot');
+    const cfg = this.service.aiAgent.getConfig();
+    const isAgy =
+      cfg.baseUrl.includes('/api/antigravity') ||
+      cfg.baseUrl.includes('localhost:8787') ||
+      cfg.baseUrl.includes('127.0.0.1:8787');
+    let host = isAgy ? 'Antigravity' : cfg.baseUrl;
+    if (!isAgy) {
+      try {
+        const u = new URL(cfg.baseUrl);
+        host = u.host;
+      } catch {
+        // Keep raw string if not a valid URL
       }
-    } else {
-      settingsPanel.style.display = 'none';
-      if (agentBody) agentBody.style.display = 'flex';
-      btnSettingsToggle?.classList.remove('active');
-      btnSettingsToggle?.setAttribute('title', 'Configure OpenAI-Compatible Endpoint & Skills');
-      if (dialogTitleText) dialogTitleText.textContent = 'AI Mesh Agent';
+    }
+    const isLocal = isAgy || host.includes('localhost') || host.includes('127.0.0.1');
+    const hasKey = !!cfg.apiKey || isLocal;
+    const keyStatus = isAgy ? 'Account ✓' : cfg.apiKey ? 'Key ✓' : isLocal ? 'Local' : 'No Key';
+    const minP = cfg.minPolygons ?? 200;
+    const maxP = cfg.maxPolygons ?? 5000;
+    const formatPoly = (n: number) => {
+      if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'k';
+      return String(n);
+    };
+    const polySummary = `${formatPoly(minP)}–${formatPoly(maxP)}p`;
+    const enabledNeural = this.service.aiAgent.getEnabledNeural3DProviders();
+    const neuralSuffix =
+      enabledNeural.length > 0
+        ? ` • 3D: ${enabledNeural.map((p) => (p.id === 'trellis' ? 'TRELLIS' : p.id === 'hunyuan3d' ? 'Hunyuan3D' : 'Hi3D')).join('+')}`
+        : '';
+    if (endpointBadge) {
+      endpointBadge.textContent = `${cfg.model} • ${polySummary} • ${host} (${keyStatus})${neuralSuffix}`;
+    }
+    if (endpointDot) {
+      endpointDot.classList.toggle('is-ready', hasKey);
     }
   }
 
@@ -6718,30 +7394,11 @@ export class MeshEditorApp {
   }
 
   private initAIAgentUI(): void {
-    const endpointInput = this.getElement<HTMLInputElement>('aiEndpointUrlInput');
-    const apiKeyInput = this.getElement<HTMLInputElement>('aiApiKeyInput');
-    const modelInput = this.getElement<HTMLInputElement>('aiModelInput');
-    const modelSelect = this.getElement<HTMLSelectElement>('aiModelSelect');
-    const btnToggleCustomModel = this.getElement<HTMLButtonElement>('btnToggleCustomModel');
-    const modelDatalist = this.getElement<HTMLDataListElement>('aiModelDatalist');
-    const settingsPanel = this.getElement<HTMLElement>('aiSettingsPanel');
-    const skillsList = this.getElement<HTMLElement>('aiSkillsList');
-    const endpointBadge =
-      this.getElement<HTMLElement>('aiEndpointSummaryText') || this.getElement<HTMLElement>('aiEndpointBadge');
-    const endpointDot = this.getElement<HTMLElement>('aiEndpointStatusDot');
-    const settingsStatus = this.getElement<HTMLElement>('aiSettingsStatus');
     const promptInput = this.getElement<HTMLTextAreaElement>('aiPromptInput');
     const imageFileInput = this.getElement<HTMLInputElement>('aiImageFileInput');
     const chatLog = this.getElement<HTMLElement>('aiChatLog');
-    const minPolyInput = this.getElement<HTMLInputElement>('aiMinPolyInput');
-    const minPolyVal = this.getElement<HTMLElement>('aiMinPolyVal');
-    const maxPolyInput = this.getElement<HTMLInputElement>('aiMaxPolyInput');
-    const maxPolyVal = this.getElement<HTMLElement>('aiMaxPolyVal');
-    const createTexturesCheck = this.getElement<HTMLInputElement>('aiCreateTexturesCheck');
     const createTexturesCheckQuick = this.getElement<HTMLInputElement>('aiCreateTexturesCheckQuick');
-    const createNormalMapsCheck = this.getElement<HTMLInputElement>('aiCreateNormalMapsCheck');
     const createNormalMapsCheckQuick = this.getElement<HTMLInputElement>('aiCreateNormalMapsCheckQuick');
-    const visualCritiqueCheck = this.getElement<HTMLInputElement>('aiVisualCritiqueCheck');
     const visualCritiqueCheckQuick = this.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
 
     if (chatLog) {
@@ -6751,492 +7408,34 @@ export class MeshEditorApp {
       this.initialChatEmptyHtml = chatLog.innerHTML;
     }
 
-    const updateEndpointBadge = () => {
-      const cfg = this.service.aiAgent.getConfig();
-      const isAgy =
-        cfg.baseUrl.includes('/api/antigravity') ||
-        cfg.baseUrl.includes('localhost:8787') ||
-        cfg.baseUrl.includes('127.0.0.1:8787');
-      let host = isAgy ? 'Antigravity' : cfg.baseUrl;
-      if (!isAgy) {
-        try {
-          const u = new URL(cfg.baseUrl);
-          host = u.host;
-        } catch {
-          // Keep raw string if not a valid URL
-        }
-      }
-      const isLocal = isAgy || host.includes('localhost') || host.includes('127.0.0.1');
-      const hasKey = !!cfg.apiKey || isLocal;
-      const keyStatus = isAgy ? 'Account ✓' : cfg.apiKey ? 'Key ✓' : isLocal ? 'Local' : 'No Key';
-      const minP = cfg.minPolygons ?? 200;
-      const maxP = cfg.maxPolygons ?? 5000;
-      const formatPoly = (n: number) => {
-        if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M';
-        if (n >= 1000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'k';
-        return String(n);
-      };
-      const polySummary = `${formatPoly(minP)}–${formatPoly(maxP)}p`;
-      const enabledNeural = this.service.aiAgent.getEnabledNeural3DProviders();
-      const neuralSuffix =
-        enabledNeural.length > 0
-          ? ` • 3D: ${enabledNeural.map((p) => (p.id === 'trellis' ? 'TRELLIS' : p.id === 'hunyuan3d' ? 'Hunyuan3D' : 'Hi3D')).join('+')}`
-          : '';
-      if (endpointBadge) {
-        endpointBadge.textContent = `${cfg.model} • ${polySummary} • ${host} (${keyStatus})${neuralSuffix}`;
-      }
-      if (endpointDot) {
-        endpointDot.classList.toggle('is-ready', hasKey);
-      }
-    };
-
-    // Populate initial values from saved config
     const initialConfig = this.service.aiAgent.getConfig();
-    if (endpointInput) endpointInput.value = initialConfig.baseUrl;
-    if (apiKeyInput) apiKeyInput.value = initialConfig.apiKey;
-    if (modelInput) modelInput.value = initialConfig.model;
+    if (createTexturesCheckQuick) createTexturesCheckQuick.checked = initialConfig.createTextures !== false;
+    if (createNormalMapsCheckQuick) createNormalMapsCheckQuick.checked = initialConfig.createNormalMaps !== false;
+    if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = !!initialConfig.visualCritique;
 
-    const populateModelSelect = (models: string[], selectedModel?: string) => {
-      if (!modelSelect) return;
-      const targetModel = selectedModel || modelInput?.value || this.service.aiAgent.getConfig().model;
-      const existing = Array.from(modelSelect.options).map((o) => o.value);
-      const combined = Array.from(new Set([...models, ...existing, targetModel].filter(Boolean)));
-      modelSelect.innerHTML = combined
-        .map((m) => `<option value="${this.escapeHtml(m)}">${this.escapeHtml(m)}</option>`)
-        .join('');
-      if (targetModel) {
-        modelSelect.value = targetModel;
-      }
-      if (modelInput) {
-        modelInput.value = modelSelect.value || targetModel || '';
-      }
-    };
-
-    if (modelSelect) {
-      populateModelSelect([], initialConfig.model);
-      modelSelect.addEventListener('change', () => {
-        if (modelInput) modelInput.value = modelSelect.value;
-        this.service.aiAgent.saveConfig({ model: modelSelect.value });
-        updateEndpointBadge();
-      });
-    }
-
-    if (modelInput) {
-      modelInput.addEventListener('input', () => {
-        if (modelSelect && modelInput.value.trim()) {
-          populateModelSelect([modelInput.value.trim()], modelInput.value.trim());
-        }
-      });
-    }
-
-    if (btnToggleCustomModel) {
-      btnToggleCustomModel.addEventListener('click', () => {
-        if (!modelInput || !modelSelect) return;
-        const isCustomVisible = modelInput.style.display !== 'none';
-        if (isCustomVisible) {
-          modelInput.style.display = 'none';
-          modelSelect.style.display = 'inline-block';
-          btnToggleCustomModel.textContent = 'Custom ID...';
-          if (modelSelect.value) {
-            modelInput.value = modelSelect.value;
-            this.service.aiAgent.saveConfig({ model: modelSelect.value });
-            updateEndpointBadge();
-          }
-        } else {
-          modelInput.style.display = 'inline-block';
-          modelSelect.style.display = 'none';
-          btnToggleCustomModel.textContent = 'Select...';
-          modelInput.focus();
-        }
-      });
-    }
-
-    if (minPolyInput) {
-      minPolyInput.value = String(initialConfig.minPolygons ?? 200);
-      if (minPolyVal) minPolyVal.textContent = Number(minPolyInput.value).toLocaleString();
-      minPolyInput.addEventListener('input', () => {
-        const val = Number(minPolyInput.value);
-        if (minPolyVal) minPolyVal.textContent = val.toLocaleString();
-        if (maxPolyInput && Number(maxPolyInput.value) < val) {
-          maxPolyInput.value = String(val);
-          if (maxPolyVal) maxPolyVal.textContent = val.toLocaleString();
-        }
-      });
-    }
-
-    if (maxPolyInput) {
-      maxPolyInput.value = String(initialConfig.maxPolygons ?? 5000);
-      if (maxPolyVal) maxPolyVal.textContent = Number(maxPolyInput.value).toLocaleString();
-      maxPolyInput.addEventListener('input', () => {
-        const val = Number(maxPolyInput.value);
-        if (maxPolyVal) maxPolyVal.textContent = val.toLocaleString();
-        if (minPolyInput && Number(minPolyInput.value) > val) {
-          minPolyInput.value = String(val);
-          if (minPolyVal) minPolyVal.textContent = val.toLocaleString();
-        }
-      });
-    }
-
-    const polyChipsContainer = this.getElement('aiMaxPolyChips');
-    polyChipsContainer?.querySelectorAll<HTMLButtonElement>('[data-poly]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const poly = btn.getAttribute('data-poly');
-        if (poly && maxPolyInput) {
-          maxPolyInput.value = poly;
-          maxPolyInput.dispatchEvent(new Event('input'));
-        }
-      });
-    });
-
-    const initialTextures = initialConfig.createTextures !== false;
-    if (createTexturesCheck) createTexturesCheck.checked = initialTextures;
-    if (createTexturesCheckQuick) createTexturesCheckQuick.checked = initialTextures;
-
-    const syncTextures = (enabled: boolean) => {
-      if (createTexturesCheck) createTexturesCheck.checked = enabled;
-      if (createTexturesCheckQuick) createTexturesCheckQuick.checked = enabled;
-      this.service.aiAgent.saveConfig({ createTextures: enabled });
-      updateEndpointBadge();
-    };
-
-    createTexturesCheck?.addEventListener('change', () => {
-      syncTextures(!!createTexturesCheck.checked);
-    });
     createTexturesCheckQuick?.addEventListener('change', () => {
-      syncTextures(!!createTexturesCheckQuick.checked);
+      this.service.aiAgent.saveConfig({ createTextures: !!createTexturesCheckQuick.checked });
+      this.syncAISettingsControlsUI?.();
+      this.refreshAIEndpointBadge();
     });
 
-    const initialNormalMaps = initialConfig.createNormalMaps !== false;
-    if (createNormalMapsCheck) createNormalMapsCheck.checked = initialNormalMaps;
-    if (createNormalMapsCheckQuick) createNormalMapsCheckQuick.checked = initialNormalMaps;
-
-    const syncNormalMaps = (enabled: boolean) => {
-      if (createNormalMapsCheck) createNormalMapsCheck.checked = enabled;
-      if (createNormalMapsCheckQuick) createNormalMapsCheckQuick.checked = enabled;
-      this.service.aiAgent.saveConfig({ createNormalMaps: enabled });
-      updateEndpointBadge();
-    };
-
-    createNormalMapsCheck?.addEventListener('change', () => {
-      syncNormalMaps(!!createNormalMapsCheck.checked);
-    });
     createNormalMapsCheckQuick?.addEventListener('change', () => {
-      syncNormalMaps(!!createNormalMapsCheckQuick.checked);
+      this.service.aiAgent.saveConfig({ createNormalMaps: !!createNormalMapsCheckQuick.checked });
+      this.syncAISettingsControlsUI?.();
+      this.refreshAIEndpointBadge();
     });
 
-    const initialVisualCritique = !!initialConfig.visualCritique;
-    if (visualCritiqueCheck) visualCritiqueCheck.checked = initialVisualCritique;
-    if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = initialVisualCritique;
-
-    const syncVisualCritique = (enabled: boolean) => {
-      if (visualCritiqueCheck) visualCritiqueCheck.checked = enabled;
-      if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = enabled;
-      this.service.aiAgent.saveConfig({ visualCritique: enabled });
-      updateEndpointBadge();
-    };
-
-    visualCritiqueCheck?.addEventListener('change', () => {
-      syncVisualCritique(!!visualCritiqueCheck.checked);
-    });
     visualCritiqueCheckQuick?.addEventListener('change', () => {
-      syncVisualCritique(!!visualCritiqueCheckQuick.checked);
+      this.service.aiAgent.saveConfig({ visualCritique: !!visualCritiqueCheckQuick.checked });
+      this.syncAISettingsControlsUI?.();
+      this.refreshAIEndpointBadge();
     });
 
-    // Neural 3D Generators (TRELLIS 2, Hunyuan3D, Hi3D)
-    const neuralProviderIds: Neural3DBackendId[] = ['trellis', 'hunyuan3d', 'hi3d'];
-    const readNeuralProvidersFromDOM = (): Neural3DProvidersMap => {
-      const currentMap = this.service.aiAgent.getNeural3DProviders();
-      for (const id of neuralProviderIds) {
-        const enableEl = this.getElement<HTMLInputElement>(`aiNeuralEnabled_${id}`);
-        const protoEl = this.getElement<HTMLSelectElement>(`aiNeuralProtocol_${id}`);
-        const modelEl = this.getElement<HTMLInputElement>(`aiNeuralModel_${id}`);
-        const urlEl = this.getElement<HTMLInputElement>(`aiNeuralUrl_${id}`);
-        const keyEl = this.getElement<HTMLInputElement>(`aiNeuralKey_${id}`);
+    this.refreshAIEndpointBadge();
 
-        const protocol = (protoEl?.value || currentMap[id].protocol) as Neural3DProtocol;
-        const preset = NEURAL_3D_PROTOCOL_DEFAULTS[id][protocol] || NEURAL_3D_PROTOCOL_DEFAULTS[id].omlx;
-        currentMap[id] = {
-          ...currentMap[id],
-          enabled: enableEl ? !!enableEl.checked : currentMap[id].enabled,
-          protocol,
-          modelId: modelEl?.value.trim() || preset.modelId,
-          endpointUrl: urlEl?.value.trim() || preset.endpointUrl,
-          apiKey: keyEl ? keyEl.value.trim() : currentMap[id].apiKey,
-        };
-      }
-      return currentMap;
-    };
-
-    const syncNeuralProvidersUI = () => {
-      const providers = this.service.aiAgent.getNeural3DProviders();
-      for (const id of neuralProviderIds) {
-        const p = providers[id];
-        const enableEl = this.getElement<HTMLInputElement>(`aiNeuralEnabled_${id}`);
-        const bodyEl = this.getElement<HTMLElement>(`aiNeuralConfigBody_${id}`);
-        const protoEl = this.getElement<HTMLSelectElement>(`aiNeuralProtocol_${id}`);
-        const modelEl = this.getElement<HTMLInputElement>(`aiNeuralModel_${id}`);
-        const urlEl = this.getElement<HTMLInputElement>(`aiNeuralUrl_${id}`);
-        const keyEl = this.getElement<HTMLInputElement>(`aiNeuralKey_${id}`);
-
-        if (enableEl) enableEl.checked = !!p.enabled;
-        if (bodyEl) bodyEl.style.display = p.enabled ? 'flex' : 'none';
-        if (protoEl) protoEl.value = p.protocol;
-        if (modelEl) modelEl.value = p.modelId || '';
-        if (urlEl) urlEl.value = p.endpointUrl || '';
-        if (keyEl) keyEl.value = p.apiKey || '';
-      }
-    };
-
-    for (const id of neuralProviderIds) {
-      const enableEl = this.getElement<HTMLInputElement>(`aiNeuralEnabled_${id}`);
-      const bodyEl = this.getElement<HTMLElement>(`aiNeuralConfigBody_${id}`);
-      const protoEl = this.getElement<HTMLSelectElement>(`aiNeuralProtocol_${id}`);
-      const modelEl = this.getElement<HTMLInputElement>(`aiNeuralModel_${id}`);
-      const urlEl = this.getElement<HTMLInputElement>(`aiNeuralUrl_${id}`);
-      const keyEl = this.getElement<HTMLInputElement>(`aiNeuralKey_${id}`);
-      const testBtn = this.getElement<HTMLButtonElement>(`btnTestNeural_${id}`);
-
-      enableEl?.addEventListener('change', () => {
-        const enabled = !!enableEl.checked;
-        if (bodyEl) bodyEl.style.display = enabled ? 'flex' : 'none';
-        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM() });
-        updateEndpointBadge();
-      });
-
-      protoEl?.addEventListener('change', () => {
-        const newProto = (protoEl.value || 'omlx') as Neural3DProtocol;
-        const preset = NEURAL_3D_PROTOCOL_DEFAULTS[id][newProto];
-        if (preset) {
-          if (urlEl) urlEl.value = preset.endpointUrl;
-          if (modelEl) modelEl.value = preset.modelId;
-        }
-        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM() });
-        updateEndpointBadge();
-      });
-
-      const onFieldChange = () => {
-        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM() });
-        updateEndpointBadge();
-      };
-      modelEl?.addEventListener('change', onFieldChange);
-      urlEl?.addEventListener('change', onFieldChange);
-      keyEl?.addEventListener('change', onFieldChange);
-
-      testBtn?.addEventListener('click', async () => {
-        this.service.aiAgent.saveConfig({ neural3DProviders: readNeuralProvidersFromDOM() });
-        const res = await this.service.aiAgent.testNeural3DProvider(id);
-        this.showToast(res.message, res.ok ? 'success' : 'warning');
-      });
-    }
-
-    syncNeuralProvidersUI();
-
-    // External Image Generator bindings (AI Textures)
-    const imgGenEnableEl = this.getElement<HTMLInputElement>('aiImageGenEnabled');
-    const imgGenBodyEl = this.getElement<HTMLElement>('aiImageGenConfigBody');
-    const imgGenBackendEl = this.getElement<HTMLSelectElement>('aiImageGenBackendSelect');
-    const imgGenModelEl = this.getElement<HTMLInputElement>('aiImageGenModel');
-    const imgGenUrlEl = this.getElement<HTMLInputElement>('aiImageGenUrl');
-    const imgGenKeyEl = this.getElement<HTMLInputElement>('aiImageGenKey');
-    const testImgGenBtn = this.getElement<HTMLButtonElement>('btnTestImageGenGlobal');
-
-    const syncImageGenUI = () => {
-      const imgGenService = this.service.externalImageGenerator;
-      const cfg = this.service.aiAgent.getConfig();
-      const isEnabled = cfg.imageGeneratorEnabled ?? true;
-      const currentActive = imgGenService.getActiveBackend();
-      const savedBackend = cfg.imageGeneratorActiveBackend;
-      const targetBackend = (
-        savedBackend && savedBackend !== 'procedural'
-          ? savedBackend
-          : currentActive && currentActive !== 'procedural'
-            ? currentActive
-            : 'pollinations'
-      ) as any;
-      const provider =
-        cfg.imageGeneratorProviders?.[targetBackend as keyof typeof cfg.imageGeneratorProviders] ||
-        imgGenService.getProvider(targetBackend);
-
-      if (imgGenEnableEl) imgGenEnableEl.checked = isEnabled;
-      if (imgGenBodyEl) imgGenBodyEl.style.display = isEnabled ? 'flex' : 'none';
-      if (imgGenBackendEl) imgGenBackendEl.value = targetBackend;
-      if (imgGenModelEl) imgGenModelEl.value = provider?.modelId || '';
-      if (imgGenUrlEl) imgGenUrlEl.value = provider?.endpointUrl || '';
-      if (imgGenKeyEl) imgGenKeyEl.value = provider?.apiKey || '';
-    };
-    this.syncAIAgentImageGenUI = syncImageGenUI;
-
-    const saveImageGenFromDOM = () => {
-      const isEnabled = !!imgGenEnableEl?.checked;
-      const backend = (imgGenBackendEl?.value || 'pollinations') as any;
-      this.service.externalImageGenerator.updateProvider(backend, {
-        modelId: imgGenModelEl?.value.trim(),
-        endpointUrl: imgGenUrlEl?.value.trim(),
-        apiKey: imgGenKeyEl?.value.trim(),
-      });
-      this.service.externalImageGenerator.setActiveBackend(isEnabled ? backend : 'procedural');
-      this.service.aiAgent.saveConfig({
-        imageGeneratorEnabled: isEnabled,
-        imageGeneratorActiveBackend: backend,
-        imageGeneratorProviders: this.service.externalImageGenerator.getProviders(),
-      });
-    };
-
-    imgGenEnableEl?.addEventListener('change', () => {
-      const isEnabled = !!imgGenEnableEl.checked;
-      if (imgGenBodyEl) imgGenBodyEl.style.display = isEnabled ? 'flex' : 'none';
-      saveImageGenFromDOM();
-    });
-
-    imgGenBackendEl?.addEventListener('change', () => {
-      const backend = (imgGenBackendEl.value || 'pollinations') as any;
-      const provider = this.service.externalImageGenerator.getProvider(backend);
-      if (imgGenModelEl) imgGenModelEl.value = provider.modelId || '';
-      if (imgGenUrlEl) imgGenUrlEl.value = provider.endpointUrl || '';
-      if (imgGenKeyEl) imgGenKeyEl.value = provider.apiKey || '';
-      saveImageGenFromDOM();
-    });
-
-    imgGenModelEl?.addEventListener('change', saveImageGenFromDOM);
-    imgGenUrlEl?.addEventListener('change', saveImageGenFromDOM);
-    imgGenKeyEl?.addEventListener('change', saveImageGenFromDOM);
-
-    testImgGenBtn?.addEventListener('click', async () => {
-      saveImageGenFromDOM();
-      const backend = (imgGenBackendEl?.value || 'pollinations') as any;
-      const res = await this.service.externalImageGenerator.testProvider(backend);
-      this.showToast(res.message, res.ok ? 'success' : 'warning');
-    });
-
-    syncImageGenUI();
-
-    updateEndpointBadge();
-    this.renderAISkills();
-
-    // Refresh dynamic skills from local dev server/bridge if available
-    if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-      this.service.aiAgent.fetchSkillsFromApi().then(() => {
-        this.renderAISkills();
-      });
-    }
-
-    this.getElement('btnAISettingsToggle')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleAISettings();
-    });
     this.getElement('btnOpenAISettingsInline')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.toggleAISettings(true);
-    });
-    this.getElement('btnCancelAISettings')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleAISettings(false);
-    });
-
-    // Endpoint presets
-    const presetContainer = this.getElement('aiPresetChips');
-    presetContainer?.querySelectorAll('[data-preset]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const presetId = (btn as HTMLElement).getAttribute('data-preset');
-        const preset = AI_ENDPOINT_PRESETS.find((p) => p.id === presetId);
-        if (preset) {
-          if (endpointInput) endpointInput.value = preset.baseUrl;
-          if (modelInput) modelInput.value = preset.defaultModel;
-          populateModelSelect([preset.defaultModel], preset.defaultModel);
-          this.service.aiAgent.saveConfig({
-            baseUrl: preset.baseUrl,
-            model: preset.defaultModel,
-          });
-          updateEndpointBadge();
-          if (settingsStatus) settingsStatus.textContent = `Preset: ${preset.label}`;
-          this.showToast(`Switched to ${preset.label} (${preset.defaultModel})`, 'info');
-
-          // Auto-fetch available models for this preset if local bridge / antigravity
-          if (preset.baseUrl.includes('antigravity') || preset.baseUrl.includes('8787')) {
-            this.service.aiAgent.fetchAvailableModels({ baseUrl: preset.baseUrl }).then((models) => {
-              if (models.length > 0) {
-                populateModelSelect(models, preset.defaultModel);
-              }
-            }).catch(() => {});
-          }
-        }
-      });
-    });
-
-    // Toggle API key visibility
-    this.getElement('btnToggleApiKeyVis')?.addEventListener('click', () => {
-      if (!apiKeyInput) return;
-      apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
-    });
-
-    // Fetch available models from OpenAI-compatible /models endpoint
-    this.getElement('btnFetchAIModels')?.addEventListener('click', async () => {
-      try {
-        if (settingsStatus) settingsStatus.textContent = 'Fetching models...';
-        const models = await this.service.aiAgent.fetchAvailableModels({
-          baseUrl: endpointInput?.value.trim(),
-          apiKey: apiKeyInput?.value.trim(),
-        });
-        populateModelSelect(models);
-        if (modelDatalist) {
-          modelDatalist.innerHTML = models.map((m) => `<option value="${m}"></option>`).join('');
-        }
-        if (settingsStatus) settingsStatus.textContent = `${models.length} models loaded`;
-        this.showToast(`Loaded ${models.length} models from endpoint.`, 'success');
-      } catch (err: any) {
-        if (settingsStatus) settingsStatus.textContent = 'Model fetch failed';
-        this.showToast(err?.message || 'Failed to fetch models from endpoint.', 'warning');
-      }
-    });
-
-    // Save settings button
-    this.getElement('btnSaveAISettings')?.addEventListener('click', () => {
-      const minVal = minPolyInput ? Math.max(50, Number(minPolyInput.value) || 200) : 200;
-      const maxVal = maxPolyInput ? Math.max(minVal, Number(maxPolyInput.value) || 5000) : 5000;
-      const createTex = createTexturesCheck ? !!createTexturesCheck.checked : true;
-      const createNorm = createNormalMapsCheck ? !!createNormalMapsCheck.checked : true;
-      const visCritique = visualCritiqueCheck ? !!visualCritiqueCheck.checked : false;
-
-      if (createTexturesCheckQuick && createTexturesCheck) {
-        createTexturesCheckQuick.checked = createTexturesCheck.checked;
-      }
-      if (createNormalMapsCheckQuick && createNormalMapsCheck) {
-        createNormalMapsCheckQuick.checked = createNormalMapsCheck.checked;
-      }
-      if (visualCritiqueCheckQuick && visualCritiqueCheck) {
-        visualCritiqueCheckQuick.checked = visualCritiqueCheck.checked;
-      }
-
-      saveImageGenFromDOM();
-
-      const skillStates: Record<string, boolean> = {
-        ...(this.service.aiAgent.getConfig().skillStates || {}),
-      };
-      if (skillsList) {
-        skillsList.querySelectorAll<HTMLInputElement>('input[type="checkbox"][data-skill-id]').forEach((cb) => {
-          const skillId = cb.getAttribute('data-skill-id');
-          if (skillId) {
-            skillStates[skillId] = !!cb.checked;
-          }
-        });
-      }
-
-      this.service.aiAgent.saveConfig({
-        baseUrl: endpointInput?.value.trim() || 'https://api.openai.com/v1',
-        apiKey: apiKeyInput?.value.trim() || '',
-        model: modelInput?.value.trim() || 'gpt-4o',
-        minPolygons: minVal,
-        maxPolygons: maxVal,
-        createTextures: createTex,
-        createNormalMaps: createNorm,
-        visualCritique: visCritique,
-        neural3DProviders: readNeuralProvidersFromDOM(),
-        skillStates,
-      });
-      updateEndpointBadge();
-      if (settingsStatus) settingsStatus.textContent = 'Saved ✓';
-      this.toggleAISettings(false);
-      this.showToast(`AI settings saved (${minVal.toLocaleString()}–${maxVal.toLocaleString()} polys, textures ${createTex ? 'on' : 'off'}, normal maps ${createNorm ? 'on' : 'off'}).`, 'success');
+      this.openSettingsModal('ai');
     });
 
     // Initialize AI Quick Prompts select-like dropdown from JS array
@@ -7305,11 +7504,6 @@ export class MeshEditorApp {
     this.getElement('btnAIPromptHelpHeader')?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.showPromptHelp('guide');
-    });
-
-    this.getElement('btnOpenPromptHelpInline')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.showPromptHelp('tools');
     });
 
     // Speech-to-Text Voice Recording
@@ -7701,8 +7895,6 @@ export class MeshEditorApp {
     const chatLog = this.getElement<HTMLElement>('aiChatLog');
     const btnGenerate = this.getElement<HTMLButtonElement>('btnAIGenerate');
     const btnStop = this.getElement<HTMLButtonElement>('btnAIStop');
-    const endpointBadge =
-      this.getElement<HTMLElement>('aiEndpointSummaryText') || this.getElement<HTMLElement>('aiEndpointBadge');
     const actionModeSelect = this.getElement<HTMLSelectElement>('aiActionModeSelect');
     const includeViewportCheck = this.getElement<HTMLInputElement>('aiIncludeViewportCheck');
     const visualCritiqueCheckQuick = this.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
@@ -7724,28 +7916,7 @@ export class MeshEditorApp {
       });
       if (endpointInput) endpointInput.value = updatedCfg.baseUrl;
       if (modelInput) modelInput.value = updatedCfg.model;
-      if (endpointBadge) {
-        const isAgy =
-          updatedCfg.baseUrl.includes('/api/antigravity') ||
-          updatedCfg.baseUrl.includes('localhost:8787') ||
-          updatedCfg.baseUrl.includes('127.0.0.1:8787');
-        let host = isAgy ? 'Antigravity' : updatedCfg.baseUrl;
-        if (!isAgy) {
-          try {
-            host = new URL(updatedCfg.baseUrl).host;
-          } catch {
-            // ignore
-          }
-        }
-        const keyStatus = isAgy
-          ? 'Account ✓'
-          : updatedCfg.apiKey
-            ? 'Key ✓'
-            : host.includes('localhost') || host.includes('127.0.0.1')
-              ? 'Local'
-              : 'No Key';
-        endpointBadge.textContent = `${updatedCfg.model} • ${host} (${keyStatus})`;
-      }
+      this.refreshAIEndpointBadge();
     }
 
     if (promptInput && promptOverride === undefined) {
@@ -7965,7 +8136,7 @@ export class MeshEditorApp {
 
       // Automatically open endpoint settings if API key or connection failed
       if (errMsg.includes('401') || errMsg.includes('API key') || errMsg.includes('Endpoint')) {
-        this.toggleAISettings(true);
+        this.openSettingsModal('ai');
       }
     } finally {
       this.aiAbortController = null;

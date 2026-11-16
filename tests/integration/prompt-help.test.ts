@@ -65,19 +65,6 @@ describe('AI Prompting & Tools Guide Modal Integration Tests', () => {
       expect(modal.classList.contains('active')).toBe(true);
     });
 
-    it('opens prompt help directly to tools tab when clicking the inline summary link (#btnOpenPromptHelpInline)', () => {
-      const modal = container.querySelector('#promptHelpModal') as HTMLElement;
-      const btnInline = container.querySelector('#btnOpenPromptHelpInline') as HTMLButtonElement;
-      expect(btnInline).not.toBeNull();
-
-      btnInline.click();
-      expect(modal.classList.contains('active')).toBe(true);
-
-      const toolsPane = modal.querySelector('#tabPaneTools') as HTMLElement;
-      expect(toolsPane.classList.contains('active')).toBe(true);
-      expect(toolsPane.style.display).toBe('flex');
-    });
-
     it('opens prompt help when clicking the trigger in the general Help modal (#btnOpenPromptHelpFromGeneralHelp)', () => {
       const modal = container.querySelector('#promptHelpModal') as HTMLElement;
       const btnFromGeneral = container.querySelector('#btnOpenPromptHelpFromGeneralHelp') as HTMLButtonElement;
