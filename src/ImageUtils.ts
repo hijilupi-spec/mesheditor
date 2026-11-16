@@ -115,11 +115,14 @@ function encodeRawPngDataUrl(rgba: Uint8ClampedArray, width: number, height: num
   for (let i = 0; i < png.length; i += chunkSize) {
     binary += String.fromCharCode.apply(null, Array.from(png.subarray(i, Math.min(png.length, i + chunkSize))));
   }
+  const nodeBuffer = (
+    globalThis as unknown as { Buffer?: { from(data: Uint8Array): { toString(enc: string): string } } }
+  ).Buffer;
   const b64 =
     typeof btoa === 'function'
       ? btoa(binary)
-      : typeof Buffer !== 'undefined'
-        ? Buffer.from(png).toString('base64')
+      : nodeBuffer
+        ? nodeBuffer.from(png).toString('base64')
         : '';
   return b64 ? `data:image/png;base64,${b64}` : '';
 }

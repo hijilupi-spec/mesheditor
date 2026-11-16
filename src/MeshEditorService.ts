@@ -6474,11 +6474,14 @@ export class MeshEditorService {
             const sub = bytes.subarray(i, Math.min(bytes.length, i + chunkSize));
             binary += String.fromCharCode.apply(null, Array.from(sub));
           }
+          const nodeBuffer = (
+            globalThis as unknown as { Buffer?: { from(data: Uint8Array): { toString(enc: string): string } } }
+          ).Buffer;
           const b64 =
             typeof btoa === 'function'
               ? btoa(binary)
-              : typeof Buffer !== 'undefined'
-                ? Buffer.from(bytes).toString('base64')
+              : nodeBuffer
+                ? nodeBuffer.from(bytes).toString('base64')
                 : '';
           if (b64) {
             const dataUrl = `data:${mimeType};base64,${b64}`;

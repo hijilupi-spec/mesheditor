@@ -1658,7 +1658,10 @@ export class HeightmapController {
       binary += String.fromCharCode.apply(null, Array.from(sub));
     }
     if (typeof btoa === 'function') return btoa(binary);
-    if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+    const nodeBuffer = (
+      globalThis as unknown as { Buffer?: { from(data: Uint8Array): { toString(enc: string): string } } }
+    ).Buffer;
+    if (nodeBuffer) return nodeBuffer.from(bytes).toString('base64');
     return '';
   }
 
@@ -1670,8 +1673,11 @@ export class HeightmapController {
         for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
         return out;
       }
-      if (typeof Buffer !== 'undefined') {
-        return new Uint8Array(Buffer.from(b64, 'base64'));
+      const nodeBuffer = (
+        globalThis as unknown as { Buffer?: { from(data: string, encoding: string): ArrayLike<number> } }
+      ).Buffer;
+      if (nodeBuffer) {
+        return new Uint8Array(nodeBuffer.from(b64, 'base64'));
       }
     } catch {
       // Ignore decode failure
