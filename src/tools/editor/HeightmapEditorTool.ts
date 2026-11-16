@@ -10,6 +10,7 @@ export class HeightmapEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleHeightmapTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Heightmap Terrain';
+  public readonly category = 'Creation';
   public readonly icon = 'mountain';
   public readonly order = 19;
   public readonly isExclusive3DTool = false;

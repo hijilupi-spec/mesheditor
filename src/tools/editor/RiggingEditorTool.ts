@@ -11,6 +11,7 @@ export class RiggingEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleRiggingTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Rigging & Weight Paint';
+  public readonly category = 'Characters';
   public readonly icon = 'bone';
   public readonly order = 15;
   public readonly defaultOpen = false;

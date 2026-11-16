@@ -11,6 +11,7 @@ export class CSGEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleCSG';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Constructive Solid Geometry';
+  public readonly category = 'Creation';
   public readonly icon = 'shapes';
   public readonly order = 8;
   public readonly defaultOpen = true;

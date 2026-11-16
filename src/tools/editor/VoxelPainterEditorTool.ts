@@ -10,6 +10,7 @@ export class VoxelPainterEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleVoxelPainter';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Voxel Painter';
+  public readonly category = 'Creation';
   public readonly icon = 'brush';
   public readonly order = 6;
   public readonly isExclusive3DTool = true;

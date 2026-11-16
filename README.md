@@ -202,32 +202,32 @@ The editor ships with **21 decentralized editor tools** located in [`src/tools/e
 
 | Tool Class | View Template | Category | Description |
 | :--- | :--- | :--- | :--- |
-| **`OutlinerEditorTool`** | `OutlinerEditorTool.ejs` | Scene Graph | Hierarchical scene tree with nesting, search filter, visibility toggle, and deletion |
-| **`CreatePrimitiveEditorTool`** | `CreatePrimitiveEditorTool.ejs` | Modeling | Parametric primitives (Box, Sphere, Cylinder, Capsule, Torus, Plane, Ground, Polyhedron) |
-| **`CSGEditorTool`** | `CSGEditorTool.ejs` | Modeling | Real-time boolean operations (Union, Subtract, Intersect) powered by Babylon CSG2 |
-| **`FacetEditorTool`** | `FacetEditorTool.ejs` | Modeling | Sub-mesh editing: triangular facet selection, extrude, inset, arc, cut-through, normal flipping |
-| **`SculptEditorTool`** | `SculptEditorTool.ejs` | Sculpting | Dynamic topology sculpting brushes (Grab, Clay, Smooth, Inflate, Flatten, Crease) |
-| **`VoxelPainterEditorTool`** | `VoxelPainterEditorTool.ejs` | Voxel | 3D voxel placement/erasing, color palettes, custom meshing, and texture atlas generation |
-| **`PathExtrusionEditorTool`** | `PathExtrusionEditorTool.ejs` | Modeling | Extrudes 2D profiles (circle, star, rectangle, n-gon) along 3D Catmull-Rom & linear splines |
-| **`AIAgentEditorTool`** | `AIAgentEditorTool.ejs` | AI Co-Pilot | Multi-turn AI assistant with SSE streaming, tool-calling execution, and prompt examples |
-| **`MeshPropertiesEditorTool`** | `MeshPropertiesEditorTool.ejs` | Geometry | Precise transform inputs, origin recentering, snap-to-ground ($Y \ge 0$), and transform baking |
-| **`MaterialEditorTool`** | `MaterialEditorTool.ejs` | Shading | PBR material authoring (albedo, roughness, metallic, emissive, UV scale/offset, planar mapping) |
-| **`UVUnwrapEditorTool`** | `UVUnwrapEditorTool.ejs` | UV Pipeline | Conformal UV unwrapping (LSCM / ABF), seam marking, and UV island layout |
-| **`BakingEditorTool`** | `BakingEditorTool.ejs` | Baking | Texture baker for high-to-low poly normal maps, ambient occlusion, and diffuse baking |
-| **`TextureOptimizerEditorTool`** | `TextureOptimizerEditorTool.ejs` | Optimization | Interactive WebP texture conversion, downsampling, and VRAM footprint inspector |
-| **`CompressModelEditorTool`** | `CompressModelEditorTool.ejs` | Optimization | Geometry decimation (QEM), WebP compression, and optimized GLB export |
-| **`SceneEnvironmentEditorTool`** | `SceneEnvironmentEditorTool.ejs` | Environment | Skybox, HDR environment lighting, ground grid customization, directional lights, and FOV |
-| **`AnimationPlayerEditorTool`** | `AnimationPlayerEditorTool.ejs` | Animation | Timeline scrubber, playback controls, animation group selector, and bone inspection |
-| **`RiggingEditorTool`** | `RiggingEditorTool.ejs` | Rigging | Skeletal bone generation, joint hierarchy, and interactive vertex weight painting |
-| **`AITextureEditorTool`** | `AITextureEditorTool.ejs` | AI Generation | AI-assisted procedural and neural texture generation with seamless tiling synthesis |
-| **`TextMeshEditorTool`** | `TextMeshEditorTool.ejs` | Modeling | 3D extruded vector text generation using typeface JSON fonts |
-| **`DecalEditorTool`** | `DecalEditorTool.ejs` | Materials | Decal stamp projection onto arbitrary 3D mesh surfaces with orientation and size controls |
-| **`HeightmapEditorTool`** | `HeightmapEditorTool.ejs` | Terrain | Grayscale heightmap & RGB mixmap 2-tab paint editor, 3-texture `TerrainMaterial` splatting, and `GroundMesh` generation |
+| **`OutlinerEditorTool`** | `OutlinerEditorTool.ejs` | `Generic` | Hierarchical scene tree with nesting, search filter, visibility toggle, and deletion |
+| **`CreatePrimitiveEditorTool`** | `CreatePrimitiveEditorTool.ejs` | `Creation` | Parametric primitives (Box, Sphere, Cylinder, Capsule, Torus, Plane, Ground, Polyhedron) |
+| **`CSGEditorTool`** | `CSGEditorTool.ejs` | `Creation` | Real-time boolean operations (Union, Subtract, Intersect) powered by Babylon CSG2 |
+| **`FacetEditorTool`** | `FacetEditorTool.ejs` | `Creation` | Sub-mesh editing: triangular facet selection, extrude, inset, arc, cut-through, normal flipping |
+| **`SculptEditorTool`** | `SculptEditorTool.ejs` | `Creation` | Dynamic topology sculpting brushes (Grab, Clay, Smooth, Inflate, Flatten, Crease) |
+| **`VoxelPainterEditorTool`** | `VoxelPainterEditorTool.ejs` | `Creation` | 3D voxel placement/erasing, color palettes, custom meshing, and texture atlas generation |
+| **`PathExtrusionEditorTool`** | `PathExtrusionEditorTool.ejs` | `Creation` | Extrudes 2D profiles (circle, star, rectangle, n-gon) along 3D Catmull-Rom & linear splines |
+| **`AIAgentEditorTool`** | `AIAgentEditorTool.ejs` | `Creation` | Multi-turn AI assistant with SSE streaming, tool-calling execution, and prompt examples |
+| **`MeshPropertiesEditorTool`** | `MeshPropertiesEditorTool.ejs` | `Generic` | Precise transform inputs, origin recentering, snap-to-ground ($Y \ge 0$), and transform baking |
+| **`MaterialEditorTool`** | `MaterialEditorTool.ejs` | `Materials` | PBR material authoring (albedo, roughness, metallic, emissive, UV scale/offset, planar mapping) |
+| **`UVUnwrapEditorTool`** | `UVUnwrapEditorTool.ejs` | `Materials` | Conformal UV unwrapping (LSCM / ABF), seam marking, and UV island layout |
+| **`BakingEditorTool`** | `BakingEditorTool.ejs` | `Materials` | Texture baker for high-to-low poly normal maps, ambient occlusion, and diffuse baking |
+| **`TextureOptimizerEditorTool`** | `TextureOptimizerEditorTool.ejs` | `Optimization` | Interactive WebP texture conversion, downsampling, and VRAM footprint inspector |
+| **`CompressModelEditorTool`** | `CompressModelEditorTool.ejs` | `Optimization` | Geometry decimation (QEM), WebP compression, and optimized GLB export |
+| **`SceneEnvironmentEditorTool`** | `SceneEnvironmentEditorTool.ejs` | `Generic` | Skybox, HDR environment lighting, ground grid customization, directional lights, and FOV |
+| **`AnimationPlayerEditorTool`** | `AnimationPlayerEditorTool.ejs` | `Generic` | Timeline scrubber, playback controls, animation group selector, and bone inspection |
+| **`RiggingEditorTool`** | `RiggingEditorTool.ejs` | `Characters` | Skeletal bone generation, joint hierarchy, and interactive vertex weight painting |
+| **`AITextureEditorTool`** | `AITextureEditorTool.ejs` | `Materials` | AI-assisted procedural and neural texture generation with seamless tiling synthesis |
+| **`TextMeshEditorTool`** | `TextMeshEditorTool.ejs` | `Creation` | 3D extruded vector text generation using typeface JSON fonts |
+| **`DecalEditorTool`** | `DecalEditorTool.ejs` | `Creation` | Decal stamp projection onto arbitrary 3D mesh surfaces with orientation and size controls |
+| **`HeightmapEditorTool`** | `HeightmapEditorTool.ejs` | `Creation` | Grayscale heightmap & RGB mixmap 2-tab paint editor, 3-texture `TerrainMaterial` splatting, and `GroundMesh` generation |
 
 ### Architectural Guidelines for Editor Tools
 
 - **Top Toolbar Policy**: The top toolbar (`#top-toolbar`) is reserved for branding, dropdown menus, undo/redo, transformation gizmos, and the help modal shortcut. Never add quick-toggle buttons to `#top-toolbar`. All editor tools are accessed exclusively through the dynamically built **Tools** dropdown menu (`#menuTools`).
-- **Dynamic Menu Generation**: `#menuTools` is built 100% dynamically at runtime via `MeshEditorApp.renderToolsMenu()`. Registering a tool class in `createBuiltinEditorTools()` automatically creates its menu entry, Lucide icon, label, ordering, and click toggling.
+- **Dynamic Menu Generation**: `#menuTools` is built 100% dynamically at runtime via `MeshEditorApp.renderToolsMenu()`, grouped by tool `category` (`Generic`, `Materials`, `Creation`, `Optimization`, `Characters`) into accessible submenus. Registering a tool class in `createBuiltinEditorTools()` automatically creates its menu entry, Lucide icon, label, ordering, and click toggling.
 - **Exclusive Viewport Clicks**: Tools that capture 3D viewport clicks (e.g. Voxel Painter, Sculpting, Spline editing) set `isExclusive3DTool: true`. Activating one exclusive tool automatically deactivates 3D editing on other exclusive tools without closing their dialogs.
 - **Unified Dark Theme CSS**: All floating dialogs use unified classes: `.tool-control-group`, `.tool-row`, `.tool-label`, `.tool-select`, `.tool-input`, `.tool-action-btn`, and `.tool-btn-primary`.
 
@@ -279,6 +279,7 @@ export class MyCustomEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleMyCustomTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Custom Generator';
+  public readonly category = 'Creation';
   public readonly icon = 'wand-2';
   public readonly order = 21;
   public readonly isExclusive3DTool = false;

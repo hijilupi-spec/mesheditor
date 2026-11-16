@@ -1,6 +1,7 @@
 import { Scene } from '@babylonjs/core';
 import type { MeshEditorApp } from './MeshEditorApp';
 import type { MeshEditorService } from './MeshEditorService';
+import type { ToolCategory } from './tools/ToolInterface';
 
 /**
  * Definition for a dropdown menu item registered by a plugin.
@@ -42,6 +43,12 @@ export interface MenuItemDefinition {
    * Defaults to appending at the end of the plugin section.
    */
   order?: number;
+
+  /**
+   * Optional category used to place tool menu items inside a Tools submenu.
+   * Example: 'Generic', 'Materials', 'Creation', 'Optimization', 'Characters'
+   */
+  category?: ToolCategory;
 
   /**
    * Callback invoked when the user clicks this menu item.

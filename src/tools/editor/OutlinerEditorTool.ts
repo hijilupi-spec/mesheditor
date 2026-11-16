@@ -10,6 +10,7 @@ export class OutlinerEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleOutliner';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Scene Objects';
+  public readonly category = 'Generic';
   public readonly icon = 'list-tree';
   public readonly order = 1;
   public readonly defaultOpen = true;

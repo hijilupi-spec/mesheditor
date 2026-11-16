@@ -11,6 +11,7 @@ export class PathExtrusionEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnTogglePathExtrusion';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Path Extrusion';
+  public readonly category = 'Creation';
   public readonly icon = 'route';
   public readonly order = 7;
   public readonly isExclusive3DTool = true;

@@ -10,6 +10,7 @@ export class SceneEnvironmentEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleScenePanel';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Scene & Environment';
+  public readonly category = 'Generic';
   public readonly icon = 'sun-medium';
   public readonly order = 13;
   public readonly defaultOpen = true;

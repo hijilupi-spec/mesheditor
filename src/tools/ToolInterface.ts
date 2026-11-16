@@ -13,6 +13,42 @@ export interface OpenAIToolDefinition {
 }
 
 /**
+ * Built-in editor tool categories used to group tools into submenus in the Tools menu.
+ */
+export type BuiltinToolCategory =
+  | 'Generic'
+  | 'Materials'
+  | 'Creation'
+  | 'Optimization'
+  | 'Characters';
+
+/**
+ * Tool category identifier (supports built-in categories and custom extension categories).
+ */
+export type ToolCategory = BuiltinToolCategory | (string & {});
+
+/**
+ * Display metadata for a tool category submenu.
+ */
+export interface ToolCategoryDefinition {
+  readonly id: ToolCategory;
+  readonly label: string;
+  readonly icon: string;
+  readonly order: number;
+}
+
+/**
+ * Ordered list of built-in tool categories displayed as submenus in the Tools menu.
+ */
+export const TOOL_CATEGORIES: readonly ToolCategoryDefinition[] = [
+  { id: 'Generic', label: 'Generic', icon: 'layers', order: 1 },
+  { id: 'Materials', label: 'Materials', icon: 'palette', order: 2 },
+  { id: 'Creation', label: 'Creation', icon: 'shapes', order: 3 },
+  { id: 'Optimization', label: 'Optimization', icon: 'zap', order: 4 },
+  { id: 'Characters', label: 'Characters', icon: 'user', order: 5 },
+];
+
+/**
  * Common tool interface for modular, self-contained 3D editor & AI agent tools.
  * Enables rapid implementation and registration of new tools, UI panels, and AI actions.
  */
@@ -43,6 +79,9 @@ export interface ToolInterface {
 
   /** Human-readable menu item and panel title label (e.g. 'Voxel Painter') */
   readonly menuLabel?: string;
+
+  /** Category used to organize this tool into a submenu in the Tools menu */
+  readonly category?: ToolCategory;
 
   /**
    * HTML/EJS view template markup for this tool's floating dialog or panel.

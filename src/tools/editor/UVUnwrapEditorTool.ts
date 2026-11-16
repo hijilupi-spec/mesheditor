@@ -11,6 +11,7 @@ export class UVUnwrapEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleUVUnwrap';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'UV Unwrap & Texel Density';
+  public readonly category = 'Materials';
   public readonly icon = 'map';
   public readonly order = 10;
   public readonly defaultOpen = false;

@@ -6,6 +6,7 @@ export class DecalEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleDecalTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Decal Painter';
+  public readonly category = 'Creation';
   public readonly icon = 'stamp';
   public readonly order = 18;
   public readonly isExclusive3DTool = true;

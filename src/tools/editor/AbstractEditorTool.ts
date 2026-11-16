@@ -1,4 +1,4 @@
-import { ToolInterface } from '../ToolInterface';
+import { ToolCategory, ToolInterface } from '../ToolInterface';
 import { getToolViewTemplate } from './toolViews';
 
 /**
@@ -14,6 +14,7 @@ export abstract class AbstractEditorTool implements ToolInterface {
   public readonly triggerButtonId?: string;
   public readonly menuId?: string;
   public readonly menuLabel?: string;
+  public readonly category?: ToolCategory;
   public readonly isExclusive3DTool?: boolean;
   public readonly defaultOpen?: boolean;
   public order?: number;

@@ -10,6 +10,7 @@ export class CreatePrimitiveEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnCreatePrimitive';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Create Mesh';
+  public readonly category = 'Creation';
   public readonly icon = 'plus-circle';
   public readonly order = 3;
   public readonly defaultOpen = true;

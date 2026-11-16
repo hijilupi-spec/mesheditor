@@ -10,6 +10,7 @@ export class MaterialEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleMaterialPanel';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Material & Texture';
+  public readonly category = 'Materials';
   public readonly icon = 'palette';
   public readonly order = 10;
   public readonly defaultOpen = true;

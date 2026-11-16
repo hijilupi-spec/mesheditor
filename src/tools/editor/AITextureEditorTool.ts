@@ -6,6 +6,7 @@ export class AITextureEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleAITextureTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'AI Texture Generator';
+  public readonly category = 'Materials';
   public readonly icon = 'wand-2';
   public readonly order = 16;
   public readonly isExclusive3DTool = false;

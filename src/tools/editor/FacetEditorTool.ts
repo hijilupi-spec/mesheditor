@@ -10,6 +10,7 @@ export class FacetEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleFacetEditor';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Facet & Vertex Editor';
+  public readonly category = 'Creation';
   public readonly icon = 'triangle';
   public readonly order = 4;
   public readonly defaultOpen = true;

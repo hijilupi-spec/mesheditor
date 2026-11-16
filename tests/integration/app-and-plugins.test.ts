@@ -363,16 +363,27 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     expect(dialogOutliner.style.bottom).toBe('');
     expect(dialogOutliner.style.height).toBe('');
 
-    // Unified order verification: Tools menu order matches stackpanel sidebar order
+    // Unified order verification: within each category submenu, Tools menu order matches relative stackpanel sidebar order
     const menuTools = container.querySelector('#menuTools');
-    const menuButtons = Array.from(menuTools?.querySelectorAll('.dropdown-item[data-tool-name]') || []) as HTMLElement[];
     const sidebarDialogs = Array.from(container.querySelectorAll('.stackpanel-sidebar .floating-dialog')) as HTMLElement[];
+    const sidebarTools = sidebarDialogs.map((d) => app.getToolByDialogId(d.id)).filter(Boolean);
 
-    const menuToolNames = menuButtons.map((b) => b.getAttribute('data-tool-name'));
-    const sidebarToolNames = sidebarDialogs.map((d) => app.getToolByDialogId(d.id)?.name).filter(Boolean);
+    const genericMenuButtons = Array.from(
+      menuTools?.querySelectorAll('#menuToolsSubmenu-Generic .dropdown-item[data-tool-name]') || []
+    ) as HTMLElement[];
+    expect(genericMenuButtons.map((b) => b.getAttribute('data-tool-name'))).toEqual([
+      'scene_outliner',
+      ...sidebarTools.filter((t) => t?.category === 'Generic').map((t) => t!.name),
+    ]);
 
-    expect(menuToolNames[0]).toBe('scene_outliner');
-    expect(menuToolNames.slice(1)).toEqual(sidebarToolNames);
+    for (const cat of ['Materials', 'Creation', 'Optimization', 'Characters']) {
+      const catButtons = Array.from(
+        menuTools?.querySelectorAll(`#menuToolsSubmenu-${cat} .dropdown-item[data-tool-name]`) || []
+      ) as HTMLElement[];
+      expect(catButtons.map((b) => b.getAttribute('data-tool-name'))).toEqual(
+        sidebarTools.filter((t) => t?.category === cat).map((t) => t!.name)
+      );
+    }
 
     // Verify Drag Handle existence and draggable attribute on sidebar dialog headers in stackpanel mode
     const firstSidebarDialog = sidebarDialogs[0];
@@ -424,10 +435,14 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     const savedOrder = JSON.parse(savedOrderJson!);
     expect(savedOrder[0]).toBe(initialLastDialog.id);
 
-    // Verify that the Tools menu was dynamically synchronized with the new order
-    const updatedMenuButtons = Array.from(menuTools?.querySelectorAll('.dropdown-item[data-tool-name]') || []) as HTMLElement[];
-    const updatedMenuToolNames = updatedMenuButtons.map((b) => b.getAttribute('data-tool-name'));
-    expect(updatedMenuToolNames[1]).toBe(app.getToolByDialogId(initialLastDialog.id)?.name);
+    // Verify that the moved tool's category submenu in Tools menu was dynamically synchronized with the new order
+    const movedTool = app.getToolByDialogId(initialLastDialog.id);
+    expect(movedTool?.category).toBeTruthy();
+    const updatedCategoryButtons = Array.from(
+      menuTools?.querySelectorAll(`#menuToolsSubmenu-${movedTool!.category} .dropdown-item[data-tool-name]`) || []
+    ) as HTMLElement[];
+    const updatedCategoryToolNames = updatedCategoryButtons.map((b) => b.getAttribute('data-tool-name'));
+    expect(updatedCategoryToolNames[0]).toBe(movedTool?.name);
 
     // Verify restoring from localStorage in a fresh app instance
     const freshApp = new MeshEditorApp({

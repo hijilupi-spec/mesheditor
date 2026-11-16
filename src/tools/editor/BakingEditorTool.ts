@@ -11,6 +11,7 @@ export class BakingEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleBakingTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Normal & AO Baker';
+  public readonly category = 'Materials';
   public readonly icon = 'flame';
   public readonly order = 11;
   public readonly defaultOpen = false;

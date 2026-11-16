@@ -602,6 +602,133 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       const customBtn = menuTools!.querySelector('#btnToggleCustomProceduralTool') as HTMLButtonElement | null;
       expect(customBtn).not.toBeNull();
       expect(customBtn?.textContent).toContain('Procedural Generator');
+
+      // Verify registering a custom categorized tool places it in the specified category submenu
+      app.registerEditorTool({
+        name: 'custom_material_helper',
+        menuLabel: 'PBR Shader Mixer',
+        category: 'Materials',
+        triggerButtonId: 'btnTogglePbrMixer',
+        dialogId: 'dialog-pbr-mixer',
+        icon: 'palette',
+        order: 99,
+        description: 'Custom material mixer tool',
+      } as any);
+      const customMatBtn = menuTools!.querySelector('#menuToolsSubmenu-Materials #btnTogglePbrMixer');
+      expect(customMatBtn).not.toBeNull();
+      expect(customMatBtn?.textContent).toContain('PBR Shader Mixer');
+
+      // Verify registering a tool with a new custom category creates its submenu dynamically
+      app.registerEditorTool({
+        name: 'custom_physics_tool',
+        menuLabel: 'Physics Collider',
+        category: 'Physics',
+        triggerButtonId: 'btnTogglePhysicsTool',
+        dialogId: 'dialog-physics-tool',
+        icon: 'box',
+        order: 100,
+        description: 'Custom physics collider tool',
+      } as any);
+      const physicsTrigger = menuTools!.querySelector('#btnToolCategory-Physics');
+      const physicsBtn = menuTools!.querySelector('#menuToolsSubmenu-Physics #btnTogglePhysicsTool');
+      expect(physicsTrigger).not.toBeNull();
+      expect(physicsBtn).not.toBeNull();
+    });
+
+    it('organizes all 21 editor tools into Generic, Materials, Creation, Optimization, and Characters submenus', () => {
+      document.body.innerHTML = '';
+      const container = document.createElement('div');
+      container.id = 'app-test-container-categories';
+      document.body.appendChild(container);
+
+      const app = new MeshEditorApp({
+        container,
+        engine,
+      });
+
+      const expectedByCategory: Record<string, string[]> = {
+        Generic: ['Scene Objects', 'Mesh Properties', 'Scene & Environment', 'Animation Player'],
+        Materials: ['AI Texture Generator', 'Material & Texture', 'Normal & AO Baker', 'UV Unwrap & Texel Density'],
+        Creation: [
+          'AI Mesh Agent',
+          'Create Mesh',
+          'Facet & Vertex Editor',
+          'Figure Sculpt & Retopo',
+          'Voxel Painter',
+          'Path Extrusion',
+          'Constructive Solid Geometry',
+          '3D Text',
+          'Decal Painter',
+          'Heightmap Terrain',
+        ],
+        Optimization: ['Compress Model', 'Texture Optimizer'],
+        Characters: ['Rigging & Weight Paint'],
+      };
+
+      const menuTools = container.querySelector('#menuTools') as HTMLElement;
+      expect(menuTools).not.toBeNull();
+
+      // Verify category triggers appear in exact expected order
+      const catTriggers = Array.from(menuTools.querySelectorAll('.dropdown-submenu-trigger')) as HTMLButtonElement[];
+      expect(catTriggers.map((t) => t.getAttribute('data-tool-category'))).toEqual([
+        'Generic',
+        'Materials',
+        'Creation',
+        'Optimization',
+        'Characters',
+      ]);
+
+      // Verify every tool belongs to its exact category and submenu
+      for (const [category, expectedLabels] of Object.entries(expectedByCategory)) {
+        const toolsInCat = app.editorTools.filter((t) => t.category === category);
+        const actualLabels = toolsInCat.map((t) => t.menuLabel);
+        expect(new Set(actualLabels)).toEqual(new Set(expectedLabels));
+
+        const submenu = menuTools.querySelector(`#menuToolsSubmenu-${category}`) as HTMLElement | null;
+        expect(submenu, `Submenu for ${category} should exist`).not.toBeNull();
+        const submenuLabels = Array.from(submenu!.querySelectorAll('.dropdown-item[data-tool-name]')).map(
+          (el) => el.querySelector('.btn-label')?.textContent?.trim()
+        );
+        expect(new Set(submenuLabels)).toEqual(new Set(expectedLabels));
+      }
+
+      // Verify opening root Tools menu and toggling category submenus via fallback click & keyboard
+      const btnTools = container.querySelector('#btnDropdownTools') as HTMLButtonElement;
+      btnTools.click();
+      expect(menuTools.getAttribute('data-popover-open')).toBe('true');
+
+      const materialsTrigger = menuTools.querySelector('#btnToolCategory-Materials') as HTMLButtonElement;
+      const materialsSubmenu = menuTools.querySelector('#menuToolsSubmenu-Materials') as HTMLElement;
+      const creationTrigger = menuTools.querySelector('#btnToolCategory-Creation') as HTMLButtonElement;
+      const creationSubmenu = menuTools.querySelector('#menuToolsSubmenu-Creation') as HTMLElement;
+
+      materialsTrigger.click();
+      expect(materialsSubmenu.getAttribute('data-popover-open')).toBe('true');
+      expect(materialsTrigger.getAttribute('aria-expanded')).toBe('true');
+
+      // Opening another submenu closes the previous sibling submenu
+      creationTrigger.click();
+      expect(creationSubmenu.getAttribute('data-popover-open')).toBe('true');
+      expect(materialsSubmenu.getAttribute('data-popover-open')).toBeNull();
+      expect(materialsTrigger.getAttribute('aria-expanded')).toBe('false');
+
+      // Escape inside submenu closes only that submenu and keeps root Tools menu open
+      const creationList = creationSubmenu.querySelector('.dropdown-menu-list') as HTMLElement;
+      creationList.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(creationSubmenu.getAttribute('data-popover-open')).toBeNull();
+      expect(menuTools.getAttribute('data-popover-open')).toBe('true');
+
+      // Active tool indicator (.has-active-tool) tracks open tools in the category
+      app.toggleDialog('dialog-rigging', true);
+      const charactersTrigger = menuTools.querySelector('#btnToolCategory-Characters') as HTMLButtonElement;
+      expect(charactersTrigger.classList.contains('has-active-tool')).toBe(true);
+      app.toggleDialog('dialog-rigging', false);
+      expect(charactersTrigger.classList.contains('has-active-tool')).toBe(false);
+
+      // Clean up open dropdowns
+      app.closeAllDropdowns();
+      expect(menuTools.getAttribute('data-popover-open')).toBeNull();
+      app.dispose();
     });
   });
 

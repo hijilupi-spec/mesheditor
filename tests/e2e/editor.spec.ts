@@ -209,5 +209,100 @@ test.describe('Mesh Editor E2E Tests', () => {
     expect(result.reloadedTexHeight).toBe(512);
     expect(result.reloadedHasSceneTextureInHeightmap).toBe(true);
   });
+
+  test('7. organizes Tools menu into category submenus with keyboard navigation, hover safe-triangle, and narrow-screen fallback', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/');
+
+    const btnTools = page.locator('#btnDropdownTools');
+    const menuTools = page.locator('#menuTools');
+
+    // Open Tools menu and verify all 5 categories are present
+    await btnTools.click();
+    await expect(menuTools).toBeVisible();
+
+    const expectedCategories = ['Generic', 'Materials', 'Creation', 'Optimization', 'Characters'];
+    for (const cat of expectedCategories) {
+      await expect(page.locator(`#btnToolCategory-${cat}`)).toBeVisible();
+    }
+
+    // Hover Generic to trigger submenu preview, then move diagonally toward Animation Player
+    const genericTrigger = page.locator('#btnToolCategory-Generic');
+    const genericSubmenu = page.locator('#menuToolsSubmenu-Generic');
+    await genericTrigger.hover();
+    await expect(genericSubmenu).toBeVisible({ timeout: 2000 });
+
+    const triggerBox = (await genericTrigger.boundingBox())!;
+    const animBtn = page.locator('#btnToggleAnimPanel');
+    const animBox = (await animBtn.boundingBox())!;
+
+    // Diagonal sweep across Materials / Creation triggers toward Animation Player inside Generic submenu
+    await page.mouse.move(triggerBox.x + triggerBox.width * 0.5, triggerBox.y + triggerBox.height * 0.5);
+    await page.mouse.move(
+      (triggerBox.x + triggerBox.width + animBox.x) * 0.5,
+      (triggerBox.y + animBox.y) * 0.5,
+      { steps: 8 }
+    );
+    await page.mouse.move(animBox.x + animBox.width * 0.5, animBox.y + animBox.height * 0.5, { steps: 5 });
+    await expect(genericSubmenu).toBeVisible();
+
+    // Pressing Escape inside the hovered submenu closes only the submenu first, then a second Escape closes the Tools menu
+    await page.keyboard.press('Escape');
+    await expect(genericSubmenu).not.toBeVisible();
+    await expect(menuTools).toBeVisible();
+    await expect(genericTrigger).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(menuTools).not.toBeVisible();
+
+    // Keyboard navigation: focus Tools button -> ArrowDown opens and enters -> ArrowRight opens submenu -> Escape closes one level
+    await btnTools.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(menuTools).toBeVisible();
+    await expect(genericTrigger).toBeFocused();
+
+    await page.keyboard.press('ArrowDown'); // Materials
+    const materialsTrigger = page.locator('#btnToolCategory-Materials');
+    const materialsSubmenu = page.locator('#menuToolsSubmenu-Materials');
+    await expect(materialsTrigger).toBeFocused();
+    await expect(materialsSubmenu).toBeVisible();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(materialsSubmenu.locator('.dropdown-item').first()).toBeFocused();
+
+    await page.keyboard.press('Escape'); // Closes only Materials submenu, keeps Tools menu open
+    await expect(materialsSubmenu).not.toBeVisible();
+    await expect(menuTools).toBeVisible();
+    await expect(materialsTrigger).toBeFocused();
+
+    // Clicking a tool inside Creation submenu toggles its dialog and closes menus
+    await page.locator('#btnToolCategory-Creation').click();
+    const creationSubmenu = page.locator('#menuToolsSubmenu-Creation');
+    await expect(creationSubmenu).toBeVisible();
+    await page.locator('#btnToggleHeightmapTool').click();
+    await expect(menuTools).not.toBeVisible();
+    await expect(page.locator('#dialog-heightmap')).toBeVisible();
+
+    // Narrow 375px viewport: submenu must never cover its trigger button
+    await page.setViewportSize({ width: 375, height: 700 });
+    await btnTools.click();
+    await expect(menuTools).toBeVisible();
+    const optTrigger = page.locator('#btnToolCategory-Optimization');
+    const optSubmenu = page.locator('#menuToolsSubmenu-Optimization');
+    await optTrigger.click();
+    await expect(optSubmenu).toBeVisible();
+
+    const narrowTriggerBox = (await optTrigger.boundingBox())!;
+    const narrowSubmenuBox = (await optSubmenu.boundingBox())!;
+    const overlapsTrigger =
+      narrowSubmenuBox.x < narrowTriggerBox.x + narrowTriggerBox.width &&
+      narrowSubmenuBox.x + narrowSubmenuBox.width > narrowTriggerBox.x &&
+      narrowSubmenuBox.y < narrowTriggerBox.y + narrowTriggerBox.height &&
+      narrowSubmenuBox.y + narrowSubmenuBox.height > narrowTriggerBox.y;
+    expect(overlapsTrigger).toBe(false);
+    expect(narrowSubmenuBox.x + narrowSubmenuBox.width).toBeLessThanOrEqual(375);
+  });
 });
 

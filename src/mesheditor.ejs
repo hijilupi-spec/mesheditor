@@ -125,15 +125,26 @@
 
         <!-- Tools Menu  -->
         <div class="dropdown-wrapper" id="dropdownTools">
-          <button class="tool-btn dropdown-toggle" id="btnDropdownTools" title="Tools & Panels Menu">
+          <button
+            class="tool-btn dropdown-toggle"
+            id="btnDropdownTools"
+            type="button"
+            title="Tools & Panels Menu"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            commandfor="menuTools"
+            command="toggle-popover"
+          >
             <span class="btn-icon"><i class="app-icon" data-lucide="wrench"></i></span>
             <span class="btn-label">Tools</span>
             <span class="dropdown-arrow"><i class="app-icon arrow-icon" data-lucide="chevron-down"></i></span>
           </button>
-          <div class="dropdown-menu" id="menuTools">
-            <!-- Dynamically populated from ToolInterface instances in MeshEditorApp.renderToolsMenu() -->
-            <div class="dropdown-divider" id="menuToolsPluginsDivider" style="display: none"></div>
-            <div id="menuToolsPlugins"></div>
+          <div class="dropdown-menu tools-root-menu" id="menuTools" popover="auto">
+            <div class="dropdown-menu-list" id="menuToolsList" focusgroup="menu nomemory" aria-labelledby="btnDropdownTools">
+              <!-- Dynamically populated from ToolInterface instances in MeshEditorApp.renderToolsMenu() -->
+              <hr class="dropdown-divider" id="menuToolsPluginsDivider" style="display: none" />
+              <div id="menuToolsPlugins" role="group" aria-label="Plugin Tools"></div>
+            </div>
           </div>
         </div>
 

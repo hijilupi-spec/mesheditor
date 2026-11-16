@@ -10,6 +10,7 @@ export class MeshPropertiesEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleMeshPanel';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Mesh Properties';
+  public readonly category = 'Generic';
   public readonly icon = 'box';
   public readonly order = 9;
   public readonly defaultOpen = true;

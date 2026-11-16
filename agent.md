@@ -64,6 +64,7 @@ When adding or modifying an editor tool:
    - `triggerButtonId`: Element ID of the trigger button in the dynamic menu (e.g. `'btnToggleMyTool'`).
    - `menuId`: Menu identifier (typically `'menuTools'`).
    - `menuLabel`: Human-readable label (strictly English, e.g. `'My Tool'`).
+   - `category`: Tool category used to group tools into `#menuTools` submenus (`'Generic' | 'Materials' | 'Creation' | 'Optimization' | 'Characters'`, or a custom category string).
    - `icon`: Lucide icon name (e.g. `'brush'`, `'wand-2'`, `'route'`, `'shapes'`).
    - `order`: Numeric sort order within `#menuTools` (e.g. 1 to 20).
    - `description`: English summary / tooltip of what the tool does.

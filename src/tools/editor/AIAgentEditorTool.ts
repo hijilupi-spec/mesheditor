@@ -10,6 +10,7 @@ export class AIAgentEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleAIAgent';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'AI Mesh Agent';
+  public readonly category = 'Creation';
   public readonly icon = 'bot';
   public readonly order = 2;
   public readonly defaultOpen = false;

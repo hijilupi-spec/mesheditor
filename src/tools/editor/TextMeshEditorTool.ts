@@ -6,6 +6,7 @@ export class TextMeshEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleTextMeshTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = '3D Text';
+  public readonly category = 'Creation';
   public readonly icon = 'type';
   public readonly order = 17;
   public readonly isExclusive3DTool = false;

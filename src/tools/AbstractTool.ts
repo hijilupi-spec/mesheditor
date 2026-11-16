@@ -1,6 +1,6 @@
 import { Mesh, PBRMaterial, Vector3 } from '@babylonjs/core';
 import { ToolExecutionContext } from './ToolExecutionContext';
-import { OpenAIToolDefinition, ToolInterface } from './ToolInterface';
+import { OpenAIToolDefinition, ToolCategory, ToolInterface } from './ToolInterface';
 
 /**
  * Abstract base class for self-contained tools.
@@ -16,6 +16,7 @@ export abstract class AbstractTool implements ToolInterface {
   public readonly triggerButtonId?: string;
   public readonly menuId?: string;
   public readonly menuLabel?: string;
+  public readonly category?: ToolCategory;
   public readonly isExclusive3DTool?: boolean;
   public readonly defaultOpen?: boolean;
   public order?: number;

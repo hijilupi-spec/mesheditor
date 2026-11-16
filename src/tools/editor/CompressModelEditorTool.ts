@@ -11,6 +11,7 @@ export class CompressModelEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleCompressModel';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Compress Model';
+  public readonly category = 'Optimization';
   public readonly icon = 'file-archive';
   public readonly order = 12;
   public readonly defaultOpen = false;

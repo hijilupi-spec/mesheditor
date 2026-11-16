@@ -12,6 +12,7 @@ export class SculptEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleSculptTool';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Figure Sculpt & Retopo';
+  public readonly category = 'Creation';
   public readonly icon = 'sparkles';
   public readonly order = 5;
   public readonly defaultOpen = false;

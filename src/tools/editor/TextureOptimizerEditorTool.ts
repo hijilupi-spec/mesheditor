@@ -10,6 +10,7 @@ export class TextureOptimizerEditorTool extends AbstractEditorTool {
   public readonly triggerButtonId = 'btnToggleTexturePanel';
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Texture Optimizer';
+  public readonly category = 'Optimization';
   public readonly icon = 'zap';
   public readonly order = 11;
   public readonly defaultOpen = true;
