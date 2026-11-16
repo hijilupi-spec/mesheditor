@@ -1,5 +1,6 @@
 import type { Nullable } from '@babylonjs/core';
 import {
+  BaseTexture,
   Color3,
   CreateGroundFromHeightMapVertexData,
   Engine,
@@ -9,6 +10,7 @@ import {
   MeshBuilder,
   NullEngine,
   PBRMaterial,
+  StandardMaterial,
   Texture,
   Vector2,
   Vector3,
@@ -303,6 +305,7 @@ export class HeightmapController {
   // Cached procedural and custom textures
   private builtinTexturesCache: HeightmapTextureOption[] | null = null;
   private customTextures: HeightmapTextureOption[] = [];
+  private decodedRgbaCache: Map<string, { rgba: Uint8ClampedArray; width: number; height: number }> = new Map();
   private activeTerrainMesh: GroundMesh | null = null;
   private terrainCounter: number = 1;
 
@@ -390,6 +393,23 @@ export class HeightmapController {
     }
   }
 
+  private isInternalHeightmapTextureName(name?: string | null): boolean {
+    const lower = (name || '').toLowerCase();
+    if (!lower) return false;
+    return (
+      lower === 'gridmat' ||
+      lower.startsWith('editor_') ||
+      lower.includes('envbrdf') ||
+      lower.includes('effectlayer') ||
+      lower.includes('highlightlayer') ||
+      lower.includes('shadowmap') ||
+      lower.includes('postprocess') ||
+      lower.endsWith('_mixmap') ||
+      lower.endsWith('_compositealbedo.png') ||
+      lower.endsWith('_bakedterrainalbedo')
+    );
+  }
+
   /**
    * Returns all available textures for the 3 terrain splat channels (built-in, custom uploaded, AI, and scene textures).
    */
@@ -420,14 +440,39 @@ export class HeightmapController {
     }
 
     const list: HeightmapTextureOption[] = [...this.builtinTexturesCache, ...this.customTextures];
-    const seenUrls = new Set(list.map((t) => t.url));
+    const seenUrls = new Set(list.map((t) => t.url).filter(Boolean));
+    const usedIds = new Set(list.map((t) => t.id));
+
+    const makeUniqueSceneId = (baseLabel: string, fallbackKey?: string): string => {
+      const cleanLabel = (baseLabel || fallbackKey || 'texture').trim();
+      let candidate = `scene_${cleanLabel}`;
+      if (!usedIds.has(candidate)) {
+        usedIds.add(candidate);
+        return candidate;
+      }
+      if (fallbackKey) {
+        candidate = `scene_${cleanLabel}_${fallbackKey}`;
+      }
+      let idx = 2;
+      while (usedIds.has(candidate)) {
+        candidate = `scene_${cleanLabel}_${idx++}`;
+      }
+      usedIds.add(candidate);
+      return candidate;
+    };
 
     const aiHistory = this.service.aiTextureGenerator?.getHistory() || [];
+    const aiAuxNames = new Set<string>();
     for (const item of aiHistory) {
+      if (item.embeddedNormalName) aiAuxNames.add(item.embeddedNormalName);
+      if (item.embeddedOrmName) aiAuxNames.add(item.embeddedOrmName);
+      if (item.embeddedAoName) aiAuxNames.add(item.embeddedAoName);
       if (item.albedoDataUrl && !seenUrls.has(item.albedoDataUrl)) {
         seenUrls.add(item.albedoDataUrl);
+        const optId = `ai_${item.id}`;
+        usedIds.add(optId);
         list.push({
-          id: `ai_${item.id}`,
+          id: optId,
           name: `[AI] ${item.name}`,
           url: item.albedoDataUrl,
           category: 'ai',
@@ -438,16 +483,67 @@ export class HeightmapController {
 
     const sceneTextures = this.service.getEmbeddedTexturesInfo?.() || [];
     for (const tex of sceneTextures) {
-      if (tex.url && !seenUrls.has(tex.url) && !tex.isAtlas) {
+      if (!tex.url || tex.isAtlas) continue;
+      if (this.isInternalHeightmapTextureName(tex.name) || aiAuxNames.has(tex.name)) continue;
+      if (!seenUrls.has(tex.url)) {
         seenUrls.add(tex.url);
         list.push({
-          id: `scene_${tex.name}`,
+          id: makeUniqueSceneId(tex.name, tex.id),
           name: `[Scene] ${tex.name}`,
           url: tex.url,
           category: 'scene',
           previewDataUrl: tex.url,
         });
       }
+    }
+
+    // Fallback scan across scene materials and raw scene textures to ensure every texture in any loaded file is selectable
+    const extraTextures: Texture[] = [];
+    for (const mat of this.service.scene.materials) {
+      const matName = (mat?.name || '').toLowerCase();
+      if (!mat || matName === 'gridmat' || matName.startsWith('editor_')) continue;
+      if (mat instanceof PBRMaterial) {
+        if (mat.albedoTexture instanceof Texture) extraTextures.push(mat.albedoTexture);
+        if (mat.emissiveTexture instanceof Texture) extraTextures.push(mat.emissiveTexture);
+      } else if (mat instanceof StandardMaterial) {
+        if (mat.diffuseTexture instanceof Texture) extraTextures.push(mat.diffuseTexture);
+        if (mat.emissiveTexture instanceof Texture) extraTextures.push(mat.emissiveTexture);
+      } else if (mat instanceof TerrainMaterial) {
+        if (mat.diffuseTexture1 instanceof Texture) extraTextures.push(mat.diffuseTexture1);
+        if (mat.diffuseTexture2 instanceof Texture) extraTextures.push(mat.diffuseTexture2);
+        if (mat.diffuseTexture3 instanceof Texture) extraTextures.push(mat.diffuseTexture3);
+      }
+    }
+    for (const t of this.service.scene.textures) {
+      if (t instanceof Texture) extraTextures.push(t);
+    }
+
+    for (const tex of extraTextures) {
+      if ((tex as any).isRenderTarget || (tex as any)._isRenderTarget || (tex as any).isCube) continue;
+      if (this.isInternalHeightmapTextureName(tex.name) || aiAuxNames.has(tex.name)) continue;
+      const lowerUrl = (tex.url || '').toLowerCase();
+      if (
+        lowerUrl.startsWith('data:application/') ||
+        lowerUrl.startsWith('data:text/') ||
+        lowerUrl.startsWith('data:environment') ||
+        lowerUrl.includes('environment') ||
+        lowerUrl.endsWith('.env') ||
+        lowerUrl.endsWith('.dds')
+      ) {
+        continue;
+      }
+
+      const resolvedUrl = this.service.resolveTextureImageUrl?.(tex) || '';
+      if (!resolvedUrl || seenUrls.has(resolvedUrl)) continue;
+      seenUrls.add(resolvedUrl);
+      const displayName = tex.name && !tex.name.startsWith('data:') ? tex.name : `Texture_${tex.uniqueId}`;
+      list.push({
+        id: makeUniqueSceneId(displayName, String(tex.uniqueId)),
+        name: `[Scene] ${displayName}`,
+        url: resolvedUrl,
+        category: 'scene',
+        previewDataUrl: resolvedUrl,
+      });
     }
 
     return list;
@@ -463,9 +559,19 @@ export class HeightmapController {
     }
 
     const raw = nameOrIdOrUrl.trim();
-    if (raw.startsWith('data:image/') || raw.startsWith('blob:') || raw.includes('/')) {
-      const existing = available.find((t) => t.url === raw);
-      if (existing) return existing;
+    const lower = raw.toLowerCase();
+
+    const exactIdOrName = available.find(
+      (t) =>
+        t.id.toLowerCase() === lower ||
+        t.name.toLowerCase() === lower ||
+        t.id.toLowerCase() === `ai_${lower}` ||
+        t.id.toLowerCase() === `scene_${lower}` ||
+        (t.url && t.url === raw),
+    );
+    if (exactIdOrName) return exactIdOrName;
+
+    if (raw.startsWith('data:image/') || raw.startsWith('blob:')) {
       return {
         id: raw,
         name: 'Custom Texture',
@@ -475,12 +581,18 @@ export class HeightmapController {
       };
     }
 
-    const lower = raw.toLowerCase();
-    const exact = available.find((t) => t.id.toLowerCase() === lower || t.name.toLowerCase() === lower);
-    if (exact) return exact;
-
     const partial = available.find((t) => t.id.toLowerCase().includes(lower) || t.name.toLowerCase().includes(lower));
     if (partial) return partial;
+
+    if (raw.includes('/') && (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('./') || raw.startsWith('/'))) {
+      return {
+        id: raw,
+        name: 'Custom Texture',
+        url: raw,
+        category: 'custom',
+        previewDataUrl: raw,
+      };
+    }
 
     return available.find((t) => t.id === fallbackId) || available[0];
   }
@@ -1344,6 +1456,13 @@ export class HeightmapController {
         t.wrapV = Texture.WRAP_ADDRESSMODE;
         t.uScale = scale;
         t.vScale = scale;
+        if (!t.isReady()) {
+          t.onLoadObservable.addOnce(() => {
+            if (!scene.isDisposed) {
+              scene.render();
+            }
+          });
+        }
         return t;
       };
 
@@ -1531,13 +1650,201 @@ export class HeightmapController {
     return resultMesh;
   }
 
+  private bytesToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const sub = bytes.subarray(i, Math.min(bytes.length, i + chunkSize));
+      binary += String.fromCharCode.apply(null, Array.from(sub));
+    }
+    if (typeof btoa === 'function') return btoa(binary);
+    if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
+    return '';
+  }
+
+  private base64ToBytes(b64: string): Uint8Array | null {
+    try {
+      if (typeof atob === 'function') {
+        const bin = atob(b64);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      }
+      if (typeof Buffer !== 'undefined') {
+        return new Uint8Array(Buffer.from(b64, 'base64'));
+      }
+    } catch {
+      // Ignore decode failure
+    }
+    return null;
+  }
+
+  private async ensureTextureOptionRgba(
+    opt: HeightmapTextureOption,
+    liveTex?: BaseTexture | null,
+    size: number = 256,
+  ): Promise<HeightmapTextureOption> {
+    if (opt.rgbaBuffer && opt.width && opt.height) {
+      if (opt.url) {
+        this.decodedRgbaCache.set(opt.url, { rgba: opt.rgbaBuffer, width: opt.width, height: opt.height });
+      }
+      return opt;
+    }
+
+    const resolvedLiveUrl = liveTex instanceof Texture ? this.service.resolveTextureImageUrl?.(liveTex) || '' : '';
+    const imageUrl = resolvedLiveUrl || opt.url || opt.previewDataUrl || '';
+
+    if (imageUrl) {
+      const cached = this.decodedRgbaCache.get(imageUrl);
+      if (cached) {
+        opt.rgbaBuffer = cached.rgba;
+        opt.width = cached.width;
+        opt.height = cached.height;
+        return opt;
+      }
+
+      const loaded = await ImageUtils.loadImageRgba(imageUrl, size, size);
+      if (loaded) {
+        this.decodedRgbaCache.set(imageUrl, loaded);
+        opt.rgbaBuffer = loaded.rgba;
+        opt.width = loaded.width;
+        opt.height = loaded.height;
+        return opt;
+      }
+    }
+
+    if (liveTex && typeof (liveTex as any).readPixels === 'function') {
+      try {
+        const texSize = liveTex.getSize();
+        if (texSize.width > 0 && texSize.height > 0) {
+          const raw = await (liveTex as any).readPixels();
+          if (raw && raw.length >= texSize.width * texSize.height * 4) {
+            const rgba = new Uint8ClampedArray(texSize.width * texSize.height * 4);
+            for (let i = 0; i < rgba.length; i++) {
+              rgba[i] = raw instanceof Float32Array ? Math.max(0, Math.min(255, Math.round(raw[i] * 255))) : raw[i];
+            }
+            const entry = { rgba, width: texSize.width, height: texSize.height };
+            if (imageUrl) this.decodedRgbaCache.set(imageUrl, entry);
+            opt.rgbaBuffer = entry.rgba;
+            opt.width = entry.width;
+            opt.height = entry.height;
+            return opt;
+          }
+        }
+      } catch {
+        // Ignore readPixels error in headless engines
+      }
+    }
+
+    // Headless fallback when no 2D canvas or GPU readback is available: preserve distinct texture tones
+    let primary = '#7d8280';
+    let secondary = '#5f6462';
+    let accent = '#9ca3a0';
+    if (opt.category === 'ai') {
+      const aiHistory = this.service.aiTextureGenerator?.getHistory() || [];
+      const matched = aiHistory.find((item) => `ai_${item.id}` === opt.id || item.albedoDataUrl === imageUrl);
+      if (matched) {
+        if (matched.primaryColor) primary = matched.primaryColor;
+        if (matched.secondaryColor) secondary = matched.secondaryColor;
+        if (matched.accentColor) accent = matched.accentColor;
+      }
+    }
+    const synth = synthesizePbrTextureBuffers({
+      type: 'stone',
+      primaryColor: primary,
+      secondaryColor: secondary,
+      accentColor: accent,
+      size: 64,
+      scale: 4,
+      seed: opt.name.length * 37 + 13,
+    });
+    const entry = { rgba: synth.albedoRgba, width: synth.width, height: synth.height };
+    if (imageUrl) this.decodedRgbaCache.set(imageUrl, entry);
+    opt.rgbaBuffer = entry.rgba;
+    opt.width = entry.width;
+    opt.height = entry.height;
+    return opt;
+  }
+
+  private async waitForTextureReady(tex: BaseTexture, timeoutMs: number = 5000): Promise<void> {
+    const isNullEngine = this.service.engine instanceof NullEngine;
+    const isReadyWithSize = () => {
+      if (!tex.isReady()) return false;
+      if (isNullEngine) return true;
+      const sz = tex.getSize();
+      return sz.width > 0 && sz.height > 0;
+    };
+
+    if (isReadyWithSize()) return;
+
+    await new Promise<void>((resolve) => {
+      let done = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let poll: ReturnType<typeof setInterval> | null = null;
+      let loadObs: any = null;
+      let internalLoadObs: any = null;
+      let errObs: any = null;
+
+      const finish = () => {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        if (poll) clearInterval(poll);
+        if (loadObs && tex instanceof Texture) {
+          tex.onLoadObservable.remove(loadObs);
+        }
+        const internal = tex.getInternalTexture?.();
+        if (internalLoadObs && internal?.onLoadedObservable) {
+          internal.onLoadedObservable.remove(internalLoadObs);
+        }
+        if (errObs) {
+          Texture.OnTextureLoadErrorObservable.remove(errObs);
+        }
+        resolve();
+      };
+
+      timer = setTimeout(finish, timeoutMs);
+      poll = setInterval(() => {
+        if (isReadyWithSize()) finish();
+      }, 25);
+
+      if (tex instanceof Texture) {
+        loadObs = tex.onLoadObservable.add(() => {
+          if (isReadyWithSize()) finish();
+        });
+      }
+      const internal = tex.getInternalTexture?.();
+      if (internal?.onLoadedObservable) {
+        internalLoadObs = internal.onLoadedObservable.add(() => {
+          if (isReadyWithSize()) finish();
+        });
+      }
+      errObs = Texture.OnTextureLoadErrorObservable.add((erroredTex) => {
+        if (erroredTex === tex) finish();
+      });
+    });
+  }
+
   /**
    * Composites a blended RGBA buffer from the 3 terrain splat textures weighted by the mixmap RGB channels.
    */
-  public compositeTerrainAlbedoRgba(size: number = 256): Uint8ClampedArray {
-    const tex1 = this.resolveTextureOption(this.config.terrainTextureName1, 'rock');
-    const tex2 = this.resolveTextureOption(this.config.terrainTextureName2, 'grass');
-    const tex3 = this.resolveTextureOption(this.config.terrainTextureName3, 'sand');
+  public compositeTerrainAlbedoRgba(
+    size: number = 256,
+    overrides?: {
+      mixmap?: Uint8ClampedArray;
+      tex1?: HeightmapTextureOption;
+      tex2?: HeightmapTextureOption;
+      tex3?: HeightmapTextureOption;
+      scale?: Vector3;
+      flipY?: boolean;
+    },
+  ): Uint8ClampedArray {
+    const tex1 = overrides?.tex1 || this.resolveTextureOption(this.config.terrainTextureName1, 'rock');
+    const tex2 = overrides?.tex2 || this.resolveTextureOption(this.config.terrainTextureName2, 'grass');
+    const tex3 = overrides?.tex3 || this.resolveTextureOption(this.config.terrainTextureName3, 'sand');
+    const mixmap = overrides?.mixmap || this.mixmapRgba;
+    const scaleVec = overrides?.scale || this.config.terrainTextureScale;
+    const flipY = Boolean(overrides?.flipY);
 
     const sampleBuffer = (
       opt: HeightmapTextureOption,
@@ -1556,27 +1863,28 @@ export class HeightmapController {
     };
 
     const out = new Uint8ClampedArray(size * size * 4);
-    const sx = this.config.terrainTextureScale.x || 10;
-    const sy = this.config.terrainTextureScale.y || 10;
-    const sz = this.config.terrainTextureScale.z || 10;
+    const sx = scaleVec.x || 10;
+    const sy = scaleVec.y || 10;
+    const sz = scaleVec.z || 10;
 
     for (let y = 0; y < size; y++) {
       const v = y / size;
       const my = Math.min(this.mapSize - 1, Math.floor(v * this.mapSize));
+      const outY = flipY ? size - 1 - y : y;
       for (let x = 0; x < size; x++) {
         const u = x / size;
         const mx = Math.min(this.mapSize - 1, Math.floor(u * this.mapSize));
         const mIdx = (my * this.mapSize + mx) * 4;
-        const w1 = this.mixmapRgba[mIdx] / 255;
-        const w2 = this.mixmapRgba[mIdx + 1] / 255;
-        const w3 = this.mixmapRgba[mIdx + 2] / 255;
+        const w1 = mixmap[mIdx] / 255;
+        const w2 = mixmap[mIdx + 1] / 255;
+        const w3 = mixmap[mIdx + 2] / 255;
         const wSum = w1 + w2 + w3 || 1;
 
         const c1 = sampleBuffer(tex1, u, v, sx, [110, 112, 118]);
         const c2 = sampleBuffer(tex2, u, v, sy, [75, 125, 55]);
         const c3 = sampleBuffer(tex3, u, v, sz, [215, 190, 140]);
 
-        const outIdx = (y * size + x) * 4;
+        const outIdx = (outY * size + x) * 4;
         out[outIdx] = Math.min(255, Math.round((c1[0] * w1 + c2[0] * w2 + c3[0] * w3) / wSum));
         out[outIdx + 1] = Math.min(255, Math.round((c1[1] * w1 + c2[1] * w2 + c3[1] * w3) / wSum));
         out[outIdx + 2] = Math.min(255, Math.round((c1[2] * w1 + c2[2] * w2 + c3[2] * w3) / wSum));
@@ -1587,23 +1895,77 @@ export class HeightmapController {
     return out;
   }
 
+  private getHeightmapMeshes(): GroundMesh[] {
+    const meshes = new Set<GroundMesh>();
+    for (const m of this.service.importedMeshes) {
+      if (m && !m.isDisposed() && this.isHeightmapMesh(m)) {
+        meshes.add(m);
+      }
+    }
+    if (this.activeTerrainMesh && !this.activeTerrainMesh.isDisposed() && this.isHeightmapMesh(this.activeTerrainMesh)) {
+      meshes.add(this.activeTerrainMesh);
+    }
+    return Array.from(meshes);
+  }
+
+  private resolveSlotOptionForMesh(
+    slotName: string | undefined,
+    fallbackId: string,
+    liveTex?: BaseTexture | null,
+  ): HeightmapTextureOption {
+    if (slotName) {
+      return this.resolveTextureOption(slotName, fallbackId);
+    }
+    if (liveTex instanceof Texture) {
+      const liveUrl = this.service.resolveTextureImageUrl?.(liveTex) || liveTex.url || '';
+      if (liveUrl) {
+        return this.resolveTextureOption(liveUrl, fallbackId);
+      }
+    }
+    return this.resolveTextureOption(undefined, fallbackId);
+  }
+
   /**
    * Temporarily swaps TerrainMaterial with a composite PBRMaterial prior to glTF/GLB export
-   * so exported terrain meshes carry valid PBR textures/albedo in standard 3D viewers.
+   * so exported terrain meshes carry valid, fully decoded PBR textures in standard 3D viewers and on reload.
    */
-  public prepareMeshesForExport(): void {
+  public async prepareMeshesForExport(): Promise<void> {
     this.exportBackupMaterials.clear();
     const isHeadless =
       this.service.engine instanceof NullEngine ||
       typeof document === 'undefined' ||
       !document.createElement('canvas').getContext('2d');
+    const compSize = isHeadless ? 128 : 512;
 
-    for (const mesh of this.service.importedMeshes) {
-      if (!mesh || mesh.isDisposed() || !this.isHeightmapMesh(mesh)) continue;
+    for (const mesh of this.getHeightmapMeshes()) {
       if (!(mesh.material instanceof TerrainMaterial)) continue;
 
-      this.exportBackupMaterials.set(mesh, mesh.material);
-      this.syncFromMesh(mesh as GroundMesh);
+      const terrainMat = mesh.material;
+      this.exportBackupMaterials.set(mesh, terrainMat);
+      this.syncFromMesh(mesh);
+
+      const meta = mesh.metadata?.heightmapData || {};
+      const meshMixmap =
+        meta.mixmapBuffer instanceof Uint8ClampedArray && meta.mixmapBuffer.length === this.mixmapRgba.length
+          ? meta.mixmapBuffer
+          : this.mixmapRgba;
+      const meshScale = Array.isArray(meta.textureScale) && meta.textureScale.length >= 3
+        ? new Vector3(
+            Number(meta.textureScale[0]) || 10,
+            Number(meta.textureScale[1]) || 10,
+            Number(meta.textureScale[2]) || 10,
+          )
+        : this.config.terrainTextureScale;
+
+      const tex1Opt = this.resolveSlotOptionForMesh(meta.texture1, 'rock', terrainMat.diffuseTexture1);
+      const tex2Opt = this.resolveSlotOptionForMesh(meta.texture2, 'grass', terrainMat.diffuseTexture2);
+      const tex3Opt = this.resolveSlotOptionForMesh(meta.texture3, 'sand', terrainMat.diffuseTexture3);
+
+      await Promise.all([
+        this.ensureTextureOptionRgba(tex1Opt, terrainMat.diffuseTexture1, 256),
+        this.ensureTextureOptionRgba(tex2Opt, terrainMat.diffuseTexture2, 256),
+        this.ensureTextureOptionRgba(tex3Opt, terrainMat.diffuseTexture3, 256),
+      ]);
 
       const pbr = new PBRMaterial(`${mesh.name}_ExportPBR`, this.service.scene);
       pbr.backFaceCulling = false;
@@ -1611,34 +1973,235 @@ export class HeightmapController {
       pbr.roughness = 0.88;
       pbr.metallic = 0.0;
 
-      const compRgba = this.compositeTerrainAlbedoRgba(256);
+      // Flip Y so uv.v = 0..1 aligns directly with glTF/GLB invertY=false texture coordinates
+      const compRgba = this.compositeTerrainAlbedoRgba(compSize, {
+        mixmap: meshMixmap,
+        tex1: tex1Opt,
+        tex2: tex2Opt,
+        tex3: tex3Opt,
+        scale: meshScale,
+        flipY: true,
+      });
 
-      // Compute average albedo color fallback
-      let rSum = 0;
-      let gSum = 0;
-      let bSum = 0;
-      const pixelCount = compRgba.length / 4;
-      for (let i = 0; i < compRgba.length; i += 4) {
-        rSum += compRgba[i];
-        gSum += compRgba[i + 1];
-        bSum += compRgba[i + 2];
-      }
-      pbr.albedoColor = new Color3(
-        rSum / (pixelCount * 255),
-        gSum / (pixelCount * 255),
-        bSum / (pixelCount * 255),
-      );
+      const compUrl = ImageUtils.rgbaBufferToDataUrl(compRgba, compSize, compSize);
+      const tex = new Texture(compUrl, this.service.scene, {
+        noMipmap: false,
+        invertY: false,
+        samplingMode: Texture.TRILINEAR_SAMPLINGMODE,
+        mimeType: 'image/png',
+      });
+      tex.name = `${mesh.name}_CompositeAlbedo.png`;
+      tex.wrapU = Texture.CLAMP_ADDRESSMODE;
+      tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+      tex.hasAlpha = false;
 
-      if (!isHeadless) {
-        const compUrl = ImageUtils.rgbaBufferToDataUrl(compRgba, 256, 256);
-        const tex = new Texture(compUrl, this.service.scene, false, true, Texture.TRILINEAR_SAMPLINGMODE);
-        tex.name = `${mesh.name}_CompositeAlbedo.png`;
-        pbr.albedoTexture = tex;
-        pbr.albedoColor = Color3.White();
-      }
+      await this.waitForTextureReady(tex, 5000);
+
+      pbr.albedoTexture = tex;
+      pbr.albedoColor = Color3.White();
 
       mesh.material = pbr;
     }
+  }
+
+  /**
+   * Ensures all TerrainMaterial textures use self-contained data:image/ URLs before .babylon serialization.
+   */
+  public async prepareTexturesForBabylonSerialization(): Promise<void> {
+    for (const mesh of this.getHeightmapMeshes()) {
+      if (!(mesh.material instanceof TerrainMaterial)) continue;
+      const mat = mesh.material;
+      const texList: Array<BaseTexture | null | undefined> = [
+        mat.mixTexture,
+        mat.diffuseTexture1,
+        mat.diffuseTexture2,
+        mat.diffuseTexture3,
+      ];
+      for (const tex of texList) {
+        if (!(tex instanceof Texture)) continue;
+        if (tex.url && tex.url.startsWith('data:image/')) continue;
+        const resolved = this.service.resolveTextureImageUrl?.(tex);
+        if (resolved && resolved.startsWith('data:image/')) {
+          tex.updateURL(resolved);
+          await this.waitForTextureReady(tex, 3000);
+        }
+      }
+    }
+  }
+
+  /**
+   * Serializes heightmap terrain state (buffers, config, and texture URLs) for .babylon project save files.
+   */
+  public exportState(): any {
+    const meshes = this.getHeightmapMeshes();
+    if (meshes.length === 0) return undefined;
+
+    const entries = meshes.map((mesh) => {
+      this.syncFromMesh(mesh);
+      const meta = mesh.metadata?.heightmapData || {};
+      const tex1Opt = this.resolveSlotOptionForMesh(meta.texture1 || this.config.terrainTextureName1, 'rock');
+      const tex2Opt = this.resolveSlotOptionForMesh(meta.texture2 || this.config.terrainTextureName2, 'grass');
+      const tex3Opt = this.resolveSlotOptionForMesh(meta.texture3 || this.config.terrainTextureName3, 'sand');
+      const hBuf =
+        meta.heightmapBuffer instanceof Uint8ClampedArray ? meta.heightmapBuffer : this.heightmapRgba;
+      const mBuf =
+        meta.mixmapBuffer instanceof Uint8ClampedArray ? meta.mixmapBuffer : this.mixmapRgba;
+
+      return {
+        meshName: mesh.name,
+        width: meta.width ?? this.config.width,
+        height: meta.height ?? this.config.height,
+        subdivisions: meta.subdivisions ?? this.config.subdivisions,
+        minHeight: meta.minHeight ?? this.config.minHeight,
+        maxHeight: meta.maxHeight ?? this.config.maxHeight,
+        texture1: meta.texture1 ?? this.config.terrainTextureName1,
+        texture2: meta.texture2 ?? this.config.terrainTextureName2,
+        texture3: meta.texture3 ?? this.config.terrainTextureName3,
+        texture1Name: tex1Opt.name,
+        texture2Name: tex2Opt.name,
+        texture3Name: tex3Opt.name,
+        texture1DataUrl: tex1Opt.category !== 'builtin' ? tex1Opt.url : undefined,
+        texture2DataUrl: tex2Opt.category !== 'builtin' ? tex2Opt.url : undefined,
+        texture3DataUrl: tex3Opt.category !== 'builtin' ? tex3Opt.url : undefined,
+        textureScale: Array.isArray(meta.textureScale)
+          ? [...meta.textureScale]
+          : [
+              this.config.terrainTextureScale.x,
+              this.config.terrainTextureScale.y,
+              this.config.terrainTextureScale.z,
+            ],
+        hasCustomMixMap: Boolean(meta.hasCustomMixMap ?? this.hasCustomMixMap),
+        mapSize: this.mapSize,
+        heightmapBase64: this.bytesToBase64(new Uint8Array(hBuf.buffer, hBuf.byteOffset, hBuf.byteLength)),
+        mixmapBase64: this.bytesToBase64(new Uint8Array(mBuf.buffer, mBuf.byteOffset, mBuf.byteLength)),
+      };
+    });
+
+    return { meshes: entries };
+  }
+
+  /**
+   * Restores saved heightmap terrain state from a loaded .babylon project file.
+   */
+  public restoreState(state: any): void {
+    if (!state || !Array.isArray(state.meshes) || state.meshes.length === 0) return;
+
+    for (const entry of state.meshes) {
+      const targetMesh = this.service.importedMeshes.find(
+        (m): m is GroundMesh => m instanceof Mesh && m.name === entry.meshName,
+      ) || this.service.importedMeshes.find((m): m is GroundMesh => m instanceof GroundMesh);
+
+      const hBytes = typeof entry.heightmapBase64 === 'string' ? this.base64ToBytes(entry.heightmapBase64) : null;
+      const mBytes = typeof entry.mixmapBase64 === 'string' ? this.base64ToBytes(entry.mixmapBase64) : null;
+
+      if (hBytes && hBytes.length === this.heightmapRgba.length) {
+        this.heightmapRgba.set(hBytes);
+      }
+      if (mBytes && mBytes.length === this.mixmapRgba.length) {
+        this.mixmapRgba.set(mBytes);
+      }
+
+      const registerRestoredCustom = (slotId: string | undefined, slotName: string | undefined, dataUrl: string | undefined) => {
+        if (!dataUrl || !dataUrl.startsWith('data:image/')) return;
+        const available = this.getAvailableTextures();
+        if (available.some((t) => t.id === slotId || t.url === dataUrl)) return;
+        this.customTextures.push({
+          id: slotId || `custom_restored_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          name: slotName || 'Restored Texture',
+          url: dataUrl,
+          category: 'custom',
+          previewDataUrl: dataUrl,
+        });
+      };
+
+      registerRestoredCustom(entry.texture1, entry.texture1Name, entry.texture1DataUrl);
+      registerRestoredCustom(entry.texture2, entry.texture2Name, entry.texture2DataUrl);
+      registerRestoredCustom(entry.texture3, entry.texture3Name, entry.texture3DataUrl);
+
+      if (entry.width) this.config.width = Number(entry.width);
+      if (entry.height) this.config.height = Number(entry.height);
+      if (entry.subdivisions) this.config.subdivisions = Number(entry.subdivisions);
+      if (entry.minHeight !== undefined) this.config.minHeight = Number(entry.minHeight);
+      if (entry.maxHeight !== undefined) this.config.maxHeight = Number(entry.maxHeight);
+      if (entry.texture1) this.config.terrainTextureName1 = String(entry.texture1);
+      if (entry.texture2) this.config.terrainTextureName2 = String(entry.texture2);
+      if (entry.texture3) this.config.terrainTextureName3 = String(entry.texture3);
+      if (Array.isArray(entry.textureScale) && entry.textureScale.length >= 3) {
+        this.config.terrainTextureScale.set(
+          Number(entry.textureScale[0]) || 10,
+          Number(entry.textureScale[1]) || 10,
+          Number(entry.textureScale[2]) || 10,
+        );
+      }
+      this.hasCustomMixMap = Boolean(entry.hasCustomMixMap);
+      this.autoGenerateMixMap = !this.hasCustomMixMap;
+
+      if (targetMesh) {
+        const mixUrl = ImageUtils.rgbaBufferToDataUrl(this.mixmapRgba, this.mapSize, this.mapSize);
+        const heightUrl = ImageUtils.rgbaBufferToDataUrl(this.heightmapRgba, this.mapSize, this.mapSize);
+        const tex1Opt = this.resolveTextureOption(entry.texture1 || entry.texture1DataUrl, 'rock');
+        const tex2Opt = this.resolveTextureOption(entry.texture2 || entry.texture2DataUrl, 'grass');
+        const tex3Opt = this.resolveTextureOption(entry.texture3 || entry.texture3DataUrl, 'sand');
+
+        let terrainMat = targetMesh.material instanceof TerrainMaterial ? targetMesh.material : null;
+        if (!terrainMat) {
+          terrainMat = new TerrainMaterial(`${targetMesh.name}_TerrainMaterial`, this.service.scene);
+          targetMesh.material = terrainMat;
+        }
+        terrainMat.backFaceCulling = this.config.backFaceCulling;
+
+        const mixTex = new Texture(mixUrl, this.service.scene, false, true, Texture.BILINEAR_SAMPLINGMODE);
+        mixTex.name = `${targetMesh.name}_Mixmap`;
+        mixTex.wrapU = Texture.CLAMP_ADDRESSMODE;
+        mixTex.wrapV = Texture.CLAMP_ADDRESSMODE;
+        if (terrainMat.mixTexture && terrainMat.mixTexture !== mixTex) terrainMat.mixTexture.dispose();
+        terrainMat.mixTexture = mixTex;
+
+        const bindSplat = (opt: HeightmapTextureOption, scale: number, label: string, prev?: Nullable<BaseTexture>): Texture => {
+          const t = new Texture(opt.url, this.service.scene, false, true, Texture.TRILINEAR_SAMPLINGMODE);
+          t.name = `${targetMesh.name}_${label}_${opt.id}`;
+          t.wrapU = Texture.WRAP_ADDRESSMODE;
+          t.wrapV = Texture.WRAP_ADDRESSMODE;
+          t.uScale = scale;
+          t.vScale = scale;
+          if (prev && prev !== t) prev.dispose();
+          return t;
+        };
+
+        terrainMat.diffuseTexture1 = bindSplat(tex1Opt, this.config.terrainTextureScale.x, 'tex1', terrainMat.diffuseTexture1);
+        terrainMat.diffuseTexture2 = bindSplat(tex2Opt, this.config.terrainTextureScale.y, 'tex2', terrainMat.diffuseTexture2);
+        terrainMat.diffuseTexture3 = bindSplat(tex3Opt, this.config.terrainTextureScale.z, 'tex3', terrainMat.diffuseTexture3);
+        terrainMat.markAsDirty(Material.TextureDirtyFlag);
+
+        targetMesh.metadata = {
+          ...(targetMesh.metadata || {}),
+          isHeightmapTerrain: true,
+          heightmapData: {
+            width: this.config.width,
+            height: this.config.height,
+            subdivisions: this.config.subdivisions,
+            minHeight: this.config.minHeight,
+            maxHeight: this.config.maxHeight,
+            texture1: this.config.terrainTextureName1,
+            texture2: this.config.terrainTextureName2,
+            texture3: this.config.terrainTextureName3,
+            textureScale: [
+              this.config.terrainTextureScale.x,
+              this.config.terrainTextureScale.y,
+              this.config.terrainTextureScale.z,
+            ],
+            hasCustomMixMap: this.hasCustomMixMap,
+            heightmapBuffer: new Uint8ClampedArray(this.heightmapRgba),
+            mixmapBuffer: new Uint8ClampedArray(this.mixmapRgba),
+            heightMapImageUrl: heightUrl,
+            mixMapImageUrl: mixUrl,
+          },
+        };
+        this.activeTerrainMesh = targetMesh;
+      }
+    }
+
+    this.onMapsChanged?.();
   }
 
   /**

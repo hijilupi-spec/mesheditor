@@ -61,7 +61,7 @@ import {
   transformFacetUVs,
 } from './geometry/facetSurfaceUtils';
 import { subdivideCatmullClarkMesh } from './geometry/organicGeometry';
-import { GridMaterial } from '@babylonjs/materials';
+import { GridMaterial, TerrainMaterial } from '@babylonjs/materials';
 import { GLTF2Export, OBJExport, RegisterEXT_texture_webp, STLExport } from '@babylonjs/serializers';
 import { DataWriter } from '@babylonjs/serializers/glTF/2.0/dataWriter';
 
@@ -6400,6 +6400,8 @@ export class MeshEditorService {
       totalApplied += fileAppliedCount;
     }
 
+    this.events.onTexturesChanged?.();
+
     if (totalApplied > 0) {
       this.events.onSceneModified?.();
       this.events.onToast?.(`Texture applied to ${totalApplied} material(s)!`, 'success');
@@ -6411,6 +6413,113 @@ export class MeshEditorService {
   /* =========================================================================
      12. TEXTURE OPTIMIZATION (WEBP)
      ========================================================================= */
+  private isSupportedImageUrl(url: string): boolean {
+    const lowerUrl = url.toLowerCase();
+    return (
+      lowerUrl.startsWith('data:image/') ||
+      lowerUrl.startsWith('blob:') ||
+      lowerUrl.startsWith('http://') ||
+      lowerUrl.startsWith('https://') ||
+      lowerUrl.startsWith('./') ||
+      lowerUrl.startsWith('/')
+    );
+  }
+
+  /**
+   * Resolves any scene Texture (including GLB/glTF binary buffer textures whose URL is "data:file:...#imageN",
+   * RawTexture/DynamicTexture canvases, or standard image URLs) into a directly displayable image URL.
+   */
+  public resolveTextureImageUrl(tex: Texture): string {
+    const rawUrl = tex.url || '';
+    if (rawUrl && this.isSupportedImageUrl(rawUrl)) {
+      return rawUrl;
+    }
+
+    const cached = (tex as any).__resolvedDataUrl;
+    if (typeof cached === 'string' && this.isSupportedImageUrl(cached)) {
+      return cached;
+    }
+
+    const internal = tex.getInternalTexture?.();
+    const candidateBuffer = (tex as any)._buffer ?? (internal as any)?._buffer;
+
+    if (typeof candidateBuffer === 'string' && this.isSupportedImageUrl(candidateBuffer)) {
+      (tex as any).__resolvedDataUrl = candidateBuffer;
+      return candidateBuffer;
+    }
+
+    if (candidateBuffer && (candidateBuffer instanceof ArrayBuffer || ArrayBuffer.isView(candidateBuffer))) {
+      try {
+        const bytes =
+          candidateBuffer instanceof ArrayBuffer
+            ? new Uint8Array(candidateBuffer)
+            : new Uint8Array(candidateBuffer.buffer, candidateBuffer.byteOffset, candidateBuffer.byteLength);
+        if (bytes.length > 0) {
+          let mimeType = (tex as any).mimeType || '';
+          if (!mimeType || !mimeType.startsWith('image/')) {
+            if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+              mimeType = 'image/png';
+            } else if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+              mimeType = 'image/jpeg';
+            } else if (bytes.length >= 4 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+              mimeType = 'image/webp';
+            } else {
+              mimeType = 'image/png';
+            }
+          }
+
+          let binary = '';
+          const chunkSize = 0x8000;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const sub = bytes.subarray(i, Math.min(bytes.length, i + chunkSize));
+            binary += String.fromCharCode.apply(null, Array.from(sub));
+          }
+          const b64 =
+            typeof btoa === 'function'
+              ? btoa(binary)
+              : typeof Buffer !== 'undefined'
+                ? Buffer.from(bytes).toString('base64')
+                : '';
+          if (b64) {
+            const dataUrl = `data:${mimeType};base64,${b64}`;
+            (tex as any).__resolvedDataUrl = dataUrl;
+            return dataUrl;
+          }
+        }
+      } catch {
+        // Ignore binary encoding failures and fall through
+      }
+    }
+
+    if (
+      typeof HTMLImageElement !== 'undefined' &&
+      candidateBuffer instanceof HTMLImageElement &&
+      candidateBuffer.src &&
+      this.isSupportedImageUrl(candidateBuffer.src)
+    ) {
+      (tex as any).__resolvedDataUrl = candidateBuffer.src;
+      return candidateBuffer.src;
+    }
+
+    if (typeof (tex as any).getContext === 'function') {
+      try {
+        const ctx = (tex as any).getContext();
+        const canvas = ctx?.canvas as HTMLCanvasElement | undefined;
+        if (canvas && typeof canvas.toDataURL === 'function') {
+          const dataUrl = canvas.toDataURL('image/png');
+          if (this.isSupportedImageUrl(dataUrl)) {
+            (tex as any).__resolvedDataUrl = dataUrl;
+            return dataUrl;
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    return '';
+  }
+
   public scanSceneTextures(): Texture[] {
     const texList: Texture[] = [];
     const internalKeywords = [
@@ -6431,18 +6540,37 @@ export class MeshEditorService {
       'envbrdf',
     ];
 
+    const surfaceAssignedTextures = new Set<Texture>();
+    for (const mat of this.scene.materials) {
+      const matName = (mat?.name || '').toLowerCase();
+      if (!mat || matName === 'gridmat' || matName.startsWith('editor_')) continue;
+      if (mat instanceof PBRMaterial) {
+        if (mat.albedoTexture instanceof Texture) surfaceAssignedTextures.add(mat.albedoTexture);
+        if (mat.emissiveTexture instanceof Texture) surfaceAssignedTextures.add(mat.emissiveTexture);
+      } else if (mat instanceof StandardMaterial) {
+        if (mat.diffuseTexture instanceof Texture) surfaceAssignedTextures.add(mat.diffuseTexture);
+        if (mat.emissiveTexture instanceof Texture) surfaceAssignedTextures.add(mat.emissiveTexture);
+      } else if (mat instanceof TerrainMaterial) {
+        if (mat.diffuseTexture1 instanceof Texture) surfaceAssignedTextures.add(mat.diffuseTexture1);
+        if (mat.diffuseTexture2 instanceof Texture) surfaceAssignedTextures.add(mat.diffuseTexture2);
+        if (mat.diffuseTexture3 instanceof Texture) surfaceAssignedTextures.add(mat.diffuseTexture3);
+      }
+    }
+
     for (const t of this.scene.textures) {
       if (!(t instanceof Texture)) continue;
 
       const lowerName = (t.name || '').toLowerCase();
+      const isSurfaceMaterialTex = surfaceAssignedTextures.has(t);
 
       // Filter out internal RenderTargetTextures, cubes, post-processes and Babylon system layers
       if ((t as any).isRenderTarget || (t as any)._isRenderTarget || (t as any).isCube) continue;
       if (lowerName === 'gridmat' || lowerName.startsWith('editor_')) continue;
-      if (internalKeywords.some((kw) => lowerName.includes(kw))) continue;
+      if (!isSurfaceMaterialTex && internalKeywords.some((kw) => lowerName.includes(kw))) continue;
 
-      // Real user / material textures must have a valid URL or buffer
-      if (!t.url && !(t as any)._buffer) continue;
+      // Real user / material textures must have a valid URL, buffer, or internal GPU buffer
+      const hasBuffer = Boolean((t as any)._buffer || t.getInternalTexture?.()?._buffer);
+      if (!t.url && !hasBuffer) continue;
 
       // Filter out non-image data URLs like data:application/ or data:Environment or raw .env/.dds
       if (t.url) {
@@ -6461,7 +6589,7 @@ export class MeshEditorService {
 
       // Filter out 1x1 dummy colormaps without materials
       const size = t.getSize();
-      if (size.width <= 1 && size.height <= 1 && lowerName.includes('color')) {
+      if (!isSurfaceMaterialTex && size.width <= 1 && size.height <= 1 && lowerName.includes('color')) {
         continue;
       }
 
@@ -6505,19 +6633,8 @@ export class MeshEditorService {
       }
 
       const size = tex.getSize();
-      const url = tex.url || '';
+      const url = this.resolveTextureImageUrl(tex);
       if (!url) continue;
-
-      // Validate URL format for 2D images
-      const lowerUrl = url.toLowerCase();
-      const isValidImageUrl =
-        lowerUrl.startsWith('data:image/') ||
-        lowerUrl.startsWith('blob:') ||
-        lowerUrl.startsWith('http://') ||
-        lowerUrl.startsWith('https://') ||
-        lowerUrl.startsWith('./') ||
-        lowerUrl.startsWith('/');
-      if (!isValidImageUrl) continue;
 
       const matNames: string[] = [];
       for (const m of this.scene.materials) {
@@ -6536,6 +6653,15 @@ export class MeshEditorService {
             m.bumpTexture === tex ||
             m.specularTexture === tex ||
             m.emissiveTexture === tex
+          ) {
+            matNames.push(m.name);
+          }
+        } else if (m instanceof TerrainMaterial) {
+          if (
+            m.diffuseTexture1 === tex ||
+            m.diffuseTexture2 === tex ||
+            m.diffuseTexture3 === tex ||
+            m.mixTexture === tex
           ) {
             matNames.push(m.name);
           }
@@ -6617,11 +6743,13 @@ export class MeshEditorService {
       if (name && (!existing.name || existing.name === 'embedded_texture')) {
         existing.name = name;
       }
+      this.events.onTexturesChanged?.();
       return existing;
     }
     const tex = new Texture(dataUrl, this.scene, false, false);
     tex.name = name;
     tex.hasAlpha = false;
+    this.events.onTexturesChanged?.();
     this.events.onToast?.(`Embedded texture "${name}" added to scene.`, 'success');
     return tex;
   }
@@ -7029,7 +7157,11 @@ export class MeshEditorService {
 
     // Restore materials & clean up temporary weight heatmap vertex colors and ensure bone nodes before export
     this.weightPaintController?.prepareMeshesForExport();
-    this.heightmapController?.prepareMeshesForExport();
+    if (format === 'glb' || format === 'gltf') {
+      await this.heightmapController?.prepareMeshesForExport();
+    } else if (format === 'babylon') {
+      await this.heightmapController?.prepareTexturesForBabylonSerialization();
+    }
 
     const shouldExport = (node: any) => this.shouldExportNode(node, opts.selectedOnly);
 
@@ -7108,6 +7240,7 @@ export class MeshEditorService {
               this.pathExtrusion && this.pathExtrusion.paths.length > 0
                 ? this.pathExtrusion.exportState()
                 : undefined,
+            heightmap: this.heightmapController?.exportState(),
           },
         };
 
@@ -7185,7 +7318,7 @@ export class MeshEditorService {
       this.decalController.mergeAllDecalsIntoMeshes();
     }
     this.weightPaintController?.prepareMeshesForExport();
-    this.heightmapController?.prepareMeshesForExport();
+    await this.heightmapController?.prepareMeshesForExport();
     try {
       const shouldExport = (node: any) => this.shouldExportNode(node, false);
       const glb = await GLTF2Export.GLBAsync(this.scene, filename, {
@@ -7305,7 +7438,7 @@ export class MeshEditorService {
     }
 
     const baseName = filename || this.currentFilename || 'compressed_model';
-    this.heightmapController?.prepareMeshesForExport();
+    await this.heightmapController?.prepareMeshesForExport();
     try {
       return await ModelCompressor.exportCompressedModel(this.scene, targetMeshes, baseName, options);
     } finally {
@@ -7646,6 +7779,11 @@ export class MeshEditorService {
     if (pathsToRestore && Array.isArray(pathsToRestore)) {
       this.pathExtrusion.loadState(pathsToRestore);
       this.events.onToast?.(`Restored ${pathsToRestore.length} path extrusions from project state.`, 'info');
+    }
+
+    // Restore Heightmap Terrain state
+    if (tools.heightmap && this.heightmapController) {
+      this.heightmapController.restoreState(tools.heightmap);
     }
 
     this.events.onSceneModified?.();

@@ -1,4 +1,4 @@
-import { NullEngine, MeshBuilder, Mesh, GroundMesh, Vector3 } from '@babylonjs/core';
+import { NullEngine, MeshBuilder, Mesh, GroundMesh, Vector3, PBRMaterial, Texture } from '@babylonjs/core';
 import { TerrainMaterial } from '@babylonjs/materials';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MeshEditorApp } from '../../src/MeshEditorApp';
@@ -1128,6 +1128,221 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(glbBlob).toBeDefined();
       expect(glbBlob.size).toBeGreaterThan(0);
       expect(terrainMesh.material instanceof TerrainMaterial).toBe(true);
+    });
+
+    it('discovers and makes AI textures created after heightmap AND GLB/scene textures immediately selectable', async () => {
+      document.body.innerHTML = '';
+      const container = document.createElement('div');
+      container.id = 'app-heightmap-ai-tex-container';
+      document.body.appendChild(container);
+
+      const app = new MeshEditorApp({
+        container,
+        engine,
+      });
+
+      const ctrl = app.service.heightmapController;
+      app.toggleDialog('dialog-heightmap', true);
+
+      // 1. Create heightmap first
+      const terrain = await ctrl.buildOrUpdateTerrainMesh({
+        name: 'AI_Textured_Terrain',
+        preset: 'mountains',
+        width: 80,
+        height: 80,
+        subdivisions: 24,
+        maxHeight: 12,
+      });
+
+      // 2. Generate a new AI texture AFTER heightmap creation (both via UI generator / AI tool)
+      const aiItem = await app.service.aiTextureGenerator.generateTexture({
+        prompt: 'Obsidian volcanic magma rock',
+        name: 'ObsidianMagma',
+        style: 'lava',
+        size: 64,
+        useAI: false,
+      });
+
+      const tex1Select = container.querySelector('#heightmapTex1Select') as HTMLSelectElement;
+      const tex2Select = container.querySelector('#heightmapTex2Select') as HTMLSelectElement;
+      const tex3Select = container.querySelector('#heightmapTex3Select') as HTMLSelectElement;
+
+      const aiOptId = `ai_${aiItem.id}`;
+      expect(Array.from(tex1Select.options).some((o) => o.value === aiOptId)).toBe(true);
+      expect(Array.from(tex2Select.options).some((o) => o.value === aiOptId)).toBe(true);
+      expect(Array.from(tex3Select.options).some((o) => o.value === aiOptId)).toBe(true);
+
+      // 3. Simulate a GLB-imported material texture whose URL is internal "data:file:model.glb#image0" with binary buffer
+      const glbSampleMat = new PBRMaterial('GLB_Mesh_Mat', app.service.scene);
+      const glbTex = new Texture('data:file:imported_rock.glb#image0', app.service.scene, false, false);
+      glbTex.name = 'Imported_Cliff_Albedo';
+      const tinyPngBytes = Uint8Array.from(
+        atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII='),
+        (c) => c.charCodeAt(0),
+      );
+      (glbTex.getInternalTexture() as any)._buffer = tinyPngBytes;
+      glbSampleMat.albedoTexture = glbTex;
+
+      // Also add a normal embedded scene texture via service
+      const extraDataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      app.service.addTextureFromDataUrl('Forest_Soil_Diffuse.png', extraDataUrl);
+
+      const available = ctrl.getAvailableTextures();
+      const glbOpt = available.find((t) => t.name.includes('Imported_Cliff_Albedo'));
+      const sceneOpt = available.find((t) => t.name.includes('Forest_Soil_Diffuse'));
+      expect(glbOpt).toBeDefined();
+      expect(glbOpt!.url.startsWith('data:image/png;base64,')).toBe(true);
+      expect(sceneOpt).toBeDefined();
+
+      expect(Array.from(tex1Select.options).some((o) => o.value === glbOpt!.id)).toBe(true);
+      expect(Array.from(tex2Select.options).some((o) => o.value === sceneOpt!.id)).toBe(true);
+
+      // Selecting the AI texture and GLB texture immediately assigns them on TerrainMaterial
+      tex1Select.value = aiOptId;
+      tex1Select.dispatchEvent(new Event('change'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect((terrain.material as TerrainMaterial).diffuseTexture1.name).toContain(aiOptId);
+
+      tex2Select.value = glbOpt!.id;
+      tex2Select.dispatchEvent(new Event('change'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect((terrain.material as TerrainMaterial).diffuseTexture2.name).toContain(glbOpt!.id);
+
+      app.dispose();
+    });
+
+    it('exports heightmap terrain textures to GLB (including AI textures) and preserves PBR textures on reload', async () => {
+      const aiItem = await service.aiTextureGenerator.generateTexture({
+        prompt: 'Golden alpine meadow grass',
+        name: 'AlpineGrass',
+        style: 'moss',
+        size: 64,
+        useAI: false,
+      });
+
+      const terrain = await service.heightmapController.buildOrUpdateTerrainMesh({
+        name: 'ExportableTerrain',
+        preset: 'island',
+        width: 80,
+        height: 80,
+        subdivisions: 24,
+        maxHeight: 12,
+        texture1: 'rock',
+        texture2: `ai_${aiItem.id}`,
+        texture3: 'sand',
+      });
+      expect(terrain.material instanceof TerrainMaterial).toBe(true);
+
+      const glbBlob = await service.exportToGLBBlob('terrain_export_test');
+      expect(glbBlob.size).toBeGreaterThan(256);
+
+      // Parse GLB JSON chunk directly and verify embedded image, texture, and baseColorTexture exist
+      const glbBuf = await glbBlob.arrayBuffer();
+      const view = new DataView(glbBuf);
+      expect(view.getUint32(0, true)).toBe(0x46546c67); // 'glTF'
+      const jsonChunkLen = view.getUint32(12, true);
+      expect(view.getUint32(16, true)).toBe(0x4e4f534a); // 'JSON'
+      const gltfJson = JSON.parse(new TextDecoder().decode(new Uint8Array(glbBuf, 20, jsonChunkLen)));
+
+      expect(Array.isArray(gltfJson.images)).toBe(true);
+      expect(gltfJson.images.length).toBeGreaterThanOrEqual(1);
+      expect(Array.isArray(gltfJson.textures)).toBe(true);
+      expect(gltfJson.textures.length).toBeGreaterThanOrEqual(1);
+      expect(gltfJson.materials[0]?.pbrMetallicRoughness?.baseColorTexture).toBeDefined();
+
+      // Reload exported GLB into a fresh MeshEditorService and verify texture survives reload
+      const reloadCanvas = document.createElement('canvas');
+      const reloadEngine = new NullEngine();
+      const reloadService = new MeshEditorService(reloadCanvas, {}, reloadEngine);
+      try {
+        const glbFile = new File([glbBuf], 'terrain_export_test.glb', { type: 'model/gltf-binary' });
+        await reloadService.loadFiles([glbFile]);
+
+        const reloadedMesh = reloadService.importedMeshes.find(
+          (m) => m.name !== '__root__' && m.getTotalVertices() > 0,
+        );
+        expect(reloadedMesh).toBeDefined();
+        const reloadedMat = reloadedMesh!.material as PBRMaterial;
+        expect(reloadedMat).toBeInstanceOf(PBRMaterial);
+        expect(reloadedMat.albedoTexture).not.toBeNull();
+
+        // Reloaded GLB texture should also be discoverable in Heightmap tool texture selector
+        const reloadedAvailable = reloadService.heightmapController.getAvailableTextures();
+        expect(reloadedAvailable.some((t) => t.category === 'scene')).toBe(true);
+      } finally {
+        reloadService.dispose();
+        reloadEngine.dispose();
+      }
+    });
+
+    it('preserves TerrainMaterial, 3 splat textures, and heightmap state when saving and reloading .babylon project', async () => {
+      const aiItem = await service.aiTextureGenerator.generateTexture({
+        prompt: 'Ancient canyon sandstone',
+        name: 'CanyonSandstone',
+        style: 'stone',
+        size: 64,
+        useAI: false,
+      });
+
+      await service.heightmapController.buildOrUpdateTerrainMesh({
+        name: 'SavedBabylonTerrain',
+        preset: 'volcano',
+        width: 90,
+        height: 90,
+        subdivisions: 24,
+        maxHeight: 16,
+        texture1: 'rock',
+        texture2: `ai_${aiItem.id}`,
+        texture3: 'sand',
+        textureScale: [11, 14, 9],
+      });
+
+      let babylonBlob: Blob | null = null;
+      const origOnExport = service.events.onExportModel;
+      service.events.onExportModel = async (blob, _filename, format) => {
+        if (format === 'babylon') babylonBlob = blob;
+        return true;
+      };
+
+      await service.exportCurrentModel({ format: 'babylon', filename: 'saved_terrain_project' });
+      service.events.onExportModel = origOnExport;
+
+      expect(babylonBlob).not.toBeNull();
+      const babylonText = await (babylonBlob as unknown as Blob).text();
+      const parsed = JSON.parse(babylonText);
+
+      // Should preserve TerrainMaterial natively (not swapped to PBR) and embed heightmap project state
+      expect(parsed.metadata?.meshEditor?.tools?.heightmap?.meshes?.length).toBe(1);
+      const savedEntry = parsed.metadata.meshEditor.tools.heightmap.meshes[0];
+      expect(savedEntry.texture2).toBe(`ai_${aiItem.id}`);
+
+      // Reload .babylon project file into a fresh service
+      const reloadCanvas = document.createElement('canvas');
+      const reloadEngine = new NullEngine();
+      const reloadService = new MeshEditorService(reloadCanvas, {}, reloadEngine);
+      try {
+        const babylonFile = new File([babylonText], 'saved_terrain_project.babylon', {
+          type: 'application/json',
+        });
+        await reloadService.loadFiles([babylonFile]);
+
+        const restoredTerrain = reloadService.heightmapController.getActiveTerrainMesh();
+        expect(restoredTerrain).not.toBeNull();
+        expect(restoredTerrain!.material instanceof TerrainMaterial).toBe(true);
+        const tm = restoredTerrain!.material as TerrainMaterial;
+        expect(tm.mixTexture).not.toBeNull();
+        expect(tm.diffuseTexture1).not.toBeNull();
+        expect(tm.diffuseTexture2).not.toBeNull();
+        expect(tm.diffuseTexture3).not.toBeNull();
+        expect(tm.diffuseTexture1.uScale).toBe(11);
+        expect(tm.diffuseTexture2.uScale).toBe(14);
+        expect(tm.diffuseTexture3.uScale).toBe(9);
+        expect(reloadService.heightmapController.config.terrainTextureName2).toBe(`ai_${aiItem.id}`);
+      } finally {
+        reloadService.dispose();
+        reloadEngine.dispose();
+      }
     });
   });
 });

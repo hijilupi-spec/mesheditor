@@ -66,6 +66,7 @@ export interface MeshEditorServiceEvents {
   onStatusChanged?: (text: string, isBusy?: boolean) => void;
   onToast?: (message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
   onModelLoaded?: (filename: string) => void;
+  onTexturesChanged?: () => void;
   onStatsUpdated?: (meshCount: number, polyCount: number) => void;
   onFaceSelected?: (faceId: number | null, isQuad?: boolean) => void;
   onVertexSelected?: (vertexIndex: number | null, position?: Vector3) => void;
@@ -217,6 +218,7 @@ export interface MeshEditorProjectData {
     voxelPainter?: MeshEditorVoxelProjectState;
     pathExtrusion?: any[];
     pathWays?: any[];
+    heightmap?: any;
     [key: string]: any;
   };
 }

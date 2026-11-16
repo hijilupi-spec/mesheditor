@@ -726,8 +726,15 @@ export class MeshEditorApp {
         this.updateOutliner();
         this.updateCSGGUI();
         this.renderEmbeddedTextures();
+        this.updateDecalUI();
+        this.updateHeightmapUI();
         this.adapter.onModelLoaded?.(filename, this);
         options.events?.onModelLoaded?.(filename);
+      },
+      onTexturesChanged: () => {
+        this.renderEmbeddedTextures();
+        this.updateDecalUI();
+        this.updateHeightmapUI();
       },
       onStatsUpdated: (meshCount, polyCount) => {
         if (this.statsMeshes) this.statsMeshes.textContent = meshCount.toString();
@@ -9289,6 +9296,7 @@ export class MeshEditorApp {
         this.showToast(`Generated "${item.name}" (${item.size}x${item.size}${backendLabel})`, 'success');
         this.updateAITextureUI();
         this.updateDecalUI();
+        this.updateHeightmapUI();
       } catch (err: any) {
         this.showToast(err?.message || 'Failed to generate texture.', 'error');
       } finally {
@@ -9318,6 +9326,7 @@ export class MeshEditorApp {
           this.showToast(`Imported texture "${item.name}" with normal map!`, 'success');
           this.updateAITextureUI();
           this.updateDecalUI();
+          this.updateHeightmapUI();
         };
         reader.readAsDataURL(file);
       } catch (err: any) {
@@ -9380,6 +9389,8 @@ export class MeshEditorApp {
 
     this.service.aiTextureGenerator.onHistoryChanged = () => {
       this.updateAITextureUI();
+      this.updateDecalUI();
+      this.updateHeightmapUI();
     };
 
     this.updateAITextureUI();
@@ -10452,7 +10463,7 @@ export class MeshEditorApp {
             selectEl.appendChild(el);
           }
         }
-        if (document.activeElement !== selectEl) {
+        if (needsRebuild || document.activeElement !== selectEl) {
           selectEl.value = resolved.id;
         }
       }

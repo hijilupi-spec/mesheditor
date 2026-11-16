@@ -134,5 +134,80 @@ test.describe('Mesh Editor E2E Tests', () => {
     await page.locator('#btnHelpDone').click();
     await expect(helpModal).not.toBeVisible();
   });
+
+  test('6. Heightmap terrain supports post-creation AI textures and preserves textures on GLB export & reload', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    const result = await page.evaluate(async () => {
+      const app = (window as any).meshEditorApp;
+      app.toggleDialog('dialog-heightmap', true);
+
+      // 1. Create a heightmap terrain first
+      await app.service.heightmapController.buildOrUpdateTerrainMesh({
+        name: 'E2E_Island',
+        preset: 'island',
+        width: 80,
+        height: 80,
+        subdivisions: 24,
+        maxHeight: 10,
+      });
+
+      // 2. Generate an AI texture AFTER creating the heightmap
+      const aiItem = await app.service.aiTextureGenerator.generateTexture({
+        prompt: 'Lush volcanic emerald moss',
+        name: 'VolcanicEmeraldMoss',
+        style: 'moss',
+        size: 128,
+        useAI: false,
+      });
+
+      const select1 = document.getElementById('heightmapTex1Select') as HTMLSelectElement;
+      const aiOptionId = `ai_${aiItem.id}`;
+      const hasAiOptionImmediately = Array.from(select1.options).some((o) => o.value === aiOptionId);
+
+      // Assign AI texture to Slot 1
+      await app.service.heightmapController.setTerrainTexture(1, aiOptionId, undefined, true);
+
+      // 3. Export GLB and verify embedded texture & reload in WebGL
+      const glbBlob = await app.service.exportToGLBBlob('e2e_island');
+      const glbBuf = await glbBlob.arrayBuffer();
+      const view = new DataView(glbBuf);
+      const jsonLen = view.getUint32(12, true);
+      const gltfJson = JSON.parse(new TextDecoder().decode(new Uint8Array(glbBuf, 20, jsonLen)));
+
+      const file = new File([glbBuf], 'e2e_island.glb', { type: 'model/gltf-binary' });
+      await app.service.loadFiles([file]);
+
+      // Wait briefly for reloaded PBR texture image decode in WebGL
+      await new Promise((r) => setTimeout(r, 150));
+      const reloadedMesh = app.service.importedMeshes.find((m: any) => m.name !== '__root__' && m.getTotalVertices() > 0);
+      const reloadedMat = reloadedMesh?.material;
+      const albedoTex = reloadedMat?.albedoTexture;
+      const texSize = albedoTex?.getSize?.() || { width: 0, height: 0 };
+
+      // Check reloaded GLB texture is also selectable in Heightmap dropdowns
+      const reloadedOptions = app.service.heightmapController.getAvailableTextures();
+
+      return {
+        hasAiOptionImmediately,
+        glbImagesCount: gltfJson.images?.length ?? 0,
+        glbHasBaseColorTexture: Boolean(gltfJson.materials?.[0]?.pbrMetallicRoughness?.baseColorTexture),
+        reloadedHasAlbedoTexture: Boolean(albedoTex),
+        reloadedTexWidth: texSize.width,
+        reloadedTexHeight: texSize.height,
+        reloadedHasSceneTextureInHeightmap: reloadedOptions.some((o: any) => o.category === 'scene'),
+      };
+    });
+
+    expect(result.hasAiOptionImmediately).toBe(true);
+    expect(result.glbImagesCount).toBeGreaterThanOrEqual(1);
+    expect(result.glbHasBaseColorTexture).toBe(true);
+    expect(result.reloadedHasAlbedoTexture).toBe(true);
+    expect(result.reloadedTexWidth).toBe(512);
+    expect(result.reloadedTexHeight).toBe(512);
+    expect(result.reloadedHasSceneTextureInHeightmap).toBe(true);
+  });
 });
 

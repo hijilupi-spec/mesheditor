@@ -1,5 +1,129 @@
 import { Scene, Vector3 } from '@babylonjs/core';
 
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes: Uint8Array): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    c = CRC32_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function adler32(bytes: Uint8Array): number {
+  let a = 1;
+  let b = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    a = (a + bytes[i]) % 65521;
+    b = (b + a) % 65521;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+function writeU32BE(buf: Uint8Array, offset: number, val: number): void {
+  buf[offset] = (val >>> 24) & 0xff;
+  buf[offset + 1] = (val >>> 16) & 0xff;
+  buf[offset + 2] = (val >>> 8) & 0xff;
+  buf[offset + 3] = val & 0xff;
+}
+
+function makePngChunk(type: string, data: Uint8Array): Uint8Array {
+  const chunk = new Uint8Array(12 + data.length);
+  writeU32BE(chunk, 0, data.length);
+  chunk[4] = type.charCodeAt(0);
+  chunk[5] = type.charCodeAt(1);
+  chunk[6] = type.charCodeAt(2);
+  chunk[7] = type.charCodeAt(3);
+  chunk.set(data, 8);
+  writeU32BE(chunk, 8 + data.length, crc32(chunk.subarray(4, 8 + data.length)));
+  return chunk;
+}
+
+/**
+ * Pure TypeScript fallback encoder producing a valid uncompressed PNG data URL
+ * when 2D canvas context is unavailable (e.g. headless Node/Vitest environments).
+ */
+function encodeRawPngDataUrl(rgba: Uint8ClampedArray, width: number, height: number): string {
+  const stride = 1 + width * 4;
+  const raw = new Uint8Array(stride * height);
+  for (let y = 0; y < height; y++) {
+    const dstRow = y * stride;
+    raw[dstRow] = 0;
+    const srcStart = y * width * 4;
+    const srcEnd = Math.min(rgba.length, srcStart + width * 4);
+    if (srcEnd > srcStart) {
+      raw.set(rgba.subarray(srcStart, srcEnd), dstRow + 1);
+    }
+  }
+
+  const maxBlock = 65535;
+  const numBlocks = Math.max(1, Math.ceil(raw.length / maxBlock));
+  const zlib = new Uint8Array(2 + raw.length + numBlocks * 5 + 4);
+  zlib[0] = 0x78;
+  zlib[1] = 0x01;
+  let zPos = 2;
+  let srcPos = 0;
+  for (let b = 0; b < numBlocks; b++) {
+    const remaining = raw.length - srcPos;
+    const blockLen = Math.min(maxBlock, remaining);
+    const isFinal = b === numBlocks - 1 ? 1 : 0;
+    zlib[zPos++] = isFinal;
+    zlib[zPos++] = blockLen & 0xff;
+    zlib[zPos++] = (blockLen >>> 8) & 0xff;
+    const nlen = blockLen ^ 0xffff;
+    zlib[zPos++] = nlen & 0xff;
+    zlib[zPos++] = (nlen >>> 8) & 0xff;
+    zlib.set(raw.subarray(srcPos, srcPos + blockLen), zPos);
+    zPos += blockLen;
+    srcPos += blockLen;
+  }
+  writeU32BE(zlib, zPos, adler32(raw));
+
+  const ihdr = new Uint8Array(13);
+  writeU32BE(ihdr, 0, width);
+  writeU32BE(ihdr, 4, height);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+
+  const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const cIHDR = makePngChunk('IHDR', ihdr);
+  const cIDAT = makePngChunk('IDAT', zlib);
+  const cIEND = makePngChunk('IEND', new Uint8Array(0));
+
+  const png = new Uint8Array(sig.length + cIHDR.length + cIDAT.length + cIEND.length);
+  let off = 0;
+  png.set(sig, off);
+  off += sig.length;
+  png.set(cIHDR, off);
+  off += cIHDR.length;
+  png.set(cIDAT, off);
+  off += cIDAT.length;
+  png.set(cIEND, off);
+
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < png.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, Array.from(png.subarray(i, Math.min(png.length, i + chunkSize))));
+  }
+  const b64 =
+    typeof btoa === 'function'
+      ? btoa(binary)
+      : typeof Buffer !== 'undefined'
+        ? Buffer.from(png).toString('base64')
+        : '';
+  return b64 ? `data:image/png;base64,${b64}` : '';
+}
+
 export class ImageUtils {
   constructor(public scene: Scene) {}
 
@@ -113,28 +237,34 @@ export class ImageUtils {
   }
 
   /**
-   * Encodes an RGBA buffer into a PNG data URL when a 2D canvas context is available.
+   * Encodes an RGBA buffer into a PNG data URL using 2D canvas when available,
+   * or a pure TypeScript stored-PNG fallback in headless environments.
    */
   static rgbaBufferToDataUrl(rgba: Uint8ClampedArray, width: number, height: number): string {
     const fallback =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=';
-    if (typeof document === 'undefined' || width <= 0 || height <= 0) {
+    if (width <= 0 || height <= 0) {
       return fallback;
     }
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return fallback;
-      const imgData = ctx.createImageData(width, height);
-      imgData.data.set(rgba.subarray(0, width * height * 4));
-      ctx.putImageData(imgData, 0, 0);
-      const url = canvas.toDataURL('image/png');
-      return url && url.startsWith('data:image') ? url : fallback;
-    } catch {
-      return fallback;
+    if (typeof document !== 'undefined') {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const imgData = ctx.createImageData(width, height);
+          imgData.data.set(rgba.subarray(0, width * height * 4));
+          ctx.putImageData(imgData, 0, 0);
+          const url = canvas.toDataURL('image/png');
+          if (url && url.startsWith('data:image')) return url;
+        }
+      } catch {
+        // Fall through to stored PNG encoder
+      }
     }
+    const rawPngUrl = encodeRawPngDataUrl(rgba, width, height);
+    return rawPngUrl || fallback;
   }
 
   /**
