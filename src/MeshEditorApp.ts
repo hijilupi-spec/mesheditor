@@ -111,6 +111,7 @@ import {
   Crosshair,
   Download,
   Eraser,
+  ExternalLink,
   Eye,
   EyeOff,
   File,
@@ -234,6 +235,7 @@ export const editorIcons = {
   Crosshair,
   Download,
   Eraser,
+  ExternalLink,
   Eye,
   EyeOff,
   File,
@@ -1343,6 +1345,22 @@ export class MeshEditorApp {
       this.showPromptHelp('guide');
     });
 
+    // About Modal
+    const aboutModal = this.getElement('aboutModal') || document.getElementById('aboutModal');
+    const btnToolbarAbout = this.getElement('btnToolbarAbout') || document.getElementById('btnToolbarAbout');
+    btnToolbarAbout?.addEventListener('click', () => this.openAboutModal());
+    (this.getElement('btnCloseAbout') || document.getElementById('btnCloseAbout'))?.addEventListener('click', () =>
+      this.closeAboutModal()
+    );
+    (this.getElement('btnAboutDone') || document.getElementById('btnAboutDone'))?.addEventListener('click', () =>
+      this.closeAboutModal()
+    );
+    aboutModal?.addEventListener('click', (e) => {
+      if (e.target === aboutModal) {
+        this.closeAboutModal();
+      }
+    });
+
     // Settings Modal
     this.initSettingsUI();
 
@@ -1954,6 +1972,27 @@ export class MeshEditorApp {
     const helpModal = this.getElement('helpModal') || document.getElementById('helpModal');
     if (helpModal) {
       helpModal.classList.remove('active');
+      this.canvas?.focus();
+    }
+  }
+
+  /**
+   * Opens the About Mesh Editor modal dialog.
+   */
+  public openAboutModal(): void {
+    const aboutModal = this.getElement('aboutModal') || document.getElementById('aboutModal');
+    if (aboutModal) {
+      aboutModal.classList.add('active');
+    }
+  }
+
+  /**
+   * Closes the About Mesh Editor modal dialog and refocuses the canvas.
+   */
+  public closeAboutModal(): void {
+    const aboutModal = this.getElement('aboutModal') || document.getElementById('aboutModal');
+    if (aboutModal && aboutModal.classList.contains('active')) {
+      aboutModal.classList.remove('active');
       this.canvas?.focus();
     }
   }
@@ -6655,6 +6694,7 @@ export class MeshEditorApp {
       } else if (e.key === 'Escape') {
         this.closeAllDropdowns();
         this.closeExportDialog();
+        this.closeAboutModal();
         if (this.service.isPlaceModeActive) {
           this.service.cancelPlacementMode();
         }

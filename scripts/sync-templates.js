@@ -32,6 +32,27 @@ const TOOLS = [
   { className: 'HeightmapEditorTool', file: 'HeightmapEditorTool.ejs', id: 'dialog-heightmap' },
 ];
 
+function getAppMetadata() {
+  const pkgPath = path.resolve(rootDir, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  const rawRepoUrl = typeof pkg.repository === 'string' ? pkg.repository : (pkg.repository && pkg.repository.url) || '';
+  const repositoryUrl = rawRepoUrl.replace(/^git\+/, '').replace(/\.git$/, '');
+  const bugsUrl = typeof pkg.bugs === 'string' ? pkg.bugs : (pkg.bugs && pkg.bugs.url) || '';
+  const author = typeof pkg.author === 'string' ? pkg.author : (pkg.author && pkg.author.name) || '';
+
+  return {
+    name: 'Mesh Editor',
+    packageName: pkg.name || 'mesheditor',
+    version: pkg.version || '',
+    description: pkg.description || '',
+    author,
+    homepage: pkg.homepage || '',
+    repositoryUrl,
+    bugsUrl,
+    license: pkg.license || '',
+  };
+}
+
 function syncTemplates() {
   const toolViews = {};
 
@@ -65,6 +86,7 @@ export function getToolViewTemplate(identifier: string): string {
 
   // 2. Render src/mesheditor.ejs to populate src/template.ts
   const rawEjs = fs.readFileSync(mesheditorEjsPath, 'utf8');
+  const appMetadata = getAppMetadata();
   const renderedHtml = ejs.render(
     rawEjs,
     {
@@ -73,6 +95,7 @@ export function getToolViewTemplate(identifier: string): string {
           title: 'Mesh Editor',
         },
       },
+      appMetadata,
     },
     { filename: mesheditorEjsPath }
   );
@@ -114,5 +137,5 @@ export function getMeshEditorTemplate(): string {
 
 syncTemplates();
 
-module.exports = { syncTemplates };
+module.exports = { syncTemplates, getAppMetadata };
 

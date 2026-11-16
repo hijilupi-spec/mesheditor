@@ -4,7 +4,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 const { setupAntigravityBridgeRoutes } = require('./scripts/antigravity-bridge');
 require('./scripts/sync-skills');
-require('./scripts/sync-templates');
+const { getAppMetadata } = require('./scripts/sync-templates');
 
 module.exports = (env, argv) => {
   const isProduction = (argv && argv.mode === 'production') || process.env.NODE_ENV === 'production';
@@ -127,8 +127,12 @@ module.exports = (env, argv) => {
               }
             }
           }
+          const pkgPath = path.resolve(__dirname, 'package.json');
+          if (fs.existsSync(pkgPath)) {
+            compilation.fileDependencies.add(pkgPath);
+          }
           const raw = fs.readFileSync(templatePath, 'utf8');
-          return ejs.render(raw, { htmlWebpackPlugin }, { filename: templatePath });
+          return ejs.render(raw, { htmlWebpackPlugin, appMetadata: getAppMetadata() }, { filename: templatePath });
         },
         filename: 'index.html',
         chunks: ['mesheditor'],

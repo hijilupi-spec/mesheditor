@@ -22,9 +22,9 @@
 
       <!-- Top Toolbar -->
       <header id="top-toolbar">
-        <div class="toolbar-brand" title="Mesh Editor">
+        <button type="button" class="toolbar-brand" id="btnToolbarAbout" title="About Mesh Editor" aria-label="About Mesh Editor">
           <%- include('../build/app-icon.svg') %>
-        </div>
+        </button>
 
         <!-- File Operations Menu -->
         <div class="dropdown-wrapper" id="dropdownFile">
@@ -705,6 +705,62 @@
           </div>
           <div class="modal-footer">
             <button class="tool-btn btn-primary" id="btnHelpDone">Got it!</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- About Modal Dialog -->
+      <div id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">
+        <div class="modal-content about-modal-content">
+          <div class="modal-header">
+            <h3 id="aboutModalTitle"><i class="app-icon" data-lucide="info"></i> About Mesh Editor</h3>
+            <button type="button" class="dialog-btn btn-close" id="btnCloseAbout" title="Close" aria-label="Close"><i class="app-icon" data-lucide="x"></i></button>
+          </div>
+          <div class="modal-body about-modal-body">
+            <div class="about-hero">
+              <div class="about-app-icon">
+                <%- include('../build/app-icon.svg') %>
+              </div>
+              <div class="about-app-heading">
+                <div class="about-app-name"><%= appMetadata.name %></div>
+                <span class="about-version-badge">v<%= appMetadata.version %></span>
+              </div>
+            </div>
+            <p class="about-description"><%= appMetadata.description %></p>
+            <div class="about-meta-list">
+              <div class="about-meta-row">
+                <span class="about-meta-label">Author</span>
+                <span class="about-meta-value"><%= appMetadata.author %></span>
+              </div>
+              <div class="about-meta-row">
+                <span class="about-meta-label">License</span>
+                <span class="about-meta-value"><%= appMetadata.license %></span>
+              </div>
+              <div class="about-meta-row">
+                <span class="about-meta-label">Homepage</span>
+                <a class="about-meta-link" href="<%= appMetadata.homepage %>" target="_blank" rel="noopener noreferrer">
+                  <span><%= appMetadata.homepage %></span>
+                  <i class="app-icon" data-lucide="external-link"></i>
+                </a>
+              </div>
+              <div class="about-meta-row">
+                <span class="about-meta-label">GitHub</span>
+                <a class="about-meta-link" href="<%= appMetadata.repositoryUrl %>" target="_blank" rel="noopener noreferrer">
+                  <span><%= appMetadata.repositoryUrl %></span>
+                  <i class="app-icon" data-lucide="external-link"></i>
+                </a>
+              </div>
+              <div class="about-meta-row">
+                <span class="about-meta-label">Issues</span>
+                <a class="about-meta-link" href="<%= appMetadata.bugsUrl %>" target="_blank" rel="noopener noreferrer">
+                  <span><%= appMetadata.bugsUrl %></span>
+                  <i class="app-icon" data-lucide="external-link"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="tool-btn btn-primary" id="btnAboutDone">Close</button>
           </div>
         </div>
       </div>
