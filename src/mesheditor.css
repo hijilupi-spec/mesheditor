@@ -2605,6 +2605,10 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
   gap: 5px;
 }
 
+#top-toolbar .dropdown-toggle .btn-icon {
+  color: var(--accent-color);
+}
+
 .dropdown-arrow {
   display: inline-flex;
   align-items: center;
@@ -2907,9 +2911,19 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
   color: var(--accent-color);
 }
 
+#menuFile .dropdown-item .btn-icon,
+#menuActions .dropdown-item .btn-icon {
+  color: var(--accent-color);
+}
+
 .dropdown-item.btn-danger:hover {
   background: var(--danger-color);
   color: #fff;
+}
+
+#menuFile .dropdown-item.btn-danger:hover .btn-icon,
+#menuActions .dropdown-item.btn-danger:hover .btn-icon {
+  color: inherit;
 }
 
 .dropdown-item .shortcut-tag {
