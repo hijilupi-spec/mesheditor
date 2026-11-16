@@ -1,7 +1,7 @@
 import { NullEngine } from '@babylonjs/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HostAppAdapter } from '../../src/adapters/HostAppAdapter';
-import { MeshEditorApp } from '../../src/MeshEditorApp';
+import { DEFAULT_MESH_EDITOR_SETTINGS, MeshEditorApp, SETTINGS_STORAGE_KEY } from '../../src/MeshEditorApp';
 import { MeshEditorPlugin } from '../../src/plugin';
 import { MeshEditorElement, registerMeshEditorElement } from '../../src/web-component';
 
@@ -772,5 +772,110 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     expect(pluginActionSpy).toHaveBeenCalledOnce();
 
     el.remove();
+  });
+
+  it('opens Settings dialog from toolbar right of Shortcuts, moves 5 scene controls there, and persists to localStorage', () => {
+    app = new MeshEditorApp({
+      container,
+      engine,
+    });
+
+    // 1. Verify #btnSettings sits immediately to the right of #btnHelp in the rightmost .panel-group
+    const panelGroup = container.querySelector('#top-toolbar .panel-group') as HTMLElement | null;
+    expect(panelGroup).not.toBeNull();
+    const panelButtons = Array.from(panelGroup!.querySelectorAll(':scope > button')) as HTMLButtonElement[];
+    expect(panelButtons.map((b) => b.id)).toEqual(['btnHelp', 'btnSettings']);
+
+    const toolbarChildren = Array.from(container.querySelector('#top-toolbar')!.children);
+    expect(toolbarChildren[toolbarChildren.length - 1]).toBe(panelGroup);
+
+    // 2. Verify Scene & Environment only contains Background, Ambient Light, Sun Light
+    const sceneContainer = container.querySelector('#gui-scene-container') as HTMLElement | null;
+    expect(sceneContainer).not.toBeNull();
+    const sceneLabels = Array.from(sceneContainer!.querySelectorAll('.property-name')).map((el) => el.textContent?.trim());
+    expect(sceneLabels).toEqual(['Background', 'Ambient Light', 'Sun Light']);
+
+    // 3. Open and close Settings dialog
+    const settingsModal = container.querySelector('#settingsModal') as HTMLDialogElement | null;
+    expect(settingsModal).not.toBeNull();
+    expect(settingsModal!.hasAttribute('open')).toBe(false);
+
+    const btnSettings = container.querySelector('#btnSettings') as HTMLButtonElement;
+    btnSettings.click();
+    expect(settingsModal!.hasAttribute('open')).toBe(true);
+
+    // 4. Modify all 5 settings inside Settings dialog and verify service + localStorage updates
+    const gridToggle = container.querySelector('#settingGridVisible') as HTMLInputElement;
+    const gridSizeNum = container.querySelector('#settingGridSizeNum') as HTMLInputElement;
+    const cameraSpeedRange = container.querySelector('#settingCameraSpeedRange') as HTMLInputElement;
+    const moveSnapNum = container.querySelector('#settingMoveSnapNum') as HTMLInputElement;
+    const rotateSnapRange = container.querySelector('#settingRotateSnapRange') as HTMLInputElement;
+
+    gridToggle.checked = false;
+    gridToggle.dispatchEvent(new Event('change', { bubbles: true }));
+
+    gridSizeNum.value = '80';
+    gridSizeNum.dispatchEvent(new Event('change', { bubbles: true }));
+
+    cameraSpeedRange.value = '1.25';
+    cameraSpeedRange.dispatchEvent(new Event('input', { bubbles: true }));
+
+    moveSnapNum.value = '0.5';
+    moveSnapNum.dispatchEvent(new Event('change', { bubbles: true }));
+
+    rotateSnapRange.value = '15';
+    rotateSnapRange.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(app.service.sceneParams.grid).toBe(false);
+    expect(app.service.sceneParams.gridSize).toBe(80);
+    expect(app.service.sceneParams.cameraSpeed).toBe(1.25);
+    expect(app.service.sceneParams.translateSnap).toBe(0.5);
+    expect(app.service.sceneParams.rotateSnap).toBe(15);
+
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
+    expect(stored).toEqual({
+      grid: false,
+      gridSize: 80,
+      cameraSpeed: 1.25,
+      translateSnap: 0.5,
+      rotateSnap: 15,
+    });
+
+    // Close dialog via Done button
+    const btnSettingsDone = container.querySelector('#btnSettingsDone') as HTMLButtonElement;
+    btnSettingsDone.click();
+    expect(settingsModal!.hasAttribute('open')).toBe(false);
+
+    // 5. Re-instantiate MeshEditorApp and verify persisted settings are restored from localStorage
+    app.dispose();
+    container.innerHTML = '';
+    const secondEngine = new NullEngine();
+    app = new MeshEditorApp({
+      container,
+      engine: secondEngine,
+    });
+
+    expect(app.service.sceneParams.grid).toBe(false);
+    expect(app.service.sceneParams.gridSize).toBe(80);
+    expect(app.service.sceneParams.cameraSpeed).toBe(1.25);
+    expect(app.service.sceneParams.translateSnap).toBe(0.5);
+    expect(app.service.sceneParams.rotateSnap).toBe(15);
+    expect(app.service.camera.speed).toBe(1.25);
+    expect(app.service.gridMesh.isEnabled()).toBe(false);
+
+    const restoredToggle = container.querySelector('#settingGridVisible') as HTMLInputElement;
+    const restoredGridSize = container.querySelector('#settingGridSizeNum') as HTMLInputElement;
+    expect(restoredToggle.checked).toBe(false);
+    expect(restoredGridSize.value).toBe('80');
+
+    // 6. Reset Defaults restores defaults and updates localStorage
+    const btnReset = container.querySelector('#btnResetSettings') as HTMLButtonElement;
+    btnReset.click();
+    expect(app.service.sceneParams.grid).toBe(DEFAULT_MESH_EDITOR_SETTINGS.grid);
+    expect(app.service.sceneParams.gridSize).toBe(DEFAULT_MESH_EDITOR_SETTINGS.gridSize);
+    expect(app.service.sceneParams.cameraSpeed).toBe(DEFAULT_MESH_EDITOR_SETTINGS.cameraSpeed);
+    expect(app.service.sceneParams.translateSnap).toBe(DEFAULT_MESH_EDITOR_SETTINGS.translateSnap);
+    expect(app.service.sceneParams.rotateSnap).toBe(DEFAULT_MESH_EDITOR_SETTINGS.rotateSnap);
+    expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}')).toEqual(DEFAULT_MESH_EDITOR_SETTINGS);
   });
 });

@@ -141,6 +141,8 @@ export class ElectronPlatformAdapter implements MeshEditorPlatformAdapter {
           break;
         case 'view:toggle-grid':
           app.service.setGridVisible(!app.service.sceneParams.grid);
+          app.saveSettingsToStorage?.();
+          app.syncSettingsUI?.();
           app.updatePanelButtonStates();
           break;
         case 'view:layout-floating':

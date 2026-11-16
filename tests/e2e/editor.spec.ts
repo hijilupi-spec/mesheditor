@@ -304,5 +304,61 @@ test.describe('Mesh Editor E2E Tests', () => {
     expect(overlapsTrigger).toBe(false);
     expect(narrowSubmenuBox.x + narrowSubmenuBox.width).toBeLessThanOrEqual(375);
   });
+
+  test('8. opens Settings dialog from toolbar right of Shortcuts and persists settings in localStorage', async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+    await page.goto('/');
+
+    const btnHelp = page.locator('#btnHelp');
+    const btnSettings = page.locator('#btnSettings');
+    await expect(btnHelp).toBeVisible();
+    await expect(btnSettings).toBeVisible();
+
+    const helpBox = (await btnHelp.boundingBox())!;
+    const settingsBox = (await btnSettings.boundingBox())!;
+    expect(settingsBox.x).toBeGreaterThan(helpBox.x);
+
+    // Scene & Environment should no longer render the 5 moved settings
+    const sceneText = await page.locator('#gui-scene-container').textContent();
+    expect(sceneText).toContain('Background');
+    expect(sceneText).toContain('Ambient Light');
+    expect(sceneText).toContain('Sun Light');
+    expect(sceneText).not.toContain('Grid visible');
+    expect(sceneText).not.toContain('Camera Speed');
+    expect(sceneText).not.toContain('Move Snap');
+
+    // Open Settings modal
+    const settingsModal = page.locator('#settingsModal');
+    await expect(settingsModal).not.toBeVisible();
+    await btnSettings.click();
+    await expect(settingsModal).toBeVisible();
+
+    // Update settings
+    await page.locator('#settingGridVisible').uncheck();
+    await page.locator('#settingGridSizeNum').fill('60');
+    await page.locator('#settingGridSizeNum').dispatchEvent('change');
+    await page.locator('#settingCameraSpeedNum').fill('1.1');
+    await page.locator('#settingCameraSpeedNum').dispatchEvent('change');
+    await page.locator('#settingMoveSnapNum').fill('0.25');
+    await page.locator('#settingMoveSnapNum').dispatchEvent('change');
+    await page.locator('#settingRotateSnapNum').fill('15');
+    await page.locator('#settingRotateSnapNum').dispatchEvent('change');
+
+    await page.locator('#btnSettingsDone').click();
+    await expect(settingsModal).not.toBeVisible();
+
+    // Reload page and confirm persistence from localStorage
+    await page.reload();
+    await page.locator('#btnSettings').click();
+    await expect(settingsModal).toBeVisible();
+
+    await expect(page.locator('#settingGridVisible')).not.toBeChecked();
+    await expect(page.locator('#settingGridSizeNum')).toHaveValue('60');
+    await expect(page.locator('#settingCameraSpeedNum')).toHaveValue('1.1');
+    await expect(page.locator('#settingMoveSnapNum')).toHaveValue('0.25');
+    await expect(page.locator('#settingRotateSnapNum')).toHaveValue('15');
+  });
 });
 

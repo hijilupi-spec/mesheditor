@@ -6726,4 +6726,283 @@ progress.loading-spinner:indeterminate {
   padding: 2px 6px !important;
 }
 
+/* =========================================================================
+   Settings Modal Dialog
+   ========================================================================= */
+dialog#settingsModal {
+  width: 480px;
+  max-width: 92vw;
+  max-height: 85vh;
+  margin: auto;
+  padding: 0;
+  background: var(--bg-header);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+dialog#settingsModal[open] {
+  display: flex;
+  flex-direction: column;
+  animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+dialog#settingsModal:modal {
+  overscroll-behavior: contain;
+}
+
+dialog#settingsModal::backdrop {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.settings-modal-header {
+  background: var(--bg-panel);
+  padding: 14px 18px;
+}
+
+.settings-modal-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-section-title {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setting-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-item-toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.setting-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.setting-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.setting-value-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.setting-number {
+  width: 68px;
+  height: 26px;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.setting-unit {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 28px;
+}
+
+/* Switch Control inside Settings Dialog */
+#settingsModal input[type="checkbox"][switch] {
+  appearance: none;
+  -webkit-appearance: none;
+  accent-color: var(--accent-active, #1f6feb);
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  background: #21262d;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  position: relative;
+  cursor: pointer;
+  margin: 0;
+  flex-shrink: 0;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+#settingsModal input[type="checkbox"][switch]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: none;
+  background: #8b949e;
+  transform: none;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+#settingsModal input[type="checkbox"][switch]:hover {
+  border-color: var(--accent-color, #58a6ff);
+  background: #28303b;
+}
+
+#settingsModal input[type="checkbox"][switch]:checked {
+  background: var(--accent-active, #1f6feb);
+  border-color: var(--accent-color, #58a6ff);
+}
+
+#settingsModal input[type="checkbox"][switch]:checked::before {
+  transform: translateX(18px);
+  background: #ffffff;
+  border: none;
+}
+
+#settingsModal input[type="checkbox"][switch]:focus-visible {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+/* Range Slider inside Settings Dialog */
+#settingsModal input[type="range"].setting-range {
+  --slider-track-size: 6px;
+  --slider-thumb-size: 15px;
+  --slider-track-radius: 999px;
+  --slider-thumb-radius: 50%;
+  --slider-track-color: #30363d;
+  --slider-fill-color: var(--accent-color, #58a6ff);
+  --slider-thumb-color: #ffffff;
+  --slider-direction: to right;
+  --attr-min: attr(min type(<number>), 0);
+  --attr-max: attr(max type(<number>), 100);
+  --control-value: attr(value type(<number>), 50);
+  --slider-progress: calc(progress(var(--control-value), var(--attr-min), var(--attr-max)) * 100%);
+
+  -webkit-appearance: none;
+  appearance: none;
+  inline-size: 100%;
+  block-size: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+@supports not (opacity: progress(1, 0, 100)) {
+  #settingsModal input[type="range"].setting-range {
+    --slider-progress: calc(
+      (var(--control-value) - var(--attr-min)) /
+      (var(--attr-max) - var(--attr-min)) * 100%
+    );
+  }
+}
+
+#settingsModal input[type="range"].setting-range::-webkit-slider-runnable-track {
+  block-size: var(--slider-track-size);
+  border: 0;
+  border-radius: var(--slider-track-radius);
+  background: linear-gradient(
+    var(--slider-direction),
+    var(--slider-fill-color) var(--slider-progress),
+    var(--slider-track-color) var(--slider-progress)
+  );
+}
+
+#settingsModal input[type="range"].setting-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  inline-size: var(--slider-thumb-size);
+  block-size: var(--slider-thumb-size);
+  margin-block-start: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
+  border: 2px solid var(--accent-active, #1f6feb);
+  border-radius: var(--slider-thumb-radius);
+  background: var(--slider-thumb-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+#settingsModal input[type="range"].setting-range::-moz-range-track {
+  block-size: var(--slider-track-size);
+  border: 0;
+  border-radius: var(--slider-track-radius);
+  background: var(--slider-track-color);
+}
+
+#settingsModal input[type="range"].setting-range::-moz-range-progress {
+  block-size: var(--slider-track-size);
+  border-radius: var(--slider-track-radius);
+  background: var(--slider-fill-color);
+}
+
+#settingsModal input[type="range"].setting-range::-moz-range-thumb {
+  inline-size: var(--slider-thumb-size);
+  block-size: var(--slider-thumb-size);
+  border: 2px solid var(--accent-active, #1f6feb);
+  border-radius: var(--slider-thumb-radius);
+  background: var(--slider-thumb-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+#settingsModal input[type="range"].setting-range:focus-visible {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.settings-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+
 

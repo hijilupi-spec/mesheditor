@@ -338,6 +338,24 @@ if (typeof document !== 'undefined') {
   }
 }
 
+export const SETTINGS_STORAGE_KEY = 'mesheditor_settings';
+
+export interface MeshEditorSettings {
+  grid: boolean;
+  gridSize: number;
+  cameraSpeed: number;
+  translateSnap: number;
+  rotateSnap: number;
+}
+
+export const DEFAULT_MESH_EDITOR_SETTINGS: MeshEditorSettings = {
+  grid: true,
+  gridSize: 20,
+  cameraSpeed: 0.4,
+  translateSnap: 0.1,
+  rotateSnap: 5,
+};
+
 export class MeshEditorApp {
   public rootContainer: HTMLElement;
   public canvas: HTMLCanvasElement;
@@ -787,6 +805,9 @@ export class MeshEditorApp {
     // Initialize Plugin Manager
     this.pluginManager = new PluginManager(this, this.service);
 
+    // Load persisted user settings (grid, gridSize, cameraSpeed, move/rotate snap) before initializing UI
+    this.loadSettingsFromStorage();
+
     this.initGUI();
     this.initToolbarAndDialogs();
     this.initFileHandling();
@@ -1185,6 +1206,8 @@ export class MeshEditorApp {
       this.closeAllDropdowns();
       const newGridState = !this.service.sceneParams.grid;
       this.service.setGridVisible(newGridState);
+      this.saveSettingsToStorage();
+      this.syncSettingsUI();
       this.updatePanelButtonStates();
       this.showToast(`Ground grid ${newGridState ? 'enabled' : 'disabled'}`, 'info');
     });
@@ -1313,6 +1336,9 @@ export class MeshEditorApp {
       helpModal?.classList.remove('active');
       this.showPromptHelp('guide');
     });
+
+    // Settings Modal
+    this.initSettingsUI();
 
     // Tool-specific Help Modal Popup
     const toolHelpModal = this.getElement('toolHelpModal');
@@ -1924,6 +1950,279 @@ export class MeshEditorApp {
       helpModal.classList.remove('active');
       this.canvas?.focus();
     }
+  }
+
+  private getNumericSettingBindings() {
+    return [
+      {
+        key: 'gridSize' as const,
+        rangeId: 'settingGridSizeRange',
+        numId: 'settingGridSizeNum',
+        min: 5,
+        max: 200,
+        unit: 'units',
+        decimals: 0,
+        apply: (val: number) => this.service.setGridSize(val),
+      },
+      {
+        key: 'cameraSpeed' as const,
+        rangeId: 'settingCameraSpeedRange',
+        numId: 'settingCameraSpeedNum',
+        min: 0.1,
+        max: 2.0,
+        unit: 'x',
+        decimals: 2,
+        apply: (val: number) => this.service.setCameraSpeed(val),
+      },
+      {
+        key: 'translateSnap' as const,
+        rangeId: 'settingMoveSnapRange',
+        numId: 'settingMoveSnapNum',
+        min: 0.01,
+        max: 50.0,
+        unit: 'units',
+        decimals: 2,
+        apply: (val: number) => this.service.setTranslateSnap(val),
+      },
+      {
+        key: 'rotateSnap' as const,
+        rangeId: 'settingRotateSnapRange',
+        numId: 'settingRotateSnapNum',
+        min: 1,
+        max: 90,
+        unit: '°',
+        decimals: 0,
+        apply: (val: number) => this.service.setRotateSnap(val),
+      },
+    ];
+  }
+
+  private syncSliderVisual(rangeEl: HTMLInputElement, value: number, unit: string): void {
+    rangeEl.style.setProperty('--attr-min', rangeEl.min || '0');
+    rangeEl.style.setProperty('--attr-max', rangeEl.max || '100');
+    rangeEl.style.setProperty('--control-value', String(value));
+    rangeEl.setAttribute('aria-valuetext', `${value} ${unit}`);
+  }
+
+  private clampSettingValue(value: number, min: number, max: number, decimals: number): number {
+    const clamped = Math.min(max, Math.max(min, value));
+    const factor = Math.pow(10, decimals);
+    return Math.round(clamped * factor) / factor;
+  }
+
+  /**
+   * Loads persisted editor settings from localStorage and applies them to the active service.
+   */
+  public loadSettingsFromStorage(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<MeshEditorSettings>;
+      if (!parsed || typeof parsed !== 'object') return;
+
+      if (typeof parsed.grid === 'boolean') {
+        this.service.setGridVisible(parsed.grid);
+      }
+      for (const binding of this.getNumericSettingBindings()) {
+        const val = parsed[binding.key];
+        if (typeof val === 'number' && Number.isFinite(val)) {
+          const clamped = this.clampSettingValue(val, binding.min, binding.max, binding.decimals);
+          binding.apply(clamped);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load settings from localStorage:', err);
+    }
+  }
+
+  /**
+   * Persists current editor settings to localStorage.
+   */
+  public saveSettingsToStorage(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const payload: MeshEditorSettings = {
+        grid: !!this.service.sceneParams.grid,
+        gridSize: this.service.sceneParams.gridSize,
+        cameraSpeed: this.service.sceneParams.cameraSpeed,
+        translateSnap: this.service.sceneParams.translateSnap,
+        rotateSnap: this.service.sceneParams.rotateSnap,
+      };
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+    } catch (err) {
+      console.warn('Failed to save settings to localStorage:', err);
+    }
+  }
+
+  /**
+   * Synchronizes all Settings dialog form controls with the current service parameters.
+   */
+  public syncSettingsUI(): void {
+    const gridToggle = this.getElement<HTMLInputElement>('settingGridVisible');
+    if (gridToggle) {
+      gridToggle.checked = !!this.service.sceneParams.grid;
+    }
+
+    for (const binding of this.getNumericSettingBindings()) {
+      const currentVal = this.service.sceneParams[binding.key];
+      const rangeEl = this.getElement<HTMLInputElement>(binding.rangeId);
+      const numEl = this.getElement<HTMLInputElement>(binding.numId);
+      if (rangeEl) {
+        rangeEl.value = String(currentVal);
+        this.syncSliderVisual(rangeEl, currentVal, binding.unit);
+      }
+      if (numEl) {
+        numEl.value = String(currentVal);
+      }
+    }
+  }
+
+  /**
+   * Resets all Settings dialog options back to their default values and persists them.
+   */
+  public resetSettingsToDefaults(): void {
+    this.service.setGridVisible(DEFAULT_MESH_EDITOR_SETTINGS.grid);
+    this.service.setGridSize(DEFAULT_MESH_EDITOR_SETTINGS.gridSize);
+    this.service.setCameraSpeed(DEFAULT_MESH_EDITOR_SETTINGS.cameraSpeed);
+    this.service.setTranslateSnap(DEFAULT_MESH_EDITOR_SETTINGS.translateSnap);
+    this.service.setRotateSnap(DEFAULT_MESH_EDITOR_SETTINGS.rotateSnap);
+
+    this.syncSettingsUI();
+    this.updatePanelButtonStates();
+    this.saveSettingsToStorage();
+    this.showToast('Settings reset to defaults.', 'info');
+  }
+
+  /**
+   * Opens the Settings modal dialog.
+   */
+  public openSettingsModal(): void {
+    this.closeAllDropdowns();
+    this.syncSettingsUI();
+    const settingsModal = this.getElement<HTMLDialogElement>('settingsModal');
+    if (!settingsModal) return;
+
+    if (typeof settingsModal.showModal === 'function') {
+      try {
+        if (!settingsModal.open) {
+          settingsModal.showModal();
+        }
+      } catch {
+        settingsModal.setAttribute('open', '');
+      }
+    } else {
+      settingsModal.setAttribute('open', '');
+    }
+  }
+
+  /**
+   * Closes the Settings modal dialog.
+   */
+  public closeSettingsModal(): void {
+    const settingsModal = this.getElement<HTMLDialogElement>('settingsModal');
+    if (!settingsModal) return;
+
+    if (typeof settingsModal.close === 'function') {
+      try {
+        if (settingsModal.open) {
+          settingsModal.close();
+        }
+      } catch {
+        settingsModal.removeAttribute('open');
+      }
+    } else {
+      settingsModal.removeAttribute('open');
+    }
+  }
+
+  private initSettingsUI(): void {
+    const settingsModal = this.getElement<HTMLDialogElement>('settingsModal');
+    this.getElement('btnSettings')?.addEventListener('click', () => this.openSettingsModal());
+    this.getElement('btnCloseSettings')?.addEventListener('click', () => this.closeSettingsModal());
+    this.getElement('btnSettingsDone')?.addEventListener('click', () => this.closeSettingsModal());
+    this.getElement('btnResetSettings')?.addEventListener('click', () => this.resetSettingsToDefaults());
+
+    if (settingsModal) {
+      settingsModal.addEventListener('close', () => {
+        settingsModal.returnValue = '';
+      });
+
+      // Fallback light-dismiss for browsers without native closedby support
+      if (typeof HTMLDialogElement !== 'undefined' && !('closedBy' in HTMLDialogElement.prototype)) {
+        const isOutside = (e: PointerEvent) => {
+          const rect = settingsModal.getBoundingClientRect();
+          return e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+        };
+        let pressedOutside = false;
+        settingsModal.addEventListener('pointerdown', (e) => {
+          pressedOutside = isOutside(e);
+        });
+        settingsModal.addEventListener('pointerup', (e) => {
+          if (pressedOutside && isOutside(e)) {
+            this.closeSettingsModal();
+          }
+        });
+      }
+    }
+
+    const gridToggle = this.getElement<HTMLInputElement>('settingGridVisible');
+    if (gridToggle) {
+      if (typeof HTMLInputElement !== 'undefined' && !('switch' in HTMLInputElement.prototype)) {
+        gridToggle.setAttribute('role', 'switch');
+      }
+      gridToggle.addEventListener('change', () => {
+        this.service.setGridVisible(gridToggle.checked);
+        this.updatePanelButtonStates();
+        this.saveSettingsToStorage();
+      });
+    }
+
+    for (const binding of this.getNumericSettingBindings()) {
+      const rangeEl = this.getElement<HTMLInputElement>(binding.rangeId);
+      const numEl = this.getElement<HTMLInputElement>(binding.numId);
+
+      if (rangeEl) {
+        rangeEl.addEventListener('input', () => {
+          const val = this.clampSettingValue(Number(rangeEl.value), binding.min, binding.max, binding.decimals);
+          binding.apply(val);
+          if (numEl) numEl.value = String(val);
+          this.syncSliderVisual(rangeEl, val, binding.unit);
+          this.saveSettingsToStorage();
+        });
+      }
+
+      if (numEl) {
+        numEl.addEventListener('input', () => {
+          const parsed = Number(numEl.value);
+          if (!Number.isFinite(parsed) || numEl.value.trim() === '') return;
+          const clamped = this.clampSettingValue(parsed, binding.min, binding.max, Math.max(binding.decimals, 3));
+          binding.apply(clamped);
+          if (rangeEl) {
+            rangeEl.value = String(clamped);
+            this.syncSliderVisual(rangeEl, clamped, binding.unit);
+          }
+          this.saveSettingsToStorage();
+        });
+
+        numEl.addEventListener('change', () => {
+          const parsed = Number(numEl.value);
+          const fallback = this.service.sceneParams[binding.key];
+          const clamped = Number.isFinite(parsed)
+            ? this.clampSettingValue(parsed, binding.min, binding.max, Math.max(binding.decimals, 3))
+            : fallback;
+          binding.apply(clamped);
+          numEl.value = String(clamped);
+          if (rangeEl) {
+            rangeEl.value = String(clamped);
+            this.syncSliderVisual(rangeEl, clamped, binding.unit);
+          }
+          this.saveSettingsToStorage();
+        });
+      }
+    }
+
+    this.syncSettingsUI();
   }
 
   /**
@@ -4330,14 +4629,6 @@ export class MeshEditorApp {
       .name('Background')
       .onChange((v) => this.service.setClearColor(v));
     this.guiScene
-      .add(this.service.sceneParams, 'grid')
-      .name('Grid visible')
-      .onChange((v) => this.service.setGridVisible(v));
-    this.guiScene
-      .add(this.service.sceneParams, 'gridSize', 5, 200, 5)
-      .name('Grid size')
-      .onChange((v) => this.service.setGridSize(v));
-    this.guiScene
       .add(this.service.sceneParams, 'ambientLight', 0.1, 3.0, 0.1)
       .name('Ambient Light')
       .onChange((v) => this.service.setAmbientIntensity(v));
@@ -4345,18 +4636,6 @@ export class MeshEditorApp {
       .add(this.service.sceneParams, 'sunLight', 0.1, 4.0, 0.1)
       .name('Sun Light')
       .onChange((v) => this.service.setSunIntensity(v));
-    this.guiScene
-      .add(this.service.sceneParams, 'cameraSpeed', 0.1, 2.0, 0.05)
-      .name('Camera Speed')
-      .onChange((v) => this.service.setCameraSpeed(v));
-    this.guiScene
-      .add(this.service.sceneParams, 'translateSnap', 0.01, 50.0, 0.05)
-      .name('Move Snap')
-      .onChange((v) => this.service.setTranslateSnap(v));
-    this.guiScene
-      .add(this.service.sceneParams, 'rotateSnap', 1, 90, 1)
-      .name('Rotate Snap (°)')
-      .onChange((v) => this.service.setRotateSnap(v));
 
     // 2. Mesh Properties GUI
     const containerMesh = document.getElementById('gui-mesh-container') || document.getElementById('gui-container-mesh');
@@ -5562,6 +5841,14 @@ export class MeshEditorApp {
     };
 
     window.addEventListener('keydown', (e: KeyboardEvent) => {
+      const settingsModal = this.getElement<HTMLDialogElement>('settingsModal');
+      if (settingsModal?.open) {
+        if (e.key === 'Escape') {
+          this.closeSettingsModal();
+        }
+        return;
+      }
+
       const activeEl = document.activeElement;
       if (
         activeEl &&
