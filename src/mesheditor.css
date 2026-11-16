@@ -3725,6 +3725,11 @@ progress.loading-spinner:indeterminate {
   border-color: var(--accent-color);
 }
 
+/* Mask API keys visually without type="password" so browsers/password managers do not treat them as login credentials */
+.api-key-masked {
+  -webkit-text-security: disc;
+}
+
 .ai-slider-header {
   display: flex;
   align-items: center;

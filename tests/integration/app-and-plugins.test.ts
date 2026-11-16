@@ -1034,4 +1034,57 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     neuralTestSpy.mockRestore();
     imgTestSpy.mockRestore();
   });
+
+  it('masks API key fields without type="password" so browsers and password managers do not trigger form warnings', () => {
+    app = new MeshEditorApp({
+      container,
+      engine,
+    });
+
+    expect(container.querySelectorAll('input[type="password"]').length).toBe(0);
+
+    const apiKeyIds = [
+      'aiApiKeyInput',
+      'aiNeuralKey_trellis',
+      'aiNeuralKey_hunyuan3d',
+      'aiNeuralKey_hi3d',
+      'aiImageGenKey',
+      'aiTextureApiKey',
+    ];
+
+    for (const id of apiKeyIds) {
+      const input = container.querySelector(`#${id}`) as HTMLInputElement;
+      expect(input).toBeTruthy();
+      expect(input.type).toBe('text');
+      expect(input.classList.contains('api-key-masked')).toBe(true);
+      expect(input.getAttribute('autocomplete')).toBe('off');
+      expect(input.hasAttribute('data-1p-ignore')).toBe(true);
+      expect(input.getAttribute('data-lpignore')).toBe('true');
+      expect(input.getAttribute('data-bwignore')).toBe('true');
+      expect(input.getAttribute('data-form-type')).toBe('other');
+    }
+
+    const pairs: Array<[string, string]> = [
+      ['aiApiKeyInput', 'btnToggleApiKeyVis'],
+      ['aiTextureApiKey', 'btnToggleTextureApiKeyVis'],
+    ];
+
+    for (const [inputId, btnId] of pairs) {
+      const input = container.querySelector(`#${inputId}`) as HTMLInputElement;
+      const btn = container.querySelector(`#${btnId}`) as HTMLButtonElement;
+      expect(btn.getAttribute('aria-pressed')).toBe('false');
+
+      btn.click();
+      expect(input.type).toBe('text');
+      expect(input.classList.contains('api-key-masked')).toBe(false);
+      expect(btn.getAttribute('aria-pressed')).toBe('true');
+      expect(btn.getAttribute('aria-label')).toBe('Hide API Key');
+
+      btn.click();
+      expect(input.type).toBe('text');
+      expect(input.classList.contains('api-key-masked')).toBe(true);
+      expect(btn.getAttribute('aria-pressed')).toBe('false');
+      expect(btn.getAttribute('aria-label')).toBe('Show API Key');
+    }
+  });
 });

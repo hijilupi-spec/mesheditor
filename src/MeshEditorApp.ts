@@ -2851,9 +2851,9 @@ export class MeshEditorApp {
       });
 
     // Toggle API key visibility
-    this.getElement('btnToggleApiKeyVis')?.addEventListener('click', () => {
-      if (!apiKeyInput) return;
-      apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
+    const btnToggleApiKeyVis = this.getElement<HTMLButtonElement>('btnToggleApiKeyVis');
+    btnToggleApiKeyVis?.addEventListener('click', () => {
+      this.toggleApiKeyVisibility(apiKeyInput, btnToggleApiKeyVis);
     });
 
     // Fetch available models from OpenAI-compatible /models endpoint
@@ -6713,6 +6713,21 @@ export class MeshEditorApp {
     setTimeout(render, 300);
   }
 
+  /**
+   * Toggles visual masking of an API key text input without using type="password",
+   * avoiding browser form warnings and password manager autofill prompts.
+   */
+  private toggleApiKeyVisibility(input: HTMLInputElement | null, toggleBtn?: HTMLElement | null): void {
+    if (!input) return;
+    const isRevealed = !input.classList.toggle('api-key-masked');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-pressed', String(isRevealed));
+      toggleBtn.setAttribute('aria-label', isRevealed ? 'Hide API Key' : 'Show API Key');
+      toggleBtn.innerHTML = `<i class="app-icon" data-lucide="${isRevealed ? 'eye-off' : 'eye'}"></i>`;
+      createIcons({ icons: editorIcons, root: toggleBtn });
+    }
+  }
+
   public showToast(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
     if (!this.toastText || !this.toastElement) return;
     const cleanMsg = message.replace(/^[\s\p{Emoji}\p{Extended_Pictographic}]+/u, '').trim();
@@ -10529,10 +10544,7 @@ export class MeshEditorApp {
     });
 
     btnToggleApiKeyVis?.addEventListener('click', () => {
-      if (!apiKeyInput) return;
-      const isPassword = apiKeyInput.type === 'password';
-      apiKeyInput.type = isPassword ? 'text' : 'password';
-      btnToggleApiKeyVis.innerHTML = `<i class="app-icon" data-lucide="${isPassword ? 'eye-off' : 'eye'}"></i>`;
+      this.toggleApiKeyVisibility(apiKeyInput, btnToggleApiKeyVis);
     });
 
     const saveBackendConfigFromDOM = () => {

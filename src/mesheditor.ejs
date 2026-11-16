@@ -868,13 +868,20 @@
                       <label for="aiApiKeyInput">API Key</label>
                       <div class="ai-input-row">
                         <input
-                          type="password"
+                          type="text"
                           id="aiApiKeyInput"
-                          class="ai-input"
+                          class="ai-input api-key-masked"
                           placeholder="sk-... (optional for local Ollama / LM Studio)"
                           autocomplete="off"
+                          autocorrect="off"
+                          autocapitalize="none"
+                          spellcheck="false"
+                          data-1p-ignore
+                          data-lpignore="true"
+                          data-bwignore="true"
+                          data-form-type="other"
                         />
-                        <button type="button" class="ai-icon-btn" id="btnToggleApiKeyVis" title="Show/Hide API Key">
+                        <button type="button" class="ai-icon-btn" id="btnToggleApiKeyVis" title="Show/Hide API Key" aria-label="Show API Key" aria-pressed="false">
                           <i class="app-icon" data-lucide="eye"></i>
                         </button>
                       </div>
@@ -1035,7 +1042,7 @@
                         <input type="text" id="aiNeuralModel_trellis" class="ai-input" placeholder="mlx-community/TRELLIS.2-4B" style="flex: 1; min-width: 0;" />
                       </div>
                       <input type="text" id="aiNeuralUrl_trellis" class="ai-input" placeholder="http://localhost:8000/v1/3d/generations" />
-                      <input type="password" id="aiNeuralKey_trellis" class="ai-input" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" />
+                      <input type="text" id="aiNeuralKey_trellis" class="ai-input api-key-masked" aria-label="TRELLIS API Key" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
                     </div>
                   </div>
 
@@ -1062,7 +1069,7 @@
                         <input type="text" id="aiNeuralModel_hunyuan3d" class="ai-input" placeholder="mlx-community/Hunyuan3D-2.1" style="flex: 1; min-width: 0;" />
                       </div>
                       <input type="text" id="aiNeuralUrl_hunyuan3d" class="ai-input" placeholder="http://localhost:8000/v1/3d/generations" />
-                      <input type="password" id="aiNeuralKey_hunyuan3d" class="ai-input" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" />
+                      <input type="text" id="aiNeuralKey_hunyuan3d" class="ai-input api-key-masked" aria-label="Hunyuan3D API Key" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
                     </div>
                   </div>
 
@@ -1089,7 +1096,7 @@
                         <input type="text" id="aiNeuralModel_hi3d" class="ai-input" placeholder="mlx-community/Hi3D-V3.0" style="flex: 1; min-width: 0;" />
                       </div>
                       <input type="text" id="aiNeuralUrl_hi3d" class="ai-input" placeholder="http://localhost:8000/v1/3d/generations" />
-                      <input type="password" id="aiNeuralKey_hi3d" class="ai-input" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" />
+                      <input type="text" id="aiNeuralKey_hi3d" class="ai-input api-key-masked" aria-label="Hi3D API Key" placeholder="API Key (optional for local oMLX / Gradio)" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
                     </div>
                   </div>
                 </div>
@@ -1127,7 +1134,7 @@
                     </div>
                     <div class="settings-ai-grid">
                       <input type="text" id="aiImageGenUrl" class="ai-input" placeholder="Endpoint URL" />
-                      <input type="password" id="aiImageGenKey" class="ai-input" placeholder="API Key (optional for Pollinations / Local)" autocomplete="off" />
+                      <input type="text" id="aiImageGenKey" class="ai-input api-key-masked" aria-label="External Image Generator API Key" placeholder="API Key (optional for Pollinations / Local)" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
                     </div>
                   </div>
                 </div>

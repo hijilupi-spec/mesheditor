@@ -78,8 +78,8 @@
         <div id="aiTextureApiKeyRow" class="tool-row" style="margin-top: 2px;">
           <label class="tool-label" for="aiTextureApiKey" style="min-width: 60px;">API Key</label>
           <div style="flex: 1; display: flex; gap: 4px; align-items: center;">
-            <input type="password" id="aiTextureApiKey" class="tool-input" placeholder="API Key (optional for Local / Free)" style="flex: 1; min-width: 0; font-size: 11px;" autocomplete="off" />
-            <button type="button" class="ai-icon-btn" id="btnToggleTextureApiKeyVis" title="Show/Hide API Key" style="width: 24px; height: 24px; padding: 0;">
+            <input type="text" id="aiTextureApiKey" class="tool-input api-key-masked" placeholder="API Key (optional for Local / Free)" style="flex: 1; min-width: 0; font-size: 11px;" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" />
+            <button type="button" class="ai-icon-btn" id="btnToggleTextureApiKeyVis" title="Show/Hide API Key" aria-label="Show API Key" aria-pressed="false" style="width: 24px; height: 24px; padding: 0;">
               <i class="app-icon" data-lucide="eye"></i>
             </button>
           </div>
