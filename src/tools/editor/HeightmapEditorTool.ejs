@@ -1,0 +1,189 @@
+<div id="dialog-heightmap" class="floating-dialog" style="top: 120px; right: 365px; width: 350px; display: none">
+  <div class="dialog-header">
+    <span class="dialog-title"><i class="app-icon" data-lucide="mountain"></i> Heightmap Terrain</span>
+    <div class="dialog-actions">
+      <button class="dialog-btn btn-help" title="Help &amp; Tool Guide" aria-label="Help"><i class="app-icon" data-lucide="help-circle"></i></button>
+      <button class="dialog-btn btn-min" title="Minimize"><i class="app-icon" data-lucide="minus"></i></button>
+      <button class="dialog-btn btn-close" title="Close"><i class="app-icon" data-lucide="x"></i></button>
+    </div>
+  </div>
+  <div class="dialog-body sculpt-tool-body">
+    <div id="heightmapSelectedBadge" class="tool-help-box">
+      Paint or upload a grayscale heightmap, configure 3 terrain textures, and build your 3D terrain mesh.
+    </div>
+
+    <!-- Hidden File Inputs -->
+    <input type="file" id="heightmapFileInput" accept="image/*" style="display: none" />
+    <input type="file" id="mixmapFileInput" accept="image/*" style="display: none" />
+    <input type="file" id="terrainTex1FileInput" accept="image/*" style="display: none" />
+    <input type="file" id="terrainTex2FileInput" accept="image/*" style="display: none" />
+    <input type="file" id="terrainTex3FileInput" accept="image/*" style="display: none" />
+
+    <!-- 1. Map Tabs: Heightmap (Grayscale) [Default] & Mix Texture (RGB) -->
+    <div class="tool-control-group">
+      <div class="heightmap-tabs" style="display: flex; gap: 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); padding-bottom: 6px; margin-bottom: 8px;">
+        <button type="button" id="heightmapTabBtnHeight" class="tool-btn tool-btn-primary" style="flex: 1; height: 28px; font-size: 11px;">
+          <i class="app-icon" data-lucide="mountain"></i> Heightmap
+        </button>
+        <button type="button" id="heightmapTabBtnMix" class="tool-btn" style="flex: 1; height: 28px; font-size: 11px;">
+          <i class="app-icon" data-lucide="layers"></i> Mix Texture (RGB)
+        </button>
+      </div>
+
+      <!-- Tab 1: Heightmap (Grayscale) -->
+      <div id="heightmapTabPaneHeight" style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="tool-row" style="align-items: stretch; gap: 8px;">
+          <canvas
+            id="heightmapPreviewCanvas"
+            width="128"
+            height="128"
+            title="Click to open Grayscale Heightmap Paint Editor"
+            style="width: 88px; height: 88px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.16); background: #000000; cursor: pointer; flex-shrink: 0;"
+          ></canvas>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+            <button type="button" id="btnOpenHeightmapPainter" class="tool-btn tool-btn-primary" style="width: 100%; height: 30px; font-size: 11px;">
+              <i class="app-icon" data-lucide="brush"></i> Paint / Edit Heightmap...
+            </button>
+            <button type="button" id="btnUploadHeightmap" class="sculpt-btn" style="width: 100%; height: 28px; font-size: 11px;">
+              <i class="app-icon" data-lucide="upload"></i> Upload Heightmap...
+            </button>
+            <div class="tool-sublabel">Black = Min Height &bull; White = Max Height</div>
+          </div>
+        </div>
+
+        <div class="tool-row" style="margin-top: 2px;">
+          <select id="heightmapPresetSelect" class="tool-select" style="flex: 1;" aria-label="Heightmap Preset">
+            <option value="black">Black (Blank Canvas)</option>
+            <option value="island">Island</option>
+            <option value="mountains">Mountain Range</option>
+            <option value="peak">Mountain Peak</option>
+            <option value="volcano">Volcano Crater</option>
+            <option value="canyon">River Canyon</option>
+            <option value="dunes">Rolling Dunes</option>
+          </select>
+          <button type="button" id="btnApplyHeightmapPreset" class="sculpt-btn" style="height: 26px; padding: 0 10px; font-size: 11px;">
+            Apply Preset
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 2: Mix Texture (RGB) -->
+      <div id="heightmapTabPaneMix" style="display: none; flex-direction: column; gap: 8px;">
+        <div class="tool-row" style="align-items: stretch; gap: 8px;">
+          <canvas
+            id="mixmapPreviewCanvas"
+            width="128"
+            height="128"
+            title="Click to open RGB Mix Texture Paint Editor"
+            style="width: 88px; height: 88px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.16); background: #0000ff; cursor: pointer; flex-shrink: 0;"
+          ></canvas>
+          <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+            <button type="button" id="btnOpenMixmapPainter" class="tool-btn tool-btn-primary" style="width: 100%; height: 30px; font-size: 11px;">
+              <i class="app-icon" data-lucide="paintbrush"></i> Paint / Edit Mix Texture...
+            </button>
+            <button type="button" id="btnUploadMixmap" class="sculpt-btn" style="width: 100%; height: 28px; font-size: 11px;">
+              <i class="app-icon" data-lucide="upload"></i> Upload Mix Texture...
+            </button>
+            <button type="button" id="btnGenerateMixmapFromHeight" class="sculpt-btn" style="width: 100%; height: 26px; font-size: 10px;">
+              <i class="app-icon" data-lucide="sparkles"></i> Auto-Generate from Heightmap
+            </button>
+          </div>
+        </div>
+        <div class="tool-sublabel">R = Texture 1 &bull; G = Texture 2 (Path) &bull; B = Texture 3</div>
+      </div>
+    </div>
+
+    <!-- 2. Three Individually Assignable Terrain Splat Textures -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="image"></i> Terrain Textures (RGB Channels)</div>
+
+      <!-- Texture 1 (Red Channel) -->
+      <div class="tool-control-group" style="margin-top: 4px; gap: 4px;">
+        <div class="tool-row" style="justify-content: space-between;">
+          <span class="tool-label" style="color: #f87171;">1. Red Channel (High / Peaks)</span>
+          <span class="tool-sublabel">Scale</span>
+        </div>
+        <div class="tool-row">
+          <div id="heightmapTex1Thumb" style="width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(248, 113, 113, 0.6); background-size: cover; background-position: center; flex-shrink: 0;"></div>
+          <select id="heightmapTex1Select" class="tool-select" style="flex: 1; min-width: 0;" aria-label="Terrain Texture 1 (Red Channel)"></select>
+          <input type="number" id="heightmapTex1ScaleNum" class="tool-number" min="0.5" max="100" step="0.5" value="10" style="width: 48px; text-align: right;" title="Texture 1 UV Scale" aria-label="Texture 1 Scale" />
+          <button type="button" id="btnUploadTerrainTex1" class="tool-action-btn" style="width: 26px; height: 26px;" title="Upload image for Texture 1">
+            <i class="app-icon" data-lucide="upload"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Texture 2 (Green Channel) -->
+      <div class="tool-control-group" style="margin-top: 6px; gap: 4px;">
+        <div class="tool-row" style="justify-content: space-between;">
+          <span class="tool-label" style="color: #4ade80;">2. Green Channel (Mid / Path)</span>
+          <span class="tool-sublabel">Scale</span>
+        </div>
+        <div class="tool-row">
+          <div id="heightmapTex2Thumb" style="width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(74, 222, 128, 0.6); background-size: cover; background-position: center; flex-shrink: 0;"></div>
+          <select id="heightmapTex2Select" class="tool-select" style="flex: 1; min-width: 0;" aria-label="Terrain Texture 2 (Green Channel)"></select>
+          <input type="number" id="heightmapTex2ScaleNum" class="tool-number" min="0.5" max="100" step="0.5" value="10" style="width: 48px; text-align: right;" title="Texture 2 UV Scale" aria-label="Texture 2 Scale" />
+          <button type="button" id="btnUploadTerrainTex2" class="tool-action-btn" style="width: 26px; height: 26px;" title="Upload image for Texture 2">
+            <i class="app-icon" data-lucide="upload"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Texture 3 (Blue Channel) -->
+      <div class="tool-control-group" style="margin-top: 6px; gap: 4px;">
+        <div class="tool-row" style="justify-content: space-between;">
+          <span class="tool-label" style="color: #60a5fa;">3. Blue Channel (Low / Base)</span>
+          <span class="tool-sublabel">Scale</span>
+        </div>
+        <div class="tool-row">
+          <div id="heightmapTex3Thumb" style="width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(96, 165, 250, 0.6); background-size: cover; background-position: center; flex-shrink: 0;"></div>
+          <select id="heightmapTex3Select" class="tool-select" style="flex: 1; min-width: 0;" aria-label="Terrain Texture 3 (Blue Channel)"></select>
+          <input type="number" id="heightmapTex3ScaleNum" class="tool-number" min="0.5" max="100" step="0.5" value="10" style="width: 48px; text-align: right;" title="Texture 3 UV Scale" aria-label="Texture 3 Scale" />
+          <button type="button" id="btnUploadTerrainTex3" class="tool-action-btn" style="width: 26px; height: 26px;" title="Upload image for Texture 3">
+            <i class="app-icon" data-lucide="upload"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Terrain Dimensions & Elevation -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="sliders"></i> Dimensions &amp; Elevation</div>
+
+      <div class="tool-row" style="margin-top: 4px;">
+        <label class="tool-label" for="heightmapWidthNum" style="min-width: 55px;">Width (X)</label>
+        <input type="number" id="heightmapWidthNum" class="tool-number" min="2" max="1000" step="2" value="100" style="flex: 1;" />
+        <label class="tool-label" for="heightmapHeightNum" style="min-width: 60px; text-align: right;">Length (Z)</label>
+        <input type="number" id="heightmapHeightNum" class="tool-number" min="2" max="1000" step="2" value="100" style="flex: 1;" />
+      </div>
+
+      <div class="sculpt-slider-row" style="margin-top: 6px;">
+        <div class="sculpt-slider-header">
+          <label class="sculpt-slider-label" for="heightmapSubdivisionsRange">Subdivisions</label>
+          <input type="number" id="heightmapSubdivisionsNum" class="tool-number" min="4" max="256" step="4" value="100" style="width: 58px; text-align: right;" aria-label="Subdivisions Value" />
+        </div>
+        <input type="range" id="heightmapSubdivisionsRange" min="8" max="200" step="4" value="100" class="tool-range" />
+      </div>
+
+      <div class="sculpt-slider-row" style="margin-top: 6px;">
+        <div class="sculpt-slider-header">
+          <label class="sculpt-slider-label" for="heightmapMaxHeightRange">Max Height</label>
+          <div class="tool-row" style="gap: 4px;">
+            <span class="tool-sublabel">Min</span>
+            <input type="number" id="heightmapMinHeightNum" class="tool-number" min="-100" max="100" step="0.5" value="0" style="width: 48px; text-align: right;" aria-label="Min Height Value" />
+            <span class="tool-sublabel">Max</span>
+            <input type="number" id="heightmapMaxHeightNum" class="tool-number" min="0.5" max="200" step="0.5" value="10" style="width: 52px; text-align: right;" aria-label="Max Height Value" />
+          </div>
+        </div>
+        <input type="range" id="heightmapMaxHeightRange" min="1" max="60" step="0.5" value="10" class="tool-range" />
+      </div>
+    </div>
+
+    <!-- 4. Create / Update Mesh -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <button type="button" id="btnBuildHeightmapTerrain" class="tool-btn tool-btn-primary btn-block" style="width: 100%; height: 34px; font-weight: 600;">
+        <i class="app-icon" data-lucide="mountain"></i> Create / Update Terrain Mesh
+      </button>
+    </div>
+  </div>
+</div>

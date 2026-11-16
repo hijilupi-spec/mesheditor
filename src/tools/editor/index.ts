@@ -20,6 +20,7 @@ import { SculptEditorTool } from './SculptEditorTool';
 import { AITextureEditorTool } from './AITextureEditorTool';
 import { TextMeshEditorTool } from './TextMeshEditorTool';
 import { DecalEditorTool } from './DecalEditorTool';
+import { HeightmapEditorTool } from './HeightmapEditorTool';
 import { TOOL_VIEWS, getToolViewTemplate } from './toolViews';
 
 export {
@@ -44,6 +45,7 @@ export {
   AITextureEditorTool,
   TextMeshEditorTool,
   DecalEditorTool,
+  HeightmapEditorTool,
   TOOL_VIEWS,
   getToolViewTemplate,
 };
@@ -73,6 +75,7 @@ export function createBuiltinEditorTools(): ToolInterface[] {
     new AITextureEditorTool(),
     new TextMeshEditorTool(),
     new DecalEditorTool(),
+    new HeightmapEditorTool(),
   ];
 }
 

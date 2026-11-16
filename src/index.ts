@@ -16,6 +16,8 @@ export * from './baking/TextureBaker';
 export * from './rigging/WeightPaintController';
 export * from './textures/AITextureGenerator';
 export * from './textures/ExternalImageGeneratorService';
+export * from './ImageUtils';
+export * from './heightmap';
 export * from './tools';
 export * from './Neural3DGeneratorService';
 export * from './AIAgentService';

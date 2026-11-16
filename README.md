@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Babylon.js](https://img.shields.io/badge/Babylon.js-9.29-orange?logo=babylon.js)](https://www.babylonjs.com/)
-[![Tests](https://img.shields.io/badge/Vitest%20Integration%20Tests-211%20Passed-brightgreen)](tests/integration/)
+[![Tests](https://img.shields.io/badge/Vitest%20Integration%20Tests-232%20Passed-brightgreen)](tests/integration/)
 [![Electron](https://img.shields.io/badge/Electron-45.1-47848F?logo=electron)](https://www.electronjs.org/)
 
 A modular 3D model studio and mesh manipulation workbench built with **TypeScript** and **Babylon.js 9.x**. Engineered from the ground up to function across multiple deployment targets through a decoupled **Platform Adapter Architecture**:
@@ -27,6 +27,7 @@ Distributed under the **[Apache License 2.0](LICENSE)**.
   - [Authoring Guide: Adding a New Editor Tool](#authoring-guide-adding-a-new-editor-tool)
 - [Procedural & AI-Callable Tool Pipeline](#procedural--ai-callable-tool-pipeline)
   - [Built-In AI Modeling Tools](#built-in-ai-modeling-tools)
+  - [Heightmap Terrain & 3-Texture Splatting](#heightmap-terrain--3-texture-splatting)
   - [ToolRegistry & OpenAI Function Schemas](#toolregistry--openai-function-schemas)
 - [Bring-Your-Own-AI (BYO-AI) & Modeling Skills](#bring-your-own-ai-byo-ai--modeling-skills)
   - [Supported LLM / VLM Endpoints](#supported-llm--vlm-endpoints)
@@ -69,7 +70,7 @@ mesheditor/
 │   ├── tools/                            # Modular tool system
 │   │   ├── ToolInterface.ts              # Tool contracts, metadata, lifecycle hooks, AI function schemas
 │   │   ├── AbstractTool.ts               # Base tool with scene, math, and mesh helper utilities
-│   │   ├── ToolRegistry.ts               # Runtime registry & execution dispatcher (44 built-in + 20 editor tools)
+│   │   ├── ToolRegistry.ts               # Runtime registry & execution dispatcher (45 built-in + 21 editor tools)
 │   │   ├── ToolExecutionContext.ts       # Execution context passed to tools during execution
 │   │   ├── editor/                       # Decentralized editor tools & EJS view templates
 │   │   │   ├── AbstractEditorTool.ts     # Base editor tool with dynamic DOM mounting & EJS compilation
@@ -93,8 +94,11 @@ mesheditor/
 │   │   │   ├── RiggingEditorTool.ts / .ejs
 │   │   │   ├── AITextureEditorTool.ts / .ejs
 │   │   │   ├── TextMeshEditorTool.ts / .ejs
-│   │   │   └── DecalEditorTool.ts / .ejs
-│   │   └── builtin/                      # 44 AI-callable procedural & manipulation tools
+│   │   │   ├── DecalEditorTool.ts / .ejs
+│   │   │   └── HeightmapEditorTool.ts / .ejs
+│   │   └── builtin/                      # 45 AI-callable procedural & manipulation tools
+│   ├── heightmap/                        # Heightmap terrain engine (GroundMesh, TerrainMaterial, 2D grayscale/RGB brush)
+│   ├── ImageUtils.ts                     # Image loading, heightmap-to-mixmap conversion & path buffer painting
 │   ├── voxel/                            # Voxel painter engine (custom mesher, palette, texture atlas)
 │   ├── pathExtrusion/                    # Spline path factory, extrusion controller, 2D profiles
 │   ├── sculpting/                        # Dynamic topology sculpt controller & brush falloffs
@@ -133,7 +137,7 @@ mesheditor/
 │   ├── generate-icons.js                 # Generates desktop `.icns`, `.ico`, and `.png` icons
 │   └── prepare-pages.js                  # Prepares distribution bundle for GitHub Pages
 └── tests/
-    ├── integration/                      # 15 Vitest headless 3D test suites with Babylon NullEngine (211 tests)
+    ├── integration/                      # 16 Vitest headless 3D test suites with Babylon NullEngine (232 tests)
     └── e2e/                              # Playwright Chromium real-browser WebGL workflow tests
 ```
 
@@ -194,7 +198,7 @@ The Mesh Editor employs a **Decentralized Modular Tool Architecture**. Rather th
 
 ### Built-In Editor Tools
 
-The editor ships with **20 decentralized editor tools** located in [`src/tools/editor/`](src/tools/editor/):
+The editor ships with **21 decentralized editor tools** located in [`src/tools/editor/`](src/tools/editor/):
 
 | Tool Class | View Template | Category | Description |
 | :--- | :--- | :--- | :--- |
@@ -218,6 +222,7 @@ The editor ships with **20 decentralized editor tools** located in [`src/tools/e
 | **`AITextureEditorTool`** | `AITextureEditorTool.ejs` | AI Generation | AI-assisted procedural and neural texture generation with seamless tiling synthesis |
 | **`TextMeshEditorTool`** | `TextMeshEditorTool.ejs` | Modeling | 3D extruded vector text generation using typeface JSON fonts |
 | **`DecalEditorTool`** | `DecalEditorTool.ejs` | Materials | Decal stamp projection onto arbitrary 3D mesh surfaces with orientation and size controls |
+| **`HeightmapEditorTool`** | `HeightmapEditorTool.ejs` | Terrain | Grayscale heightmap & RGB mixmap 2-tab paint editor, 3-texture `TerrainMaterial` splatting, and `GroundMesh` generation |
 
 ### Architectural Guidelines for Editor Tools
 
@@ -360,7 +365,7 @@ npm test
 
 ## Procedural & AI-Callable Tool Pipeline
 
-The Mesh Editor includes **44 built-in procedural modeling tools** located in [`src/tools/builtin/`](src/tools/builtin/). Every tool implements the `ToolInterface` contract, providing:
+The Mesh Editor includes **45 built-in procedural modeling tools** located in [`src/tools/builtin/`](src/tools/builtin/). Every tool implements the `ToolInterface` contract, providing:
 
 - A unique snake_case `name` (e.g. `csg_boolean`, `extrude_polygon`, `retopologize_mesh`)
 - A strict JSON Schema definition for `parameters` compatible with the OpenAI Function Calling standard
@@ -413,6 +418,38 @@ The Mesh Editor includes **44 built-in procedural modeling tools** located in [`
 | `modeler_generate_texture`| `GenerateTextureTool.ts`| Generates procedural or neural textures and assigns them to materials |
 | `modeler_create_text_mesh`| `CreateTextMeshTool.ts` | Extrudes 3D text meshes using typeface vector definitions |
 | `modeler_decal` | `DecalTool.ts` | Projects 2D decal textures onto mesh surfaces at specified positions |
+| `modeler_create_heightmap`| `CreateHeightmapTool.ts` | Generates or updates 3D heightmap `GroundMesh` terrains with 3-texture RGB `TerrainMaterial` splatting |
+
+### Heightmap Terrain & 3-Texture Splatting
+
+Built on Babylon.js **`GroundMesh`** (`MeshBuilder.CreateGroundFromHeightMap`) and **`TerrainMaterial`**, the Heightmap Terrain workflow is available both interactively in **Tools → Heightmap Terrain** and autonomously to the AI Agent via `modeler_create_heightmap` ([`HeightmapController.ts`](src/heightmap/HeightmapController.ts)):
+
+- **2-Tab Interactive Paint Editor (`#heightmapPaintModal`)**:
+  - **Tab 1 — Heightmap (Grayscale, Default)**: Starts on a pure black canvas (`0`) so you can sculpt hills, mountains, and islands directly with white/grayscale brushes (`0..255`), upload grayscale heightmap images, or apply procedural presets (`Island`, `Mountain Range`, `Mountain Peak`, `Volcano Crater`, `River Canyon`, `Rolling Dunes`). Brush tools include adjustable **Size** and radial cosine **Smoothness**, plus **Undo Last Stroke**.
+  - **Tab 2 — Mix Texture (RGB)**: Upload an RGB splat map or paint directly into the **Red** (`Texture 1`), **Green** (`Texture 2 / Path`), and **Blue** (`Texture 3`) channels (or custom RGB colors) to carve roads, trails, and material zones, or auto-generate the mixmap from elevation via [`ImageUtils`](src/ImageUtils.ts).
+  - Clicking **OK & Redraw Mesh** commits both 2D maps and immediately rebuilds the 3D `GroundMesh` in the viewport.
+- **3 Individually Assignable Splat Textures**: Assign each of the 3 diffuse layers independently (`rock`, `grass`, `sand`, `snow`, `dirt`, `cobblestone`, `gravel`, `volcanic`, `moss`, `water`, AI-generated textures, scene textures, or uploaded images) with independent UV scales (`uScale` / `vScale`). Selecting any texture immediately updates `TerrainMaterial` and re-renders the mesh.
+- **Pathway Projection & GLB Export**: Supports `pathPoints` corridor carving (`applyPathToVertices`) and green-channel path painting (`ImageUtils.paintPathOnMixMapBuffer`), plus automatic composite PBR material synthesis during `.glb` / `.gltf` export.
+
+```typescript
+// AI Agent tool call example: alpine mountains with snow, cobblestone pass, and rocky cliffs
+modeler_create_heightmap({
+  name: 'Alpine_Mountains',
+  preset: 'mountains',
+  width: 100,
+  height: 100,
+  subdivisions: 100,
+  minHeight: 0,
+  maxHeight: 22,
+  texture1: 'snow',        // Red channel (high peaks)
+  texture2: 'cobblestone', // Green channel (mountain pass)
+  texture3: 'rock',        // Blue channel (cliffs)
+  textureScale: [12, 16, 10],
+  pathPoints: [[-45, 3, -35], [0, 4, 0], [45, 3, 35]],
+  pathWidth: 8,
+  pathProjection: true,
+});
+```
 
 ### ToolRegistry & OpenAI Function Schemas
 
@@ -755,13 +792,14 @@ The repository employs a **two-tier testing strategy**:
 tests/
 ├── integration/                 # Stage 1: Fast Headless 3D tests (Vitest + Babylon NullEngine + jsdom)
 │   ├── service.test.ts          # Core 3D engine: primitives, gizmos, transforms, CSG2, undo/redo (35 tests)
-│   ├── app-and-plugins.test.ts  # UI orchestration, Outliner sync, PluginManager, HostAppAdapter (14 tests)
-│   ├── tools.test.ts            # ToolRegistry, 44 built-in tools, OpenAI function schemas (25 tests)
-│   ├── ai-agent.test.ts         # Multi-turn BYO-AI agent, SSE streaming, multi-provider presets (17 tests)
-│   ├── electron-adapter.test.ts # Native file dialogs, companion file resolution, IPC bridge (7 tests)
+│   ├── app-and-plugins.test.ts  # UI orchestration, Outliner sync, PluginManager, HostAppAdapter (15 tests)
+│   ├── tools.test.ts            # ToolRegistry, 45 built-in tools, OpenAI schemas, Heightmap tool (28 tests)
+│   ├── ai-agent.test.ts         # Multi-turn BYO-AI agent, SSE streaming, multi-provider presets (22 tests)
+│   ├── electron-adapter.test.ts # Native file dialogs, companion file resolution, IPC bridge (4 tests)
 │   ├── scene-hierarchy-and-separation.test.ts # Groups, loose-parts separation, outliner search (9 tests)
 │   ├── gaming-pipeline-tools.test.ts          # UV unwrapping, baking, rigging, weight paint, decals (11 tests)
-│   ├── architecture-tools.test.ts             # Walls, openings, arches, columns, moldings, stairs (11 tests)
+│   ├── architecture-tools.test.ts             # Walls, openings, arches, columns, moldings, stairs (7 tests)
+│   ├── organic-and-pbr-upgrades.test.ts       # Organic SDF/sweep archetypes, 4-map de-lit PBR presets (12 tests)
 │   ├── sdf-modeling.test.ts                   # Signed Distance Fields & Surface Nets polygonizer (3 tests)
 │   ├── voxel-painter.test.ts                  # Voxel grids, palettes, meshing, and chunk operations (24 tests)
 │   ├── path-extrusion.test.ts                 # Spline path factory, extrusion controller, 2D profiles (8 tests)
@@ -775,7 +813,7 @@ tests/
 
 ### Headless 3D Integration Tests (Vitest + NullEngine)
 
-By injecting Babylon's headless **`NullEngine`**, the integration test suite executes real 3D matrix math, bounding box calculations, vertex buffer transformations, and CSG2 booleans directly in Node.js without needing a physical GPU (~30 seconds for all **211 tests**):
+By injecting Babylon's headless **`NullEngine`**, the integration test suite executes real 3D matrix math, bounding box calculations, vertex buffer transformations, and CSG2 booleans directly in Node.js without needing a physical GPU (~45 seconds for all **232 tests**):
 
 ```bash
 # Run headless 3D integration tests
@@ -813,7 +851,7 @@ npm run test:all
 | `npm run build` | `webpack --mode production` | Compiles production standalone web app into `dist/` |
 | `npm run build:lib` | *Multiple build steps* | Builds ESM (`dist-lib/esm/`), UMD (`dist-lib/index.umd.js`), `.d.ts`, and standalone Web Component bundle (`dist-lib/standalone/`) |
 | `npm run type-check` | `tsc --noEmit` | Validates TypeScript types across the entire project |
-| `npm test` | `vitest run` | Runs all 15 headless 3D integration test suites (211 tests) |
+| `npm test` | `vitest run` | Runs all 16 headless 3D integration test suites (232 tests) |
 | `npm run test:watch` | `vitest` | Runs Vitest in interactive watch mode |
 | `npm run test:e2e` | `playwright test` | Executes Playwright Chromium browser E2E tests |
 | `npm run test:all` | `vitest run && playwright test` | Executes full test suite (Integration + E2E) |

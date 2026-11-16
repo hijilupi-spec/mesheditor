@@ -213,6 +213,46 @@ export const AI_QUICK_PROMPTS: AIQuickPrompt[] = [
     prompt:
       "Spawn a humanoid character blockout in T-Pose using modeler_spawn_base_mesh (type: 'humanoid', pose: 't_pose', name: 'Hero_Humanoid'). Prepare it for game engine animation: 1) auto-generate a 20-bone humanoid skeleton hierarchy matched to mesh bounding bounds using modeler_rig_and_weight (action: 'auto_rig', template: 'humanoid', autoBindSkin: true), 2) bind normalized 4-bone capsule skin weights summing strictly to 1.0, and 3) test joint articulation by rotating the right forearm and left knee using action: 'pose_bone' (pitchDeg: 45) to verify natural limb flexion without pinch distortion.",
   },
+  {
+    id: 'heightmap_alpine_mountains',
+    title: 'Alpine Mountain Range',
+    technique: 'heightmap',
+    tag: 'Terrain',
+    category: 'Heightmap & Terrain',
+    description: 'Snow-capped peaks, cobblestone mountain pass & 3-texture RGB splatting',
+    prompt:
+      "Create a dramatic alpine mountain range using modeler_create_heightmap: set name: 'Alpine_Mountains', preset: 'mountains', width: 100, height: 100, subdivisions: 100, minHeight: 0, maxHeight: 22. Assign the 3 RGB splat textures individually: texture1: 'snow' (Red / High Peaks), texture2: 'cobblestone' (Green / Mountain Pass), and texture3: 'rock' (Blue / Cliff Base) with textureScale: [12, 16, 10]. Add two tall central ridge peaks using heightStrokes (size: 40, smoothness: 0.8, value: 255) and carve a winding cobblestone pass across the valley using pathPoints: [[-45, 3, -35], [-10, 4, -5], [15, 5, 10], [45, 3, 35]], pathWidth: 8, pathTransitionWidth: 5, pathYOffset: 0, pathProjection: true.",
+  },
+  {
+    id: 'heightmap_tropical_island',
+    title: 'Tropical Island & Path',
+    technique: 'heightmap',
+    tag: 'Island',
+    category: 'Heightmap & Terrain',
+    description: 'Sandy shore, lush meadow slopes, rocky peaks & painted green trail',
+    prompt:
+      "Build a tropical island terrain using modeler_create_heightmap: set name: 'Tropical_Island', preset: 'island', width: 100, height: 100, subdivisions: 100, minHeight: 0, maxHeight: 16. Assign texture1: 'rock' (Red / Upper Cliffs), texture2: 'grass' (Green / Meadow & Trail), texture3: 'sand' (Blue / Beach & Shore) with textureScale: [10, 14, 12]. Sculpt twin rocky ridges near the island center with heightStrokes (points: [[0.42, 0.48], [0.56, 0.44]], size: 32, smoothness: 0.85, value: 240) and paint a winding green meadow footpath from the southern beach up into the central plateau using mixStrokes (channel: 'g', size: 22, smoothness: 0.7).",
+  },
+  {
+    id: 'heightmap_volcano_crater',
+    title: 'Volcano Crater Island',
+    technique: 'heightmap',
+    tag: 'Volcano',
+    category: 'Heightmap & Terrain',
+    description: 'Conical volcanic rim, sunken crater, basalt ash & lava path channel',
+    prompt:
+      "Generate a dramatic volcanic crater landscape using modeler_create_heightmap: set name: 'Volcano_Crater', preset: 'volcano', width: 100, height: 100, subdivisions: 100, minHeight: 0, maxHeight: 24. Assign texture1: 'volcanic' (Red / Basalt Rim), texture2: 'dirt' (Green / Ash Trail), and texture3: 'sand' (Blue / Coastal Ash) with textureScale: [10, 12, 12]. Deepen the central crater floor with a black grayscale brush stroke in heightStrokes (points: [[0.5, 0.5]], size: 28, smoothness: 0.75, value: 20) and paint a winding scorched trail down the slope using mixStrokes (channel: 'g', points: [[0.5, 0.62], [0.58, 0.78], [0.7, 0.9]], size: 18, smoothness: 0.65).",
+  },
+  {
+    id: 'heightmap_river_canyon',
+    title: 'River Canyon Valley',
+    technique: 'heightmap',
+    tag: 'Canyon',
+    category: 'Heightmap & Terrain',
+    description: 'Steep rocky plateau cliffs, grassy ledges & carved riverbed floor',
+    prompt:
+      "Build a winding river canyon valley using modeler_create_heightmap: set name: 'River_Canyon', preset: 'canyon', width: 120, height: 120, subdivisions: 100, minHeight: 0, maxHeight: 18. Assign texture1: 'rock' (Red / Canyon Cliffs), texture2: 'grass' (Green / Riverbank Trail), and texture3: 'water' (Blue / Riverbed) with textureScale: [10, 12, 8]. Carve a smooth winding riverbed path through the canyon floor using pathPoints: [[-50, 0.5, -45], [-15, 0.5, -10], [18, 0.5, 12], [50, 0.5, 45]], pathWidth: 12, pathTransitionWidth: 6, pathYOffset: 0, pathProjection: true.",
+  },
 ];
 
 export function getAllQuickPrompts(): AIQuickPrompt[] {

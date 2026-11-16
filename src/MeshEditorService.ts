@@ -124,6 +124,7 @@ import { WeightPaintController } from './rigging/WeightPaintController';
 import { AITextureGenerator } from './textures/AITextureGenerator';
 import { TextMeshController } from './textMesh/TextMeshController';
 import { DecalController } from './decals/DecalController';
+import { HeightmapController } from './heightmap';
 import {
   BevelModifierOptions,
   NonDestructiveCSGMetadata,
@@ -177,6 +178,7 @@ export class MeshEditorService {
   }
   public textMeshController: TextMeshController;
   public decalController: DecalController;
+  public heightmapController: HeightmapController;
   public get pathWays(): PathExtrusionController {
     return this.pathExtrusion;
   }
@@ -292,6 +294,7 @@ export class MeshEditorService {
     this.aiAgent.syncExternalImageGenerator();
     this.textMeshController = new TextMeshController(this);
     this.decalController = new DecalController(this);
+    this.heightmapController = new HeightmapController(this);
     const defaultAtlas = this.textureAtlasManager.getAtlases()[0];
     if (defaultAtlas) {
       this.voxelPainter.useTextureAtlas(defaultAtlas.id);
@@ -7026,6 +7029,7 @@ export class MeshEditorService {
 
     // Restore materials & clean up temporary weight heatmap vertex colors and ensure bone nodes before export
     this.weightPaintController?.prepareMeshesForExport();
+    this.heightmapController?.prepareMeshesForExport();
 
     const shouldExport = (node: any) => this.shouldExportNode(node, opts.selectedOnly);
 
@@ -7171,6 +7175,7 @@ export class MeshEditorService {
       this.events.onToast?.(`Export failed: ${err.message || err}`, 'error');
       this.events.onStatusChanged?.('Export error');
     } finally {
+      this.heightmapController?.restoreMeshesAfterExport();
       this.weightPaintController?.restoreMeshesAfterExport();
     }
   }
@@ -7180,6 +7185,7 @@ export class MeshEditorService {
       this.decalController.mergeAllDecalsIntoMeshes();
     }
     this.weightPaintController?.prepareMeshesForExport();
+    this.heightmapController?.prepareMeshesForExport();
     try {
       const shouldExport = (node: any) => this.shouldExportNode(node, false);
       const glb = await GLTF2Export.GLBAsync(this.scene, filename, {
@@ -7211,6 +7217,7 @@ export class MeshEditorService {
         }
       });
     } finally {
+      this.heightmapController?.restoreMeshesAfterExport();
       this.weightPaintController?.restoreMeshesAfterExport();
     }
   }
@@ -7298,7 +7305,12 @@ export class MeshEditorService {
     }
 
     const baseName = filename || this.currentFilename || 'compressed_model';
-    return ModelCompressor.exportCompressedModel(this.scene, targetMeshes, baseName, options);
+    this.heightmapController?.prepareMeshesForExport();
+    try {
+      return await ModelCompressor.exportCompressedModel(this.scene, targetMeshes, baseName, options);
+    } finally {
+      this.heightmapController?.restoreMeshesAfterExport();
+    }
   }
 
   /* =========================================================================

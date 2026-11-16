@@ -45,6 +45,7 @@ import {
   GenerateTextureTool,
   CreateTextMeshTool,
   DecalTool,
+  CreateHeightmapTool,
 } from './builtin';
 
 /**
@@ -173,5 +174,6 @@ export function createDefaultToolRegistry(): ToolRegistry {
     new GenerateTextureTool(),
     new CreateTextMeshTool(),
     new DecalTool(),
+    new CreateHeightmapTool(),
   ]);
 }

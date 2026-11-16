@@ -1,5 +1,6 @@
-import { NullEngine, MeshBuilder, Mesh, Vector3 } from '@babylonjs/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { NullEngine, MeshBuilder, Mesh, GroundMesh, Vector3 } from '@babylonjs/core';
+import { TerrainMaterial } from '@babylonjs/materials';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MeshEditorApp } from '../../src/MeshEditorApp';
 import { MeshEditorService } from '../../src/MeshEditorService';
 import {
@@ -26,6 +27,7 @@ import {
   MaterialEditorTool,
   SceneEnvironmentEditorTool,
   AnimationPlayerEditorTool,
+  HeightmapEditorTool,
 } from '../../src/tools';
 
 describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)', () => {
@@ -103,11 +105,11 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('2. ToolRegistry Management', () => {
-    it('initializes default registry with all 44 built-in modeling tools', () => {
+    it('initializes default registry with all 45 built-in modeling tools', () => {
       const registry = createDefaultToolRegistry();
       const allTools = registry.getAll();
 
-      expect(allTools.length).toBe(44);
+      expect(allTools.length).toBe(45);
       expect(registry.has('modeler_get_scene_info')).toBe(true);
       expect(registry.has('modeler_plan_model')).toBe(true);
       expect(registry.has('modeler_create_primitive')).toBe(true);
@@ -152,9 +154,10 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(registry.has('modeler_generate_texture')).toBe(true);
       expect(registry.has('modeler_create_text_mesh')).toBe(true);
       expect(registry.has('modeler_decal')).toBe(true);
+      expect(registry.has('modeler_create_heightmap')).toBe(true);
 
       const openAiDefs = registry.getOpenAITools();
-      expect(openAiDefs.length).toBe(44);
+      expect(openAiDefs.length).toBe(45);
       expect(openAiDefs.every((d) => d.type === 'function' && typeof d.function.name === 'string')).toBe(true);
     });
 
@@ -271,9 +274,9 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('4. Tool Abstraction, In-App Help Guides & Dialog Wiring', () => {
-    it('provides unified ToolInterface metadata and comprehensive English help text for all 20 editor tools', () => {
+    it('provides unified ToolInterface metadata and comprehensive English help text for all 21 editor tools', () => {
       const editorTools = getBuiltinEditorTools();
-      expect(editorTools.length).toBe(20);
+      expect(editorTools.length).toBe(21);
 
       const requiredTools = [
         'scene_outliner',
@@ -296,6 +299,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
         'ai_texture_generator',
         'text_mesh',
         'decal_painter',
+        'heightmap_terrain',
       ];
 
       for (const name of requiredTools) {
@@ -443,7 +447,12 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
 
     it('instantiates all decentralized editor tool classes with self-contained configurations and help guides', () => {
       const tools = createBuiltinEditorTools();
-      expect(tools.length).toBe(20);
+      expect(tools.length).toBe(21);
+
+      const heightmapTool = new HeightmapEditorTool();
+      expect(heightmapTool.name).toBe('heightmap_terrain');
+      expect(heightmapTool.dialogId).toBe('dialog-heightmap');
+      expect(heightmapTool.helpText).toContain('Heightmap Terrain');
 
       const outliner = new OutlinerEditorTool();
       expect(outliner.name).toBe('scene_outliner');
@@ -923,6 +932,202 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(crateAfter).toBeDefined();
       expect(crateAfter.getTotalVertices()).toBeGreaterThan(initialVerts);
       expect(crateAfter.metadata?.mergedDecalCount).toBe(2);
+    });
+  });
+
+  describe('9. Heightmap Terrain Tool (User UI, 2-Tab Paint Editor & AI Tool)', () => {
+    it('initializes heightmap with black ground, supports grayscale & RGB painting with size/smoothness, and redraws GroundMesh on OK', async () => {
+      document.body.innerHTML = '';
+      const container = document.createElement('div');
+      container.id = 'app-heightmap-container';
+      document.body.appendChild(container);
+
+      const app = new MeshEditorApp({
+        container,
+        engine,
+      });
+
+      const ctrl = app.service.heightmapController;
+
+      // Default heightmap starts pure black (0)
+      expect(ctrl.heightmapRgba[0]).toBe(0);
+      expect(ctrl.heightmapRgba[1]).toBe(0);
+      expect(ctrl.heightmapRgba[2]).toBe(0);
+
+      // Open Heightmap tool dialog
+      app.toggleDialog('dialog-heightmap', true);
+      const dlg = container.querySelector('#dialog-heightmap') as HTMLElement;
+      expect(dlg.style.display).toBe('flex');
+
+      // Default tab is Heightmap (Grayscale), Mix tab hidden
+      const heightPane = container.querySelector('#heightmapTabPaneHeight') as HTMLElement;
+      const mixPane = container.querySelector('#heightmapTabPaneMix') as HTMLElement;
+      expect(heightPane.style.display).not.toBe('none');
+      expect(mixPane.style.display).toBe('none');
+
+      // Open 2-tab Paint Editor modal
+      (container.querySelector('#btnOpenHeightmapPainter') as HTMLButtonElement).click();
+      const paintModal = container.querySelector('#heightmapPaintModal') as HTMLElement;
+      expect(paintModal.classList.contains('active')).toBe(true);
+
+      // Set brush size & smoothness via UI controls and paint white grayscale hill in center
+      const sizeRange = container.querySelector('#heightmapBrushSizeRange') as HTMLInputElement;
+      const smoothRange = container.querySelector('#heightmapBrushSmoothnessRange') as HTMLInputElement;
+      sizeRange.value = '48';
+      sizeRange.dispatchEvent(new Event('input'));
+      smoothRange.value = '80';
+      smoothRange.dispatchEvent(new Event('input'));
+
+      expect(ctrl.brushSize).toBe(48);
+      expect(ctrl.brushSmoothness).toBeCloseTo(0.8);
+
+      // Paint white stroke on black heightmap
+      ctrl.paintHeightmapStroke(128, 128, 128, 128, { size: 48, smoothness: 0.8, value: 255 });
+      const centerIdx = (128 * ctrl.mapSize + 128) * 4;
+      const edgeIdx = (128 * ctrl.mapSize + 148) * 4;
+      expect(ctrl.heightmapRgba[centerIdx]).toBe(255);
+      expect(ctrl.heightmapRgba[edgeIdx]).toBeGreaterThan(0);
+      expect(ctrl.heightmapRgba[edgeIdx]).toBeLessThan(255);
+
+      // Switch to Tab 2 (Mix Texture RGB) and paint a green path
+      (container.querySelector('#paintModalTabMix') as HTMLButtonElement).click();
+      (container.querySelector('#btnPaintChannelGreen') as HTMLButtonElement).click();
+      expect(ctrl.brushRgbChannel).toBe('g');
+      ctrl.paintMixmapStroke(20, 128, 230, 128, { size: 24, smoothness: 0.5, channel: 'g' });
+      expect(ctrl.hasCustomMixMap).toBe(true);
+      expect(ctrl.mixmapRgba[centerIdx + 1]).toBe(255);
+      expect(ctrl.mixmapRgba[centerIdx]).toBe(0);
+
+      // Press OK button -> closes modal and immediately redraws 3D GroundMesh
+      (container.querySelector('#btnConfirmHeightmapPaint') as HTMLButtonElement).click();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(paintModal.classList.contains('active')).toBe(false);
+
+      const terrainMesh = ctrl.getActiveTerrainMesh();
+      expect(terrainMesh).not.toBeNull();
+      expect(terrainMesh instanceof GroundMesh).toBe(true);
+      expect(terrainMesh!.material instanceof TerrainMaterial).toBe(true);
+
+      // Verify elevated center vs black border
+      const bbox = terrainMesh!.getBoundingInfo().boundingBox;
+      expect(bbox.maximum.y).toBeGreaterThan(8);
+      expect(bbox.minimum.y).toBeCloseTo(0, 2);
+
+      app.dispose();
+    });
+
+    it('individually assigns the 3 terrain textures and immediately re-renders the mesh upon selection', async () => {
+      document.body.innerHTML = '';
+      const container = document.createElement('div');
+      container.id = 'app-heightmap-tex-container';
+      document.body.appendChild(container);
+
+      const app = new MeshEditorApp({
+        container,
+        engine,
+      });
+
+      const ctrl = app.service.heightmapController;
+      app.toggleDialog('dialog-heightmap', true);
+
+      // Build an initial terrain mesh
+      const terrain = await ctrl.buildOrUpdateTerrainMesh({
+        preset: 'island',
+        width: 80,
+        height: 80,
+        subdivisions: 32,
+        maxHeight: 12,
+      });
+
+      const renderSpy = vi.spyOn(app.service.scene, 'render');
+      const tex1Select = container.querySelector('#heightmapTex1Select') as HTMLSelectElement;
+      const tex2Select = container.querySelector('#heightmapTex2Select') as HTMLSelectElement;
+      const tex3Select = container.querySelector('#heightmapTex3Select') as HTMLSelectElement;
+
+      // Select Texture 1 (Red channel) -> immediately updates & re-renders
+      tex1Select.value = 'snow';
+      tex1Select.dispatchEvent(new Event('change'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(ctrl.config.terrainTextureName1).toBe('snow');
+      expect((terrain.material as TerrainMaterial).diffuseTexture1.name).toContain('snow');
+      expect(renderSpy).toHaveBeenCalled();
+
+      // Select Texture 2 (Green channel) -> immediately updates & re-renders
+      renderSpy.mockClear();
+      tex2Select.value = 'cobblestone';
+      tex2Select.dispatchEvent(new Event('change'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(ctrl.config.terrainTextureName2).toBe('cobblestone');
+      expect((terrain.material as TerrainMaterial).diffuseTexture2.name).toContain('cobblestone');
+      expect(renderSpy).toHaveBeenCalled();
+
+      // Select Texture 3 (Blue channel) -> immediately updates & re-renders
+      renderSpy.mockClear();
+      tex3Select.value = 'volcanic';
+      tex3Select.dispatchEvent(new Event('change'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(ctrl.config.terrainTextureName3).toBe('volcanic');
+      expect((terrain.material as TerrainMaterial).diffuseTexture3.name).toContain('volcanic');
+      expect(renderSpy).toHaveBeenCalled();
+
+      app.dispose();
+    });
+
+    it('creates and updates heightmap terrains via AI tool modeler_create_heightmap with paths and GLB export', async () => {
+      const resJson = await service.aiAgent.executeToolCall('modeler_create_heightmap', {
+        name: 'VolcanicIsland',
+        preset: 'island',
+        width: 100,
+        height: 100,
+        subdivisions: 40,
+        minHeight: 0,
+        maxHeight: 14,
+        texture1: 'volcanic',
+        texture2: 'cobblestone',
+        texture3: 'sand',
+        textureScale: [12, 16, 10],
+        heightStrokes: [
+          {
+            points: [
+              [0.5, 0.5],
+              [0.6, 0.6],
+            ],
+            size: 36,
+            smoothness: 0.75,
+            value: 255,
+          },
+        ],
+        pathPoints: [
+          [-30, 1, -20],
+          [0, 2, 0],
+          [30, 1, 20],
+        ],
+        pathWidth: 10,
+        pathTransitionWidth: 5,
+        pathYOffset: 0,
+        pathProjection: true,
+      });
+
+      const res = JSON.parse(resJson);
+      expect(res.status).toBe('ok');
+      expect(res.meshName).toBe('VolcanicIsland');
+      expect(res.textures).toEqual(['volcanic', 'cobblestone', 'sand']);
+      expect(res.vertices).toBe(41 * 41);
+
+      const terrainMesh = service.importedMeshes.find((m) => m.name === 'VolcanicIsland') as GroundMesh;
+      expect(terrainMesh).toBeDefined();
+      expect(terrainMesh instanceof GroundMesh).toBe(true);
+      expect(terrainMesh.material instanceof TerrainMaterial).toBe(true);
+      const tm = terrainMesh.material as TerrainMaterial;
+      expect(tm.diffuseTexture1.uScale).toBe(12);
+      expect(tm.diffuseTexture2.uScale).toBe(16);
+      expect(tm.diffuseTexture3.uScale).toBe(10);
+
+      // Verify GLB export works cleanly and restores TerrainMaterial afterwards
+      const glbBlob = await service.exportToGLBBlob('volcanic_island');
+      expect(glbBlob).toBeDefined();
+      expect(glbBlob.size).toBeGreaterThan(0);
+      expect(terrainMesh.material instanceof TerrainMaterial).toBe(true);
     });
   });
 });

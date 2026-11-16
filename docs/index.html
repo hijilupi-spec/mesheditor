@@ -222,6 +222,10 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span><strong>Create mountains, islands &amp; heightmap terrains:</strong> Upload grayscale heightmaps or paint elevation on a black ground in the <strong>2-Tab Paint Editor</strong> (brush <strong>Size</strong> &amp; <strong>Smoothness</strong>), paint RGB <strong>Mix Textures</strong> for trails and roads, assign each of the <strong>3 splat textures</strong> individually with instant re-render on <code>GroundMesh</code> + <code>TerrainMaterial</code>, or generate terrains via AI with <code>modeler_create_heightmap</code>.</span>
+            </li>
+            <li class="overview-bullet-item">
+              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
               <span><strong>Work precisely with units &amp; snapping:</strong> Navigate with Universal Orbit, Pan, and WASD fly-through. Work with project units, grid, vertex snapping, numeric controls, and focus (<kbd>F</kbd>).</span>
             </li>
             <li class="overview-bullet-item">
@@ -1241,6 +1245,114 @@
             </p>
           </div>
         </div>
+
+        <!-- Heightmap Terrain & 3-Texture RGB Splatting Showcase -->
+        <div id="heightmap-terrain" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="section-header" style="margin-bottom: 36px;">
+            <span class="section-tag">Heightmap Terrain &amp; 3-Texture RGB Splatting</span>
+            <h3 class="section-title" style="font-size: 32px;">Sculpt Islands, Mountains &amp; Pathways on GroundMesh.</h3>
+            <p class="section-desc">
+              Powered by Babylon.js <code>GroundMesh</code> and <code>TerrainMaterial</code>, the <strong>Heightmap Terrain</strong> tool lets both artists and the AI Agent build landscapes with grayscale elevation maps, RGB mix texture path splatting, and 3 individually assignable surface textures.
+            </p>
+          </div>
+
+          <div class="ai-feature-card-grid" style="margin-bottom: 36px;">
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 3 4 8 5-5 5 15H2L8 3z"></path></svg>
+              </div>
+              <h4 class="card-title">2-Tab Grayscale &amp; RGB Paint Editor</h4>
+              <p class="card-desc">
+                <strong>Tab 1 (Heightmap)</strong> starts on a pure black canvas for painting elevation in grayscale with adjustable brush <strong>Size</strong> and radial <strong>Smoothness</strong>, or uploading heightmap images and presets (<em>Island</em>, <em>Mountains</em>, <em>Volcano</em>, <em>Canyon</em>, <em>Dunes</em>). <strong>Tab 2 (Mix Texture)</strong> paints RGB splat channels to carve paths and trails. Pressing <strong>OK</strong> immediately redraws the 3D terrain mesh.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Grayscale Brush</span>
+                <span class="card-tag">Size &amp; Smoothness</span>
+                <span class="card-tag">RGB Mix Editor</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              </div>
+              <h4 class="card-title">3-Texture Individual Splatting</h4>
+              <p class="card-desc">
+                Assign <strong>Texture 1 (Red &mdash; Peaks)</strong>, <strong>Texture 2 (Green &mdash; Mid / Path)</strong>, and <strong>Texture 3 (Blue &mdash; Base / Shore)</strong> individually from 10 procedural terrain presets (<code>rock</code>, <code>grass</code>, <code>sand</code>, <code>snow</code>, <code>cobblestone</code>, <code>volcanic</code>, <code>water</code>), AI/scene textures, or custom uploads. Selecting any texture immediately re-renders the mesh.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">TerrainMaterial</span>
+                <span class="card-tag">Instant Re-Render</span>
+                <span class="card-tag">Custom UV Scale</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+              </div>
+              <h4 class="card-title">AI Terrain &amp; Path Projection</h4>
+              <p class="card-desc">
+                The AI Mesh Agent calls <code>modeler_create_heightmap</code> directly (with ready-to-use Quick Prompts for <em>Alpine Mountains</em>, <em>Tropical Island</em>, <em>Volcano Crater</em>, and <em>River Canyon</em>) to sculpt elevations via <code>heightStrokes</code>, paint trails via <code>mixStrokes</code>, carve 3D <code>pathPoints</code> corridors, and export cleanly to GLB.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">modeler_create_heightmap</span>
+                <span class="card-tag">Path Carving</span>
+                <span class="card-tag">GLB Export Ready</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="plugin-section-grid">
+            <div>
+              <span class="section-tag">Human + AI Terrain Workflow</span>
+              <h4 class="section-title" style="font-size: 26px;">Paint Elevation &amp; Trails Manually, or Generate Worlds via AI.</h4>
+              <p class="section-desc" style="margin-bottom: 18px;">
+                Every terrain parameter&mdash;mesh dimensions, grid subdivisions, min/max elevation, grayscale strokes, RGB mixmaps, and 3 individual surface textures&mdash;stays synchronized between the <strong>Heightmap Terrain</strong> studio dialog and the AI tool pipeline:
+              </p>
+              <ul class="adapter-list" style="margin-bottom: 20px;">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Live 2-Tab Brush Canvas:</strong> Start on black ground, paint smooth white mountains in Tab 1, switch to Tab 2 to paint a green path on the RGB mixmap, and click <strong>OK &amp; Redraw Mesh</strong>.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Instant Per-Channel Texture Swaps:</strong> Change Texture 1, 2, or 3 independently from dropdowns or file uploads and see the 3D <code>GroundMesh</code> re-render immediately.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Automated GLB Composite PBR Export:</strong> Exporting blends the 3 splat textures via the RGB mixmap into a standard glTF PBR material, then restores the live <code>TerrainMaterial</code>.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="code-window">
+              <div class="code-header">
+                <div class="code-dots">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="code-title">Heightmap Terrain &amp; 3-Texture Splatting &bull; AI Tool</span>
+                <span style="font-size: 11px; color: var(--accent-hover);">GroundMesh</span>
+              </div>
+              <pre class="code-body"><code><span class="code-cm">// Generate an island or mountain range with 3 splat textures &amp; path</span>
+<span class="code-fn">modeler_create_heightmap</span>({
+  name: <span class="code-str">'Alpine_Mountains'</span>,
+  preset: <span class="code-str">'mountains'</span>, <span class="code-cm">// island | peak | volcano | canyon | dunes</span>
+  width: <span class="code-num">100</span>, height: <span class="code-num">100</span>, subdivisions: <span class="code-num">100</span>,
+  minHeight: <span class="code-num">0</span>, maxHeight: <span class="code-num">22</span>,
+  texture1: <span class="code-str">'snow'</span>,        <span class="code-cm">// Red channel (high peaks)</span>
+  texture2: <span class="code-str">'cobblestone'</span>, <span class="code-cm">// Green channel (carved pass)</span>
+  texture3: <span class="code-str">'rock'</span>,        <span class="code-cm">// Blue channel (cliff base)</span>
+  textureScale: [<span class="code-num">12</span>, <span class="code-num">16</span>, <span class="code-num">10</span>],
+  heightStrokes: [{ points: [[<span class="code-num">0.5</span>, <span class="code-num">0.5</span>]], size: <span class="code-num">40</span>, smoothness: <span class="code-num">0.8</span>, value: <span class="code-num">255</span> }],
+  pathPoints: [[<span class="code-num">-45</span>, <span class="code-num">3</span>, <span class="code-num">-35</span>], [<span class="code-num">0</span>, <span class="code-num">4</span>, <span class="code-num">0</span>], [<span class="code-num">45</span>, <span class="code-num">3</span>, <span class="code-num">35</span>]],
+  pathWidth: <span class="code-num">8</span>, pathProjection: <span class="code-kw">true</span>
+});</code></pre>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1261,7 +1373,7 @@
           <div class="feature-card">
             <h3 class="card-title">Game Developers &amp; Indies</h3>
             <p class="card-desc">
-              Complete high-to-low-poly production in one window: sculpt characters or hard-surface props, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs to uniform Texel Density, bake Normal &amp; AO maps, rig with 4-bone Weight Painting, compress with Draco, and export to Unity, Unreal Engine, or Godot.
+              Complete high-to-low-poly production and environment authoring in one window: paint heightmap terrains with 3-texture RGB splatting, sculpt characters or hard-surface props, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs to uniform Texel Density, bake Normal &amp; AO maps, rig with 4-bone Weight Painting, compress with Draco, and export to Unity, Unreal Engine, or Godot.
             </p>
           </div>
 

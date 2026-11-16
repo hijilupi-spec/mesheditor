@@ -354,6 +354,7 @@
         <%- include('./tools/editor/AITextureEditorTool.ejs') %>
         <%- include('./tools/editor/TextMeshEditorTool.ejs') %>
         <%- include('./tools/editor/DecalEditorTool.ejs') %>
+        <%- include('./tools/editor/HeightmapEditorTool.ejs') %>
       </div>
 
       <!-- Bottom Status Bar -->
@@ -423,7 +424,7 @@
               <i class="app-icon" data-lucide="wand-2"></i> Prompting Guide
             </button>
             <button type="button" class="prompt-tab-btn" data-tab="tools">
-              <i class="app-icon" data-lucide="wrench"></i> Available AI Tools <span class="tab-badge" id="promptHelpToolCountBadge">44</span>
+              <i class="app-icon" data-lucide="wrench"></i> Available AI Tools <span class="tab-badge" id="promptHelpToolCountBadge">45</span>
             </button>
             <button type="button" class="prompt-tab-btn" data-tab="examples">
               <i class="app-icon" data-lucide="sparkles"></i> Prompt Templates
@@ -763,6 +764,138 @@
             <button class="tool-btn btn-export" id="btnConfirmExport">
               <span class="btn-icon"><i class="app-icon" data-lucide="download"></i></span>
               <span class="btn-label">Export</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Heightmap & Mix Texture 2-Tab Paint Editor Modal Dialog -->
+      <div id="heightmapPaintModal">
+        <div class="modal-content heightmap-paint-dialog" role="dialog" aria-modal="true" aria-labelledby="heightmapPaintModalTitle">
+          <div class="modal-header">
+            <h3 id="heightmapPaintModalTitle"><i class="app-icon" data-lucide="brush"></i> Heightmap &amp; Mix Texture Paint Editor</h3>
+            <button type="button" class="dialog-btn btn-close" id="btnCloseHeightmapPaintModal" title="Close"><i class="app-icon" data-lucide="x"></i></button>
+          </div>
+
+          <!-- 2-Tab Switcher: Tab 1 Heightmap (Grayscale) [Default], Tab 2 Mix Texture (RGB) -->
+          <div class="prompt-help-tabs" id="heightmapPaintModalTabs">
+            <button type="button" class="prompt-tab-btn active" id="paintModalTabHeight" data-paint-tab="height">
+              <i class="app-icon" data-lucide="mountain"></i> Heightmap (Grayscale)
+            </button>
+            <button type="button" class="prompt-tab-btn" id="paintModalTabMix" data-paint-tab="mix">
+              <i class="app-icon" data-lucide="layers"></i> Mix Texture (RGB)
+            </button>
+          </div>
+
+          <div class="modal-body heightmap-paint-modal-body">
+            <div class="heightmap-paint-layout">
+              <!-- Left: Interactive 2D Paint Canvas -->
+              <div class="heightmap-paint-canvas-wrap">
+                <canvas
+                  id="heightmapPaintCanvas"
+                  width="256"
+                  height="256"
+                  class="heightmap-paint-canvas"
+                  title="Left-Click and drag to paint"
+                ></canvas>
+                <div class="tool-sublabel" id="heightmapPaintCanvasHint" style="text-align: center; margin-top: 6px;">
+                  Painting on black ground in grayscale: White raises terrain, Black lowers it.
+                </div>
+              </div>
+
+              <!-- Right: Brush Tools (Size, Smoothness, Color / Channels) -->
+              <div class="heightmap-paint-controls">
+                <div class="sculpt-section-title"><i class="app-icon" data-lucide="brush"></i> Brush Settings</div>
+
+                <div class="sculpt-slider-row">
+                  <div class="sculpt-slider-header">
+                    <label class="sculpt-slider-label" for="heightmapBrushSizeRange">Brush Size</label>
+                    <input type="number" id="heightmapBrushSizeNum" class="tool-number" min="2" max="120" step="1" value="28" style="width: 54px; text-align: right;" aria-label="Brush Size Value" />
+                  </div>
+                  <input type="range" id="heightmapBrushSizeRange" min="2" max="120" step="1" value="28" class="tool-range" />
+                </div>
+
+                <div class="sculpt-slider-row">
+                  <div class="sculpt-slider-header">
+                    <label class="sculpt-slider-label" for="heightmapBrushSmoothnessRange">Smoothness</label>
+                    <div class="tool-row" style="gap: 3px;">
+                      <input type="number" id="heightmapBrushSmoothnessNum" class="tool-number" min="0" max="100" step="5" value="75" style="width: 50px; text-align: right;" aria-label="Brush Smoothness Value" />
+                      <span class="tool-sublabel">%</span>
+                    </div>
+                  </div>
+                  <input type="range" id="heightmapBrushSmoothnessRange" min="0" max="100" step="5" value="75" class="tool-range" />
+                </div>
+
+                <!-- Tab 1 Controls: Grayscale Brush -->
+                <div id="paintModalGrayscaleControls" class="heightmap-paint-mode-group">
+                  <div class="sculpt-slider-row">
+                    <div class="sculpt-slider-header">
+                      <label class="sculpt-slider-label" for="heightmapBrushGrayRange">Grayscale Value</label>
+                      <span id="heightmapBrushGrayVal" class="sculpt-slider-val">255 (White)</span>
+                    </div>
+                    <input type="range" id="heightmapBrushGrayRange" min="0" max="255" step="1" value="255" class="tool-range" />
+                  </div>
+
+                  <div class="tool-row" style="gap: 4px; margin-top: 4px;">
+                    <button type="button" id="btnPaintGrayWhite" class="sculpt-btn active" style="flex: 1; font-size: 10px;">White (255)</button>
+                    <button type="button" id="btnPaintGrayMid" class="sculpt-btn" style="flex: 1; font-size: 10px;">Gray (128)</button>
+                    <button type="button" id="btnPaintGrayBlack" class="sculpt-btn" style="flex: 1; font-size: 10px;">Black (0)</button>
+                  </div>
+
+                  <div class="tool-row" style="gap: 6px; margin-top: 6px;">
+                    <button type="button" id="btnPaintClearBlack" class="sculpt-btn" style="flex: 1; font-size: 11px;">
+                      <i class="app-icon" data-lucide="eraser"></i> Clear Black
+                    </button>
+                    <button type="button" id="btnPaintUploadHeight" class="sculpt-btn" style="flex: 1; font-size: 11px;">
+                      <i class="app-icon" data-lucide="upload"></i> Upload
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Tab 2 Controls: RGB Mix Texture Brush -->
+                <div id="paintModalMixControls" class="heightmap-paint-mode-group" style="display: none;">
+                  <div class="tool-label" style="margin-bottom: 4px;">Mix Channel / Color</div>
+                  <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <button type="button" id="btnPaintChannelRed" class="sculpt-btn" style="justify-content: flex-start; border-left: 4px solid #ef4444;">
+                      Red (Texture 1)
+                    </button>
+                    <button type="button" id="btnPaintChannelGreen" class="sculpt-btn active" style="justify-content: flex-start; border-left: 4px solid #22c55e;">
+                      Green (Texture 2 / Path)
+                    </button>
+                    <button type="button" id="btnPaintChannelBlue" class="sculpt-btn" style="justify-content: flex-start; border-left: 4px solid #3b82f6;">
+                      Blue (Texture 3 / Base)
+                    </button>
+                  </div>
+
+                  <div class="tool-row" style="margin-top: 6px; justify-content: space-between;">
+                    <label class="tool-label" for="heightmapPaintCustomColor">Custom RGB</label>
+                    <input type="color" id="heightmapPaintCustomColor" value="#00ff00" class="path-extrusion-color-input" />
+                  </div>
+
+                  <div class="tool-row" style="gap: 6px; margin-top: 6px;">
+                    <button type="button" id="btnPaintResetMixFromHeight" class="sculpt-btn" style="flex: 1; font-size: 11px;">
+                      <i class="app-icon" data-lucide="sparkles"></i> Auto-Mix
+                    </button>
+                    <button type="button" id="btnPaintUploadMix" class="sculpt-btn" style="flex: 1; font-size: 11px;">
+                      <i class="app-icon" data-lucide="upload"></i> Upload RGB
+                    </button>
+                  </div>
+                </div>
+
+                <div style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 8px; margin-top: auto;">
+                  <button type="button" id="btnPaintUndoStroke" class="sculpt-btn" style="width: 100%; height: 28px;">
+                    <i class="app-icon" data-lucide="undo-2"></i> Undo Last Stroke
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer export-modal-footer">
+            <button type="button" class="tool-btn" id="btnCancelHeightmapPaint">Cancel</button>
+            <button type="button" class="tool-btn tool-btn-primary" id="btnConfirmHeightmapPaint">
+              <span class="btn-icon"><i class="app-icon" data-lucide="check"></i></span>
+              <span class="btn-label">OK &amp; Redraw Mesh</span>
             </button>
           </div>
         </div>

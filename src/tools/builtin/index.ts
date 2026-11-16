@@ -42,4 +42,5 @@ export * from './RigWeightTool';
 export * from './GenerateTextureTool';
 export * from './CreateTextMeshTool';
 export * from './DecalTool';
+export * from './CreateHeightmapTool';
 

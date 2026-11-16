@@ -1529,7 +1529,8 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
 #helpModal,
 #exportModal,
 #toolHelpModal,
-#promptHelpModal {
+#promptHelpModal,
+#heightmapPaintModal {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.72);
@@ -1544,8 +1545,68 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
 #helpModal.active,
 #exportModal.active,
 #toolHelpModal.active,
-#promptHelpModal.active {
+#promptHelpModal.active,
+#heightmapPaintModal.active {
   display: flex;
+}
+
+.heightmap-paint-dialog {
+  background: var(--bg-header);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  width: 660px;
+  max-width: 94vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.heightmap-paint-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.heightmap-paint-layout {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.heightmap-paint-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.heightmap-paint-canvas {
+  width: 340px;
+  height: 340px;
+  background: #000000;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: crosshair;
+  touch-action: none;
+  image-rendering: auto;
+}
+
+.heightmap-paint-controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.heightmap-paint-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 8px;
 }
 
 /* Tool Help Guide Dialog */
