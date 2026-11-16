@@ -1119,6 +1119,10 @@ export class MeshEditorApp {
       this.closeAllDropdowns();
       this.triggerImportModel();
     });
+    this.getElement('btnSaveBabylonScene')?.addEventListener('click', () => {
+      this.closeAllDropdowns();
+      void this.saveBabylonScene();
+    });
     this.getElement('btnExportMenu')?.addEventListener('click', () => {
       this.closeAllDropdowns();
       this.openExportDialog();
@@ -2840,6 +2844,18 @@ export class MeshEditorApp {
 
     this.closeExportDialog();
     await this.service.exportCurrentModel({ filename, format, selectedOnly });
+  }
+
+  /**
+   * Saves the full Babylon.js scene and embedded MeshEditor project state as a .babylon file.
+   */
+  public async saveBabylonScene(): Promise<void> {
+    const filename = (this.service.exportParams.filename || 'scene').trim() || 'scene';
+    await this.service.exportCurrentModel({
+      filename,
+      format: 'babylon',
+      selectedOnly: false,
+    });
   }
 
   private initFacetToolUI(): void {

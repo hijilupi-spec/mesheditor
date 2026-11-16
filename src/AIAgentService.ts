@@ -300,6 +300,9 @@ export class AIAgentService {
       if (lower === 'gemini-3.1-pro-preview' || lower === 'gemini-4-argon') {
         return 'gemini-4-argon-medium';
       }
+      if (lower === 'gemini-4-hydrogen' || lower === 'hydrogen') {
+        return 'gemini-4-hydrogen-medium';
+      }
       return m;
     }
 

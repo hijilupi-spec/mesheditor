@@ -25,6 +25,11 @@ const DEFAULT_AGY_MODELS = [
   'gemini-4-argon-medium',
   'gemini-4-argon-high',
   'gemini-4-argon-low',
+  'gemini-4-hydrogen-medium',
+  'gemini-4-hydrogen-high',
+  'gemini-4-hydrogen-xhigh',
+  'gemini-4-hydrogen-low',
+  'gemini-pro-orchestrator-g1-pro',
   'claude-sonnet-5-5-medium',
   'claude-sonnet-5-5-high',
   'claude-sonnet-5-5-low',
@@ -76,7 +81,13 @@ function normalizeAgyModel(requestedModel) {
     if (raw.includes('low')) return 'gemini-3.8-flash-low';
     return 'gemini-3.8-flash-medium';
   }
-  if (raw.includes('argon') || raw.includes('3.1-pro') || raw.includes('2.5-pro') || raw.includes('gemini-pro')) {
+  if (raw.includes('hydrogen')) {
+    if (raw.includes('xhigh')) return 'gemini-4-hydrogen-xhigh';
+    if (raw.includes('high')) return 'gemini-4-hydrogen-high';
+    if (raw.includes('low')) return 'gemini-4-hydrogen-low';
+    return 'gemini-4-hydrogen-medium';
+  }
+  if (raw.includes('argon') || raw.includes('3.1-pro') || raw.includes('2.5-pro') || raw === 'gemini-pro') {
     if (raw.includes('high')) return 'gemini-4-argon-high';
     if (raw.includes('low')) return 'gemini-4-argon-low';
     return 'gemini-4-argon-medium';
@@ -209,7 +220,7 @@ async function listAgyModels() {
       for (const line of lines) {
         const clean = line.replace(/^[\s⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]+/, '').trim();
         if (!clean || clean.startsWith('Fetching')) continue;
-        const match = clean.match(/^([a-z0-9._-]+)\s{2,}(.+)$/i);
+        const match = clean.match(/^([a-z0-9._-]+)(?:\t+|\s{2,})(.+)$/i);
         if (match) {
           parsed.push(match[1].trim());
         }

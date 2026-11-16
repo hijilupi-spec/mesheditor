@@ -1669,6 +1669,27 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(details.statusCode).toBe(429);
       expect(details.message).toContain('Individual quota reached');
     });
+
+    it('includes and normalizes all Gemini 4 Hydrogen modes (low, medium, high, xhigh)', () => {
+      const require = createRequire(import.meta.url);
+      const bridge = require('../../scripts/antigravity-bridge.js');
+
+      expect(bridge.DEFAULT_AGY_MODELS).toEqual(
+        expect.arrayContaining([
+          'gemini-4-hydrogen-low',
+          'gemini-4-hydrogen-medium',
+          'gemini-4-hydrogen-high',
+          'gemini-4-hydrogen-xhigh',
+        ])
+      );
+
+      expect(bridge.normalizeAgyModel('gemini-4-hydrogen-low')).toBe('gemini-4-hydrogen-low');
+      expect(bridge.normalizeAgyModel('gemini-4-hydrogen-medium')).toBe('gemini-4-hydrogen-medium');
+      expect(bridge.normalizeAgyModel('gemini-4-hydrogen-high')).toBe('gemini-4-hydrogen-high');
+      expect(bridge.normalizeAgyModel('gemini-4-hydrogen-xhigh')).toBe('gemini-4-hydrogen-xhigh');
+      expect(bridge.normalizeAgyModel('gemini-4-hydrogen')).toBe('gemini-4-hydrogen-medium');
+      expect(bridge.normalizeAgyModel('hydrogen-xhigh')).toBe('gemini-4-hydrogen-xhigh');
+    });
   });
 });
 
