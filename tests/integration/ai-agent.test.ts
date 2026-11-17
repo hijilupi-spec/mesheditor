@@ -1687,6 +1687,80 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(bridge.normalizeAgyModel('gemini-4-hydrogen')).toBe('gemini-4-hydrogen-medium');
       expect(bridge.normalizeAgyModel('hydrogen-xhigh')).toBe('gemini-4-hydrogen-xhigh');
     });
+
+    it('persists optional promptSuffix in config and appends it to user prompts when set', async () => {
+      const capturedBodies: any[] = [];
+      service.aiAgent.customFetch = vi.fn(async (_url: string, init: any) => {
+        capturedBodies.push(JSON.parse(init.body));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { role: 'assistant', content: 'Done.' } }],
+          }),
+        } as any;
+      }) as any;
+
+      // Without promptSuffix, prompt is sent unchanged
+      await service.aiAgent.runPrompt({ prompt: 'Build a wooden barrel' });
+      expect(capturedBodies[0].messages[1]).toEqual({
+        role: 'user',
+        content: 'Build a wooden barrel',
+      });
+
+      // Configure promptSuffix and verify persistence
+      const updated = service.aiAgent.saveConfig({
+        promptSuffix: 'Use low-poly stylized fantasy art style.',
+      });
+      expect(updated.promptSuffix).toBe('Use low-poly stylized fantasy art style.');
+
+      const stored = JSON.parse(localStorage.getItem('mesheditor_ai_agent_config') || '{}');
+      expect(stored.promptSuffix).toBe('Use low-poly stylized fantasy art style.');
+      expect(service.aiAgent.loadSavedConfig().promptSuffix).toBe('Use low-poly stylized fantasy art style.');
+
+      // Text prompt has promptSuffix appended at the end
+      await service.aiAgent.runPrompt({ prompt: 'Build a stone tower' });
+      const lastUserMsg = capturedBodies[1].messages[capturedBodies[1].messages.length - 1];
+      expect(lastUserMsg).toEqual({
+        role: 'user',
+        content: 'Build a stone tower\n\nUse low-poly stylized fantasy art style.',
+      });
+
+      // Multimodal prompt (text + image) also has promptSuffix appended
+      await service.aiAgent.runPrompt({
+        prompt: 'Recreate this shield',
+        images: ['data:image/png;base64,AAAA'],
+      });
+      const multimodalMsg = capturedBodies[2].messages[capturedBodies[2].messages.length - 1];
+      expect(multimodalMsg.role).toBe('user');
+      expect(multimodalMsg.content[0]).toEqual({
+        type: 'text',
+        text: 'Recreate this shield\n\nUse low-poly stylized fantasy art style.',
+      });
+    });
+
+    it('wires #aiPromptSuffixInput in AI Settings modal to config and resets to empty on defaults restore', () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const nullEngine = new NullEngine();
+      const app = new MeshEditorApp({ container, engine: nullEngine });
+      try {
+        const suffixInput = container.querySelector<HTMLTextAreaElement>('#aiPromptSuffixInput');
+        expect(suffixInput).toBeTruthy();
+
+        suffixInput!.value = 'Stylized PBR, warm rim lighting';
+        suffixInput!.dispatchEvent(new Event('change'));
+
+        expect(app.service.aiAgent.getConfig().promptSuffix).toBe('Stylized PBR, warm rim lighting');
+
+        app.resetAISettingsToDefaults();
+        expect(app.service.aiAgent.getConfig().promptSuffix).toBe('');
+        expect(suffixInput!.value).toBe('');
+      } finally {
+        app.dispose();
+        container.remove();
+      }
+    });
   });
 });
 

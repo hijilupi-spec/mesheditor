@@ -2469,6 +2469,7 @@ export class MeshEditorApp {
     const createNormalMapsCheckQuick = this.getElement<HTMLInputElement>('aiCreateNormalMapsCheckQuick');
     const visualCritiqueCheck = this.getElement<HTMLInputElement>('aiVisualCritiqueCheck');
     const visualCritiqueCheckQuick = this.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
+    const promptSuffixInput = this.getElement<HTMLTextAreaElement>('aiPromptSuffixInput');
 
     const populateModelSelect = (models: string[], selectedModel?: string) => {
       if (!modelSelect) return;
@@ -2615,6 +2616,8 @@ export class MeshEditorApp {
       if (visualCritiqueCheck) visualCritiqueCheck.checked = critiqueOn;
       if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = critiqueOn;
 
+      if (promptSuffixInput) promptSuffixInput.value = cfg.promptSuffix || '';
+
       syncNeuralProvidersUI();
       syncImageGenUI();
     };
@@ -2641,6 +2644,15 @@ export class MeshEditorApp {
     apiKeyInput?.addEventListener('change', () => {
       this.service.aiAgent.saveConfig({ apiKey: apiKeyInput.value.trim() });
       this.refreshAIEndpointBadge();
+    });
+
+    promptSuffixInput?.addEventListener('input', () => {
+      this.service.aiAgent.saveConfig({ promptSuffix: promptSuffixInput.value });
+    });
+    promptSuffixInput?.addEventListener('change', () => {
+      const trimmed = promptSuffixInput.value.trim();
+      promptSuffixInput.value = trimmed;
+      this.service.aiAgent.saveConfig({ promptSuffix: trimmed });
     });
 
     modelSelect?.addEventListener('change', () => {

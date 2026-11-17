@@ -159,6 +159,7 @@ export interface AIAgentEndpointConfig {
   createTextures?: boolean;
   createNormalMaps?: boolean;
   visualCritique?: boolean;
+  promptSuffix?: string;
   neural3DProviders?: Neural3DProvidersMap;
   imageGeneratorEnabled?: boolean;
   imageGeneratorActiveBackend?: ImageGeneratorBackendId | 'procedural';

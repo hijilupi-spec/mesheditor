@@ -90,6 +90,7 @@ export const DEFAULT_AI_AGENT_CONFIG: AIAgentEndpointConfig = {
   createTextures: true,
   createNormalMaps: true,
   visualCritique: false,
+  promptSuffix: '',
   neural3DProviders: createDefaultNeural3DProviders(),
   imageGeneratorEnabled: true,
   imageGeneratorActiveBackend: 'pollinations',
@@ -360,6 +361,8 @@ export class AIAgentService {
           typeof parsed.createNormalMaps === 'boolean' ? parsed.createNormalMaps : DEFAULT_AI_AGENT_CONFIG.createNormalMaps,
         visualCritique:
           typeof parsed.visualCritique === 'boolean' ? parsed.visualCritique : DEFAULT_AI_AGENT_CONFIG.visualCritique,
+        promptSuffix:
+          typeof parsed.promptSuffix === 'string' ? parsed.promptSuffix : DEFAULT_AI_AGENT_CONFIG.promptSuffix,
         neural3DProviders: normalizeNeural3DProviders(parsed.neural3DProviders),
         imageGeneratorEnabled:
           typeof parsed.imageGeneratorEnabled === 'boolean'
@@ -1272,7 +1275,8 @@ ${textureRule}
      AGENT EXECUTION LOOP (Text-to-Mesh, Image-to-Mesh, Mesh-Update)
      ========================================================================= */
   public async runPrompt(options: AIAgentRequestOptions): Promise<AIAgentChatMessage> {
-    const prompt = (options.prompt || '').trim();
+    const rawPrompt = (options.prompt || '').trim();
+    const promptSuffix = (this.config.promptSuffix || '').trim();
     const images = [...(options.images || [])];
 
     if (options.includeViewportSnapshot) {
@@ -1280,9 +1284,11 @@ ${textureRule}
       if (snap) images.push(snap);
     }
 
-    if (!prompt && images.length === 0) {
+    if (!rawPrompt && images.length === 0) {
       throw new Error('Please provide a prompt or attach an image.');
     }
+
+    const prompt = rawPrompt ? (promptSuffix ? `${rawPrompt}\n\n${promptSuffix}` : rawPrompt) : '';
 
     if (options.mode === 'replace_scene') {
       this.service.clearModel();
@@ -1318,12 +1324,14 @@ ${textureRule}
 
     // Current user message (multimodal if images are attached)
     if (images.length > 0) {
+      const defaultImagePrompt =
+        'Analyze this reference image and recreate the corresponding 3D model in detail using the Babylon.js Modeler tools in the scene.';
+      const imageTextPrompt =
+        prompt || (promptSuffix ? `${defaultImagePrompt}\n\n${promptSuffix}` : defaultImagePrompt);
       const contentParts: any[] = [
         {
           type: 'text',
-          text:
-            prompt ||
-            'Analyze this reference image and recreate the corresponding 3D model in detail using the Babylon.js Modeler tools in the scene.',
+          text: imageTextPrompt,
         },
       ];
       for (const imgUrl of images) {
