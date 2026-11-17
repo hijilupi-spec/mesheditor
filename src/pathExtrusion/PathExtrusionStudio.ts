@@ -40,6 +40,7 @@ const CSS = `
   justify-content: space-between;
   cursor: move;
   user-select: none;
+  touch-action: none;
   gap: 12px;
 }
 .pes-header-left {
@@ -301,6 +302,7 @@ const CSS = `
   width: 100%;
   max-width: 720px;
   aspect-ratio: 2 / 1;
+  touch-action: none;
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.6);
 }
 .pes-canvas-toolbar {
@@ -386,6 +388,9 @@ export class PathExtrusionStudio {
   private hoveredEdgeIndex: number | null = null;
   private snapGrid = 0.1; // meters
   private mouseWorldCoord = { x: 0, y: 0 };
+  private canvasToolMode: 'edit' | 'add' | 'delete' = 'edit';
+  private activeCanvasPointers: Map<number, { clientX: number; clientY: number }> = new Map();
+  private lastCanvasPinchState: { midX: number; midY: number; dist: number } | null = null;
 
   // Preset parameters state
   private currentPreset: PresetShapeName = 'pipe';
@@ -667,7 +672,7 @@ export class PathExtrusionStudio {
   }
 
   private setupDraggableHeader(header: HTMLElement): void {
-    header.addEventListener('mousedown', (e: MouseEvent) => {
+    header.addEventListener('pointerdown', (e: PointerEvent) => {
       if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).tagName === 'SELECT') return;
       this.isDragging = true;
       this.dragStartX = e.clientX;
@@ -678,7 +683,7 @@ export class PathExtrusionStudio {
       e.preventDefault();
     });
 
-    window.addEventListener('mousemove', (e: MouseEvent) => {
+    window.addEventListener('pointermove', (e: PointerEvent) => {
       if (!this.isDragging) return;
       const dx = e.clientX - this.dragStartX;
       const dy = e.clientY - this.dragStartY;
@@ -688,9 +693,11 @@ export class PathExtrusionStudio {
       this.dialog.style.margin = '0';
     });
 
-    window.addEventListener('mouseup', () => {
+    const stopDrag = () => {
       this.isDragging = false;
-    });
+    };
+    window.addEventListener('pointerup', stopDrag);
+    window.addEventListener('pointercancel', stopDrag);
   }
 
   private updatePathDropdown(): void {
@@ -1023,12 +1030,25 @@ export class PathExtrusionStudio {
     `;
     snapSelect.onchange = () => (this.snapGrid = parseFloat(snapSelect.value));
 
-    toolbar.append(fitBtn, zoomInBtn, zoomOutBtn, resetPanBtn, closedBtn, flipHBtn, flipVBtn, centerBtn, snapSelect);
+    const modeSelect = document.createElement('select');
+    modeSelect.className = 'pes-select small';
+    modeSelect.title = '2D Canvas Touch / Pointer Interaction Mode';
+    modeSelect.innerHTML = `
+      <option value="edit">Mode: Edit / Pan</option>
+      <option value="add">Mode: + Add Point</option>
+      <option value="delete">Mode: - Delete Point</option>
+    `;
+    modeSelect.value = this.canvasToolMode;
+    modeSelect.onchange = () => {
+      this.canvasToolMode = modeSelect.value as 'edit' | 'add' | 'delete';
+    };
+
+    toolbar.append(fitBtn, zoomInBtn, zoomOutBtn, resetPanBtn, closedBtn, flipHBtn, flipVBtn, centerBtn, modeSelect, snapSelect);
     canvasContainer.appendChild(toolbar);
 
     const hint = document.createElement('div');
     hint.className = 'pes-canvas-hint';
-    hint.innerHTML = '💡 <b>Controls:</b> Drag vertices • Click edge to add point • Right-click vertex to delete • Drag background to pan • Wheel to zoom';
+    hint.innerHTML = '💡 <b>Controls:</b> Drag vertices • Tap/Click edge to add point • Right-click or Delete mode to remove • 2-finger pinch to zoom • Drag background to pan';
     canvasContainer.appendChild(hint);
 
     canvasSection.appendChild(canvasContainer);
@@ -1291,33 +1311,89 @@ export class PathExtrusionStudio {
       return { cx, cy };
     };
 
-    canvas.addEventListener('mousedown', (e: MouseEvent) => {
+    const getPinchState = () => {
+      if (this.activeCanvasPointers.size < 2) return null;
+      const pts = Array.from(this.activeCanvasPointers.values());
+      return {
+        midX: (pts[0].clientX + pts[1].clientX) * 0.5,
+        midY: (pts[0].clientY + pts[1].clientY) * 0.5,
+        dist: Math.hypot(pts[1].clientX - pts[0].clientX, pts[1].clientY - pts[0].clientY),
+      };
+    };
+
+    canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+      this.activeCanvasPointers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+
+      if (this.activeCanvasPointers.size >= 2) {
+        this.isCanvasDragging = false;
+        this.draggedVertexIndex = null;
+        this.isPanning = false;
+        this.lastCanvasPinchState = getPinchState();
+        return;
+      }
+
       const { cx, cy } = getCanvasCoords(e);
       const p = this.getActivePath();
       if (!p || !p.shape) return;
 
       const shape = p.shape;
+      const hitRadius = e.pointerType === 'touch' ? 18 : 9;
+      const edgeHitRadius = e.pointerType === 'touch' ? 14 : 6;
 
       // 1. Check vertex pick
       let foundIdx: number | null = null;
       for (let i = 0; i < shape.length; i++) {
         const { cx: px, cy: py } = toCanvas(shape[i].x, shape[i].y);
         const dist = Math.hypot(cx - px, cy - py);
-        if (dist <= 9) {
+        if (dist <= hitRadius) {
           foundIdx = i;
           break;
         }
       }
 
+      if (e.button === 0 && this.canvasToolMode === 'add') {
+        const world = toWorld(cx, cy);
+        const finalX = this.snapGrid > 0 ? Math.round(world.x / this.snapGrid) * this.snapGrid : world.x;
+        const finalY = this.snapGrid > 0 ? Math.round(world.y / this.snapGrid) * this.snapGrid : world.y;
+        shape.push(new Vector3(finalX, finalY, 0));
+        this.currentPreset = 'custom';
+        this.renderActiveTab();
+        this.triggerWYSIWYGUpdate();
+        return;
+      }
+
+      if (e.button === 0 && this.canvasToolMode === 'delete') {
+        if (foundIdx !== null && shape.length > 3) {
+          shape.splice(foundIdx, 1);
+          this.currentPreset = 'custom';
+          this.renderActiveTab();
+          this.triggerWYSIWYGUpdate();
+        }
+        return;
+      }
+
       if (e.button === 0) {
+        let edgeIdx = this.hoveredEdgeIndex;
+        if (foundIdx === null && edgeIdx === null && shape.length >= 2) {
+          for (let i = 0; i < shape.length; i++) {
+            const nextI = (i + 1) % shape.length;
+            const p1 = toCanvas(shape[i].x, shape[i].y);
+            const p2 = toCanvas(shape[nextI].x, shape[nextI].y);
+            if (this.distToSegment({ x: cx, y: cy }, { x: p1.cx, y: p1.cy }, { x: p2.cx, y: p2.cy }) <= edgeHitRadius) {
+              edgeIdx = i;
+              break;
+            }
+          }
+        }
+
         if (foundIdx !== null) {
           this.isCanvasDragging = true;
           this.draggedVertexIndex = foundIdx;
           canvas.style.cursor = 'grabbing';
-        } else if (this.hoveredEdgeIndex !== null) {
+        } else if (edgeIdx !== null) {
           // Edge pick: insert vertex
           const world = toWorld(cx, cy);
-          const insertIdx = this.hoveredEdgeIndex + 1;
+          const insertIdx = edgeIdx + 1;
           shape.splice(insertIdx, 0, new Vector3(world.x, world.y, 0));
           this.isCanvasDragging = true;
           this.draggedVertexIndex = insertIdx;
@@ -1346,7 +1422,29 @@ export class PathExtrusionStudio {
       }
     });
 
-    canvas.addEventListener('mousemove', (e: MouseEvent) => {
+    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+      if (this.activeCanvasPointers.has(e.pointerId)) {
+        this.activeCanvasPointers.set(e.pointerId, { clientX: e.clientX, clientY: e.clientY });
+      }
+
+      if (this.activeCanvasPointers.size >= 2) {
+        const nextPinch = getPinchState();
+        if (nextPinch && this.lastCanvasPinchState) {
+          const rect = canvas.getBoundingClientRect();
+          const scaleFactorX = rect.width > 0 ? this.canvasWidth / rect.width : 1;
+          const scaleFactorY = rect.height > 0 ? this.canvasHeight / rect.height : 1;
+          this.panX += (nextPinch.midX - this.lastCanvasPinchState.midX) * scaleFactorX;
+          this.panY += (nextPinch.midY - this.lastCanvasPinchState.midY) * scaleFactorY;
+          if (this.lastCanvasPinchState.dist > 0 && nextPinch.dist > 0) {
+            const factor = nextPinch.dist / this.lastCanvasPinchState.dist;
+            this.scale = Math.max(2, Math.min(400, this.scale * factor));
+          }
+          this.redrawCanvas();
+        }
+        this.lastCanvasPinchState = nextPinch;
+        return;
+      }
+
       const { cx, cy, scaleFactorX, scaleFactorY } = getCanvasCoords(e);
       const world = toWorld(cx, cy);
       this.mouseWorldCoord = world;
@@ -1414,7 +1512,11 @@ export class PathExtrusionStudio {
       }
     });
 
-    const handleMouseUp = () => {
+    const handlePointerUp = (e: PointerEvent) => {
+      this.activeCanvasPointers.delete(e.pointerId);
+      if (this.activeCanvasPointers.size < 2) {
+        this.lastCanvasPinchState = null;
+      }
       const p = this.getActivePath();
       if (this.isCanvasDragging) {
         this.isCanvasDragging = false;
@@ -1427,8 +1529,9 @@ export class PathExtrusionStudio {
       }
     };
 
-    canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('mouseleave', handleMouseUp);
+    canvas.addEventListener('pointerup', handlePointerUp);
+    canvas.addEventListener('pointercancel', handlePointerUp);
+    canvas.addEventListener('pointerleave', handlePointerUp);
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     canvas.addEventListener('dblclick', (e: MouseEvent) => {

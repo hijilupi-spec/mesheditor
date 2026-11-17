@@ -99,11 +99,26 @@ export class TextMeshController {
 
   private attachPointerObserver(): void {
     this.detachPointerObserver();
+    let downPos: { x: number; y: number } | null = null;
     this.pointerObserver = this.service.scene.onPointerObservable.add((pointerInfo) => {
       if (!this.isSurfacePlacementActive || this.service.isSceneInteractionLocked) return;
-      if (pointerInfo.type !== PointerEventTypes.POINTERDOWN) return;
       const evt = pointerInfo.event as PointerEvent;
-      if (evt.button !== 0 || !evt.shiftKey) return;
+      if (evt.button !== 0) return;
+
+      if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
+        downPos = {
+          x: evt.clientX ?? this.service.scene.pointerX,
+          y: evt.clientY ?? this.service.scene.pointerY,
+        };
+        return;
+      }
+
+      if (pointerInfo.type !== PointerEventTypes.POINTERUP || !downPos) return;
+      const cx = evt.clientX ?? this.service.scene.pointerX;
+      const cy = evt.clientY ?? this.service.scene.pointerY;
+      const dist = Math.hypot(cx - downPos.x, cy - downPos.y);
+      downPos = null;
+      if (dist > 10) return;
 
       const pickInfo = this.service.scene.pick(
         this.service.scene.pointerX,

@@ -131,11 +131,26 @@ export class UVUnwrapController {
    * Interactive 3D viewport click handler for manual seam edge marking.
    */
   private initPointerHandling(): void {
+    let downPos: { x: number; y: number } | null = null;
     this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
       if (!this.isActive || !this.seamPickMode || this.service.isSceneInteractionLocked) return;
-      if (pointerInfo.type !== PointerEventTypes.POINTERDOWN) return;
-      const evt = pointerInfo.event as MouseEvent;
+      const evt = pointerInfo.event as PointerEvent;
       if (evt && evt.button !== 0) return;
+
+      if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
+        downPos = {
+          x: evt?.clientX ?? this.scene.pointerX,
+          y: evt?.clientY ?? this.scene.pointerY,
+        };
+        return;
+      }
+
+      if (pointerInfo.type !== PointerEventTypes.POINTERUP || !downPos) return;
+      const cx = evt?.clientX ?? this.scene.pointerX;
+      const cy = evt?.clientY ?? this.scene.pointerY;
+      const dist = Math.hypot(cx - downPos.x, cy - downPos.y);
+      downPos = null;
+      if (dist > 8) return;
 
       const pick = pointerInfo.pickInfo;
       if (

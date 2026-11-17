@@ -107,6 +107,7 @@ import {
   Combine,
   Compass,
   Copy,
+  CopyPlus,
   CornerDownLeft,
   Cpu,
   createIcons,
@@ -142,6 +143,7 @@ import {
   Lightbulb,
   ListTree,
   Loader2,
+  Magnet,
   Map as LucideMap,
   Maximize,
   Maximize2,
@@ -166,6 +168,7 @@ import {
   PlusCircle,
   Redo2,
   RefreshCw,
+  Rotate3d,
   RotateCcw,
   RotateCw,
   Route,
@@ -179,6 +182,7 @@ import {
   Shield,
   ShieldCheck,
   Sliders,
+  Smartphone,
   Smile,
   Sparkles,
   Square,
@@ -232,6 +236,7 @@ export const editorIcons = {
   Combine,
   Compass,
   Copy,
+  CopyPlus,
   CornerDownLeft,
   Cpu,
   Crosshair,
@@ -266,6 +271,7 @@ export const editorIcons = {
   Lightbulb,
   ListTree,
   Loader2,
+  Magnet,
   Map: LucideMap,
   Maximize,
   Maximize2,
@@ -290,6 +296,7 @@ export const editorIcons = {
   PlusCircle,
   Redo2,
   RefreshCw,
+  Rotate3d,
   RotateCcw,
   RotateCw,
   Route,
@@ -303,6 +310,7 @@ export const editorIcons = {
   Shield,
   ShieldCheck,
   Sliders,
+  Smartphone,
   Smile,
   Sparkles,
   Square,
@@ -1228,6 +1236,11 @@ export class MeshEditorApp {
         this.service.pasteAtCursor();
       }
     });
+    this.getElement('btnDuplicateSelected')?.addEventListener('click', () => {
+      this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
+      this.service.duplicateSelectedMesh();
+    });
     document.getElementById('btnDeleteSelected')?.addEventListener('click', () => {
       this.closeAllDropdowns();
       if (this.isAIGenerating) return;
@@ -1450,6 +1463,9 @@ export class MeshEditorApp {
 
     // Initialize Facet Modeling UI
     this.initFacetToolUI();
+
+    // Initialize Touch Viewport Modifier Controls
+    this.initTouchViewportControls();
 
     // Search filter in Outliner
     this.outlinerSearchInput?.addEventListener('input', (e) => {
@@ -1748,7 +1764,7 @@ export class MeshEditorApp {
       });
     }
 
-    // Floating Mode 2D Window Dragging
+    // Floating Mode 2D Window Dragging (supports mouse & touch via Pointer Events)
     if (header) {
       let isDragging = false;
       let startX = 0;
@@ -1756,7 +1772,7 @@ export class MeshEditorApp {
       let initialLeft = 0;
       let initialTop = 0;
 
-      header.addEventListener('mousedown', (e: MouseEvent) => {
+      header.addEventListener('pointerdown', (e: PointerEvent) => {
         if (this.layoutMode === 'stackpanel' || document.body.classList.contains('layout-stackpanel')) return;
         if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('.dialog-btn')) return;
 
@@ -1771,7 +1787,7 @@ export class MeshEditorApp {
         // Bring to front
         this.bringDialogToFront(dialog);
 
-        const onMouseMove = (moveEvent: MouseEvent) => {
+        const onPointerMove = (moveEvent: PointerEvent) => {
           if (!isDragging) return;
           const deltaX = moveEvent.clientX - startX;
           const deltaY = moveEvent.clientY - startY;
@@ -1786,17 +1802,19 @@ export class MeshEditorApp {
           dialog.style.transform = 'none';
         };
 
-        const onMouseUp = () => {
+        const onPointerUp = () => {
           if (isDragging) {
             isDragging = false;
             this.saveDialogLayout();
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerUp);
           }
         };
 
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
       });
     }
   }
@@ -4107,6 +4125,52 @@ export class MeshEditorApp {
     }
   }
 
+  private initTouchViewportControls(): void {
+    const btnOrbit = this.getElement<HTMLButtonElement>('btnTouchModeOrbit');
+    const btnRect = this.getElement<HTMLButtonElement>('btnTouchModeRect');
+    const btnMulti = this.getElement<HTMLButtonElement>('btnTouchMultiSelect');
+    const btnSnap = this.getElement<HTMLButtonElement>('btnTouchSnap');
+    const btnFocus = this.getElement<HTMLButtonElement>('btnTouchFocus');
+
+    btnOrbit?.addEventListener('click', () => {
+      this.service.setTouchDragMode('orbit');
+      this.updateTouchViewportControls();
+    });
+
+    btnRect?.addEventListener('click', () => {
+      this.service.setTouchDragMode('marquee');
+      this.updateTouchViewportControls();
+    });
+
+    btnMulti?.addEventListener('click', () => {
+      this.service.setTouchMultiSelectActive(!this.service.touchMultiSelectActive);
+      this.updateTouchViewportControls();
+    });
+
+    btnSnap?.addEventListener('click', () => {
+      this.service.setTouchSnapActive(!this.service.touchSnapActive);
+      this.updateTouchViewportControls();
+    });
+
+    btnFocus?.addEventListener('click', () => {
+      this.service.focusOnSelected();
+    });
+
+    this.updateTouchViewportControls();
+  }
+
+  public updateTouchViewportControls(): void {
+    const btnOrbit = this.getElement<HTMLButtonElement>('btnTouchModeOrbit');
+    const btnRect = this.getElement<HTMLButtonElement>('btnTouchModeRect');
+    const btnMulti = this.getElement<HTMLButtonElement>('btnTouchMultiSelect');
+    const btnSnap = this.getElement<HTMLButtonElement>('btnTouchSnap');
+
+    btnOrbit?.classList.toggle('active', this.service.touchDragMode === 'orbit');
+    btnRect?.classList.toggle('active', this.service.touchDragMode === 'marquee');
+    btnMulti?.classList.toggle('active', this.service.touchMultiSelectActive);
+    btnSnap?.classList.toggle('active', this.service.touchSnapActive || this.service.isSnapModifierActive);
+  }
+
   private initFacetToolUI(): void {
     const btnPickToggle = this.getElement<HTMLButtonElement>('btnFacetPickToggle');
     const lblPickState = this.getElement<HTMLElement>('lblFacetPickState');
@@ -5084,7 +5148,9 @@ export class MeshEditorApp {
 
     btn.addEventListener('pointerdown', (e) => {
       this.toolsMenuPointerTrigger = btn;
-      e.preventDefault();
+      if (e.pointerType !== 'touch') {
+        e.preventDefault();
+      }
     });
 
     btn.addEventListener('click', (e) => {
@@ -5423,7 +5489,9 @@ export class MeshEditorApp {
       catBtn.addEventListener('pointerdown', (e) => {
         this.clearToolsHoverPreviewTimer();
         this.toolsMenuPointerTrigger = catBtn;
-        e.preventDefault();
+        if (e.pointerType !== 'touch') {
+          e.preventDefault();
+        }
       });
 
       catBtn.addEventListener('click', (e) => {
@@ -6175,7 +6243,7 @@ export class MeshEditorApp {
         openPicker();
       });
 
-      row.addEventListener('mousedown', () => {
+      row.addEventListener('pointerdown', () => {
         openPicker();
       });
 
@@ -6183,10 +6251,10 @@ export class MeshEditorApp {
         openPicker();
       });
 
-      selector?.addEventListener('mousedown', () => {
+      selector?.addEventListener('pointerdown', () => {
         isDraggingPalette = true;
         openPicker();
-        const onWindowMouseUp = () => {
+        const onWindowPointerUp = () => {
           isDraggingPalette = false;
           selector.classList.remove('drag');
           if (!row.matches(':hover') && document.activeElement !== input) {
@@ -6194,7 +6262,8 @@ export class MeshEditorApp {
             dialog?.classList.remove('has-open-color-picker');
           }
         };
-        window.addEventListener('mouseup', onWindowMouseUp, { once: true });
+        window.addEventListener('pointerup', onWindowPointerUp, { once: true });
+        window.addEventListener('pointercancel', onWindowPointerUp, { once: true });
       });
 
       row.addEventListener('mouseleave', () => {
@@ -6206,7 +6275,7 @@ export class MeshEditorApp {
     }
 
     const rootTarget = this.rootContainer || document;
-    rootTarget.addEventListener('mousedown', (e: Event) => {
+    rootTarget.addEventListener('pointerdown', (e: Event) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
       const activeColorRow = target.closest('.cr.color') as HTMLElement | null;
@@ -6594,7 +6663,7 @@ export class MeshEditorApp {
 
       row.addEventListener('click', (e: MouseEvent) => {
         if (this.isAIGenerating) return;
-        if (e.metaKey || e.ctrlKey) {
+        if (e.metaKey || e.ctrlKey || this.service.touchMultiSelectActive) {
           this.service.toggleNodeSelection(node as any);
         } else if (e.shiftKey) {
           this.service.rangeSelectNodes(node as any);
@@ -9648,6 +9717,10 @@ export class MeshEditorApp {
     });
 
     const btnOpenStudio = this.getElement<HTMLButtonElement>('btnOpenPathExtrusionStudio');
+    const chkTapPlace = this.getElement<HTMLInputElement>('chkPathExtrusionTapPlace');
+    chkTapPlace?.addEventListener('change', () => {
+      this.service.pathExtrusion.tapToPlaceMode = Boolean(chkTapPlace.checked);
+    });
     btnOpenStudio?.addEventListener('click', () => {
       this.service.pathExtrusion.setActive(true);
       PathExtrusionStudio.open(this.service, this.service.pathExtrusion, () => {
@@ -11664,6 +11737,8 @@ export class MeshEditorApp {
     (dialog as any)._decalInitialized = true;
 
     const btnToggleMode = this.getElement<HTMLButtonElement>('btnToggleDecalPaintMode');
+    const btnModeStamp = this.getElement<HTMLButtonElement>('btnDecalModeStamp');
+    const btnModeErase = this.getElement<HTMLButtonElement>('btnDecalModeErase');
     const texSelect = this.getElement<HTMLSelectElement>('decalTextureSelect');
     const btnUpload = this.getElement<HTMLButtonElement>('btnUploadDecalImage');
     const fileInput = this.getElement<HTMLInputElement>('decalImageFileInput');
@@ -11682,6 +11757,16 @@ export class MeshEditorApp {
       this.service.decalController.setActive(next);
       this.updateDecalUI();
       this.updatePanelButtonStates();
+    });
+
+    btnModeStamp?.addEventListener('click', () => {
+      this.service.decalController.interactionMode = 'stamp';
+      this.updateDecalUI();
+    });
+
+    btnModeErase?.addEventListener('click', () => {
+      this.service.decalController.interactionMode = 'erase';
+      this.updateDecalUI();
     });
 
     texSelect?.addEventListener('change', () => {
@@ -11797,18 +11882,22 @@ export class MeshEditorApp {
 
     const ctrl = this.service.decalController;
     const btnToggleMode = this.getElement<HTMLButtonElement>('btnToggleDecalPaintMode');
+    const btnModeStamp = this.getElement<HTMLButtonElement>('btnDecalModeStamp');
+    const btnModeErase = this.getElement<HTMLButtonElement>('btnDecalModeErase');
     const modeLabel = this.getElement<HTMLElement>('decalPaintModeLabel');
     if (btnToggleMode && modeLabel) {
       if (ctrl.isActive) {
         btnToggleMode.classList.add('tool-btn-primary');
         btnToggleMode.classList.remove('sculpt-btn');
-        modeLabel.textContent = 'Paint Mode: Active (Click Mesh)';
+        modeLabel.textContent = 'Paint Mode: Active (Click / Tap Mesh)';
       } else {
         btnToggleMode.classList.remove('tool-btn-primary');
         btnToggleMode.classList.add('sculpt-btn');
         modeLabel.textContent = 'Activate Decal Paint Mode';
       }
     }
+    btnModeStamp?.classList.toggle('active', ctrl.interactionMode === 'stamp');
+    btnModeErase?.classList.toggle('active', ctrl.interactionMode === 'erase');
 
     const available = ctrl.getAvailableTextures();
     const texSelect = this.getElement<HTMLSelectElement>('decalTextureSelect');

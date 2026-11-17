@@ -348,6 +348,87 @@ describe('MeshEditorService Integration Tests (Babylon NullEngine)', () => {
       } as any);
       expect(service.selectedNodes).toEqual([box]);
     });
+
+    it('supports keyboard-free touch Box Select mode, +Select multi-selection, and persistent Touch Snap', () => {
+      const box1 = service.createPrimitive(defaultPrimitiveConfig({ name: 'TouchMulti1' }));
+      box1.position.set(0, 0, 0);
+      const box2 = service.createPrimitive(defaultPrimitiveConfig({ name: 'TouchMulti2' }));
+      box2.position.set(0.5, 0, 0);
+      service.selectNodes([]);
+      service.scene.render();
+
+      // 1. Touch +Select allows toggling multiple meshes without Shift/Cmd
+      service.setTouchMultiSelectActive(true);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 20, button: 0, clientX: 100, clientY: 100 },
+        pickInfo: { hit: true, pickedMesh: box1, subMeshId: 0 },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 20, button: 0, clientX: 101, clientY: 101 },
+        pickInfo: { hit: true, pickedMesh: box1, subMeshId: 0 },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 21, button: 0, clientX: 120, clientY: 120 },
+        pickInfo: { hit: true, pickedMesh: box2, subMeshId: 0 },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 21, button: 0, clientX: 121, clientY: 121 },
+        pickInfo: { hit: true, pickedMesh: box2, subMeshId: 0 },
+      } as any);
+      expect(service.selectedNodes).toContain(box1);
+      expect(service.selectedNodes).toContain(box2);
+
+      // 2. Touch Snap persists across pointer events without ctrlKey/metaKey
+      service.setTouchSnapActive(true);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 22, button: 0, clientX: 10, clientY: 10, ctrlKey: false, metaKey: false },
+        pickInfo: { hit: false },
+      } as any);
+      expect(service.isSnapModifierActive).toBe(true);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 22, button: 0, clientX: 10, clientY: 10, ctrlKey: false, metaKey: false },
+        pickInfo: { hit: false },
+      } as any);
+      expect(service.isSnapModifierActive).toBe(true);
+      service.setTouchSnapActive(false);
+
+      // 3. Touch Box Select mode activates marquee on 1-finger drag without orbiting
+      service.setTouchMultiSelectActive(false);
+      service.selectNodes([]);
+      service.setTouchDragMode('marquee');
+      const preCam = service.camera.position.clone();
+      const renderW = service.getEngine().getRenderWidth();
+      const renderH = service.getEngine().getRenderHeight();
+
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 30, button: 0, clientX: 0, clientY: 0 },
+        pickInfo: { hit: false },
+      } as any);
+      expect(service.isMarqueeCandidate).toBe(true);
+
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERMOVE,
+        event: { pointerType: 'touch', pointerId: 30, button: 0, clientX: renderW, clientY: renderH },
+      } as any);
+      expect(service.isMarqueeActive).toBe(true);
+      expect(Vector3.Distance(preCam, service.camera.position)).toBe(0);
+
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 30, button: 0, clientX: renderW, clientY: renderH },
+        pickInfo: { hit: false },
+      } as any);
+      expect(service.selectedNodes).toContain(box1);
+      expect(service.selectedNodes).toContain(box2);
+      service.setTouchDragMode('orbit');
+    });
   });
 
   describe('4. Grouping & Ungrouping with Undo/Redo', () => {

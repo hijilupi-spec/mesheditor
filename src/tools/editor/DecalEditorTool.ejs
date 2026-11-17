@@ -16,10 +16,18 @@
         class="tool-btn tool-btn-primary btn-block"
         style="width: 100%; height: 32px;"
       >
-        <i class="app-icon" data-lucide="mouse-pointer"></i> <span id="decalPaintModeLabel">Paint Mode: Active (Click Mesh)</span>
+        <i class="app-icon" data-lucide="mouse-pointer"></i> <span id="decalPaintModeLabel">Paint Mode: Active (Click / Tap Mesh)</span>
       </button>
-      <div class="tool-sublabel" style="text-align: center; margin-top: 2px;">
-        Left-Click mesh to stamp &bull; Right-Click decal to remove &bull; Q/E rotate
+      <div class="sculpt-grid-2" style="margin-top: 6px;">
+        <button type="button" id="btnDecalModeStamp" class="sculpt-btn active" title="Tap or left-click mesh to stamp decal">
+          <i class="app-icon" data-lucide="stamp"></i> Stamp
+        </button>
+        <button type="button" id="btnDecalModeErase" class="sculpt-btn" title="Tap or left-click decal to erase it (also Right-Click on desktop)">
+          <i class="app-icon" data-lucide="eraser"></i> Erase Decal
+        </button>
+      </div>
+      <div class="tool-sublabel" style="text-align: center; margin-top: 4px;">
+        Tap/Click mesh to stamp &bull; Erase mode or Right-Click to remove
       </div>
     </div>
 

@@ -20,7 +20,7 @@ export class TextMeshEditorTool extends AbstractEditorTool {
     <ul>
       <li><strong>Create 3D Text:</strong> Type your text, select a font family (<em>Kenney Future</em>, <em>Droid Sans Bold</em>, or <em>Droid Sans Regular</em>), adjust size, extrusion depth, and curve resolution, then click <strong>Create 3D Text</strong>.</li>
       <li><strong>Edit Existing Text:</strong> Select any 3D Text mesh in the viewport or Outliner. Its settings automatically load into the dialog so you can modify the text, font, depth, or material and click <strong>Update Selected</strong>.</li>
-      <li><strong>Surface Placement:</strong> Enable <em>Shift + Left-Click in 3D view</em> to stamp new 3D text directly onto any clicked surface or ground point.</li>
+      <li><strong>Surface Placement:</strong> Enable <em>Click / Tap 3D surface to stamp</em> to place new 3D text directly onto any clicked or tapped surface or ground point.</li>
     </ul>
   `;
 

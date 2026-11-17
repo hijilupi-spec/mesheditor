@@ -5,10 +5,11 @@
 [![Babylon.js](https://img.shields.io/badge/Babylon.js-9.29-orange?logo=babylon.js)](https://www.babylonjs.com/)
 [![Tests](https://img.shields.io/badge/Vitest%20Integration%20Tests-232%20Passed-brightgreen)](tests/integration/)
 [![Electron](https://img.shields.io/badge/Electron-45.1-47848F?logo=electron)](https://www.electronjs.org/)
+[![Touch & Mobile](https://img.shields.io/badge/Touch%20%26%20Mobile-iPad%20%7C%20iPhone%20%7C%20Android-2ea043)](README.md#touch--mobile-controls)
 
-A modular 3D model studio and mesh manipulation workbench built with **TypeScript** and **Babylon.js 9.x**. Engineered from the ground up to function across multiple deployment targets through a decoupled **Platform Adapter Architecture**:
+A modular 3D model studio and mesh manipulation workbench built with **TypeScript** and **Babylon.js 9.x**. Engineered from the ground up to function across **Desktop, Tablet & Mobile Touch Devices** and multiple deployment targets through a decoupled **Platform Adapter Architecture**:
 
-1. **Standalone Web Application** (Full-featured browser 3D studio with local dev server)
+1. **Standalone Web Application (Desktop & Touch/Mobile)** (Full-featured browser 3D studio with responsive UI for iPad, iPhone, Android tablets/phones, and desktop browsers)
 2. **NPM Library & Web Component** (`<mesh-editor>` Custom Element + modular ESM / UMD TypeScript classes)
 3. **Desktop Application** (Cross-platform native macOS `.dmg`, Windows `.exe`, and Linux `.AppImage`/`.deb` via Electron)
 
@@ -22,6 +23,7 @@ Distributed under the **[Apache License 2.0](LICENSE)**.
   - [Directory Structure](#directory-structure)
   - [Core Design Principles](#core-design-principles)
 - [Viewport Navigation & Keyboard Shortcuts](#viewport-navigation--keyboard-shortcuts)
+  - [Touch & Mobile Controls](#touch--mobile-controls)
 - [Decentralized Modular Tool Architecture](#decentralized-modular-tool-architecture)
   - [Built-In Editor Tools](#built-in-editor-tools)
   - [Authoring Guide: Adding a New Editor Tool](#authoring-guide-adding-a-new-editor-tool)
@@ -152,6 +154,19 @@ mesheditor/
 ---
 
 ## Viewport Navigation & Keyboard Shortcuts
+
+### Touch & Mobile Controls
+
+Mesh Editor works out of the box on touch devices (iPad, iPhone, Android tablets and phones, and touch laptops) with zero keyboard required:
+
+| Gesture / Control | Action | Description |
+| :--- | :--- | :--- |
+| **1-Finger Tap** | Select / Manipulate | Select mesh, facet, vertex, or drag 3D transform gizmo handles |
+| **1-Finger Drag** | Orbit Camera | Smoothly orbit around the scene target (or draw a selection rectangle in *Box Select* mode) |
+| **2-Finger Pinch & Drag** | Zoom & Pan | Pinch in/out to zoom and drag with two fingers to pan the camera |
+| **Touch Viewport Bar** | Keyboard-Free Modifiers | Bottom-left floating bar on touch & compact (`≤ 1024px`) viewports for switching *Orbit / Box Select*, *+Select* (multi-select), *Snap*, and *Focus* |
+| **Keyboard-Free Tools** | Full Tool Parity | Tap-to-place toggles for 3D Text & Path Extrusion, Stamp/Erase mode in Decal Painter, pointer/pinch support in the 2D Path Extrusion Studio canvas, and `Duplicate` in the Actions menu |
+| **Compact Responsive UI** | Auto-Minimized Outliner | Automatically starts with *Scene Objects* minimized on viewports `≤ 1024px` wide and adapts panels & toolbars for tablets and phones |
 
 ### Mouse Controls
 

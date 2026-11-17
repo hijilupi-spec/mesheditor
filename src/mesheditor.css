@@ -543,6 +543,7 @@ body.is-electron-mac #top-toolbar .toolbar-brand {
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
+  touch-action: none;
   justify-content: space-between;
   cursor: grab;
   user-select: none;
@@ -735,6 +736,7 @@ body.layout-stackpanel .stackpanel-sidebar .floating-dialog .dialog-header,
   box-shadow: none !important;
   outline: none !important;
   cursor: pointer !important;
+  touch-action: pan-y !important;
 }
 
 body.layout-stackpanel .stackpanel-sidebar .floating-dialog .dialog-header[draggable="true"],
@@ -1568,7 +1570,91 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
   }
 }
 
+@media (max-width: 768px) {
+  body.layout-stackpanel #dialog-outliner,
+  #app-container.layout-stackpanel #dialog-outliner {
+    left: 6px !important;
+    top: 58px !important;
+    width: min(250px, calc(100vw - 12px)) !important;
+  }
+
+  body.layout-stackpanel .stackpanel-sidebar,
+  #app-container.layout-stackpanel .stackpanel-sidebar,
+  body.layout-stackpanel #stackpanelRightSidebar,
+  #app-container.layout-stackpanel #stackpanelRightSidebar {
+    right: 6px !important;
+    top: 58px !important;
+    width: min(255px, calc(100vw - 12px)) !important;
+  }
+}
+
+/* Touch & Compact Viewport Controls */
+.touch-viewport-controls {
+  display: none;
+  position: absolute;
+  left: 12px;
+  bottom: 44px;
+  z-index: 95;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-elevated);
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.touch-viewport-controls::-webkit-scrollbar {
+  display: none;
+}
+
+.touch-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
+
+.touch-ctrl-btn.active {
+  background: var(--accent-active);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.touch-ctrl-btn .app-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.touch-ctrl-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-color);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  .touch-viewport-controls {
+    display: flex;
+  }
+
   #bottom-bar {
     padding: 0 10px;
     gap: 10px;
@@ -1601,6 +1687,18 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
     flex-shrink: 0;
     gap: 10px;
     white-space: nowrap;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .dialog-btn {
+    min-width: 26px;
+    min-height: 26px;
+  }
+
+  .touch-ctrl-btn {
+    height: 32px;
+    padding: 0 10px;
   }
 }
 

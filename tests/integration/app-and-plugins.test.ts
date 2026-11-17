@@ -1213,4 +1213,82 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
       Object.defineProperty(window, 'innerWidth', { value: origInnerWidth, configurable: true });
     }
   });
+
+  it('wires keyboard-free touch viewport bar, Duplicate action, and tap modes for Path Extrusion, Decals, and 3D Text', async () => {
+    app = new MeshEditorApp({ container, engine });
+
+    const btnOrbit = container.querySelector('#btnTouchModeOrbit') as HTMLButtonElement;
+    const btnRect = container.querySelector('#btnTouchModeRect') as HTMLButtonElement;
+    const btnMulti = container.querySelector('#btnTouchMultiSelect') as HTMLButtonElement;
+    const btnSnap = container.querySelector('#btnTouchSnap') as HTMLButtonElement;
+    const btnDup = container.querySelector('#btnDuplicateSelected') as HTMLButtonElement;
+    expect(btnOrbit).not.toBeNull();
+    expect(btnRect).not.toBeNull();
+    expect(btnMulti).not.toBeNull();
+    expect(btnSnap).not.toBeNull();
+    expect(btnDup).not.toBeNull();
+
+    // Ensure touch controls are NOT inside #top-toolbar
+    expect(container.querySelector('#top-toolbar #touchViewportControls')).toBeNull();
+
+    btnRect.click();
+    expect(app.service.touchDragMode).toBe('marquee');
+    expect(btnRect.classList.contains('active')).toBe(true);
+    btnOrbit.click();
+    expect(app.service.touchDragMode).toBe('orbit');
+
+    btnMulti.click();
+    expect(app.service.touchMultiSelectActive).toBe(true);
+    btnSnap.click();
+    expect(app.service.touchSnapActive).toBe(true);
+    expect(app.service.isSnapModifierActive).toBe(true);
+
+    // Duplicate from Actions menu without keyboard
+    const box = app.service.createPrimitive({
+      shape: 'Box',
+      name: 'DupBox',
+      size: 1,
+      width: 1,
+      height: 1,
+      depth: 1,
+      subdivisions: 1,
+      tessellation: 12,
+      color: '#4f8cf6',
+    });
+    app.service.selectNodes([box]);
+    const preCount = app.service.importedMeshes.length;
+    btnDup.click();
+    expect(app.service.importedMeshes.length).toBe(preCount + 1);
+
+    // Path Extrusion tap-to-place toggle works without Shift
+    const chkTapPlace = container.querySelector('#chkPathExtrusionTapPlace') as HTMLInputElement;
+    expect(chkTapPlace).not.toBeNull();
+    chkTapPlace.checked = true;
+    chkTapPlace.dispatchEvent(new Event('change'));
+    expect(app.service.pathExtrusion.tapToPlaceMode).toBe(true);
+
+    // Decal Painter Stamp / Erase mode buttons work without Right-Click
+    const btnEraseDecal = container.querySelector('#btnDecalModeErase') as HTMLButtonElement;
+    const btnStampDecal = container.querySelector('#btnDecalModeStamp') as HTMLButtonElement;
+    expect(btnEraseDecal).not.toBeNull();
+    expect(btnStampDecal).not.toBeNull();
+    btnEraseDecal.click();
+    expect(app.service.decalController.interactionMode).toBe('erase');
+    btnStampDecal.click();
+    expect(app.service.decalController.interactionMode).toBe('stamp');
+
+    // Text Mesh surface placement stamps on tap without Shift key
+    app.service.textMeshController.setSurfacePlacementActive(true);
+    const beforeTextCount = app.service.importedMeshes.length;
+    app.service.scene.onPointerObservable.notifyObservers({
+      type: PointerEventTypes.POINTERDOWN,
+      event: { pointerType: 'touch', pointerId: 40, button: 0, shiftKey: false, clientX: 200, clientY: 200 },
+    } as any);
+    app.service.scene.onPointerObservable.notifyObservers({
+      type: PointerEventTypes.POINTERUP,
+      event: { pointerType: 'touch', pointerId: 40, button: 0, shiftKey: false, clientX: 201, clientY: 201 },
+    } as any);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(app.service.importedMeshes.length).toBeGreaterThan(beforeTextCount);
+  });
 });

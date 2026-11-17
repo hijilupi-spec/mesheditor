@@ -18,8 +18,8 @@ export class DecalEditorTool extends AbstractEditorTool {
     <h4>Decal Painter Tool</h4>
     <p>Paint surface details, stickers, foliage, wear-and-tear, or custom AI textures directly onto 3D meshes.</p>
     <ul>
-      <li><strong>Left-Click on Mesh:</strong> Projects and stamps the selected decal onto the surface under your cursor.</li>
-      <li><strong>Right-Click on Decal:</strong> Removes an unmerged decal under the cursor.</li>
+      <li><strong>Tap / Left-Click on Mesh:</strong> Projects and stamps the selected decal onto the surface (in Stamp mode).</li>
+      <li><strong>Erase Decal Mode or Right-Click:</strong> Removes an unmerged decal when tapped or clicked.</li>
       <li><strong>Keyboard Shortcuts:</strong> Press <kbd>Q</kbd> / <kbd>E</kbd> to rotate the decal by 15&deg;, or <kbd>[</kbd> / <kbd>]</kbd> to resize the decal projector.</li>
       <li><strong>Mesh Fusion &amp; Export:</strong> Click <strong>Merge Decals into Mesh</strong> at any time to fuse placed decals into the target mesh geometry (with normal-offset submeshes), or simply export your model &mdash; unmerged decals are automatically fused into the mesh during export.</li>
     </ul>

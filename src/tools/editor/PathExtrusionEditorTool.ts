@@ -36,7 +36,7 @@ export class PathExtrusionEditorTool extends AbstractEditorTool {
 <h4><i class="app-icon" data-lucide="list-ordered"></i> Getting Started</h4>
 <ul>
   <li>Click <strong>➕ Add Path</strong> in the panel or in the Studio to create your first path extrusion curve.</li>
-  <li>Shift + Click in the 3D scene to add more spline anchor points.</li>
+  <li>Hold <kbd>Shift</kbd> + Click or enable <strong>Tap / Click 3D view to add points</strong> to add spline anchor points (touch-friendly).</li>
   <li>Click <strong>Open Studio</strong> to customize the 2D cross-section profile.</li>
 </ul>
 `.trim();

@@ -256,11 +256,32 @@ export class MeshEditorService {
 
   // Touch camera & gesture state (separates single-tap selection from 1-finger orbit & 2-finger pinch/pan)
   public touchOrbitTarget: Vector3 = new Vector3(0, 1, 0);
+  public touchDragMode: 'orbit' | 'marquee' = 'orbit';
+  public touchMultiSelectActive: boolean = false;
+  public touchSnapActive: boolean = false;
   private activeTouchPointers: Map<number, { clientX: number; clientY: number }> = new Map();
   private touchOrbitActive: boolean = false;
   private touchTapEligible: boolean = false;
   private touchLastSingleClient: { x: number; y: number } | null = null;
   private touchLastPinchState: { midX: number; midY: number; dist: number } | null = null;
+
+  public setTouchDragMode(mode: 'orbit' | 'marquee'): void {
+    this.touchDragMode = mode;
+    if (mode !== 'marquee') {
+      this.isMarqueeCandidate = false;
+      this.isMarqueeActive = false;
+      this.hideMarqueeVisual();
+    }
+  }
+
+  public setTouchMultiSelectActive(active: boolean): void {
+    this.touchMultiSelectActive = active;
+  }
+
+  public setTouchSnapActive(active: boolean): void {
+    this.touchSnapActive = active;
+    this.setSnapModifierActive(active);
+  }
 
   // Events listener
   public events: MeshEditorServiceEvents = {};
@@ -716,6 +737,26 @@ export class MeshEditorService {
     // Pointer Picking for Mesh Selection & Facet Editing
     let pointerDownPos = { x: 0, y: 0 };
     let touchDownClient = { x: 0, y: 0 };
+    const getTouchCanvasPoint = (evt: PointerEvent): { x: number; y: number } => {
+      if (this.scene.pointerX !== 0 || this.scene.pointerY !== 0) {
+        return { x: this.scene.pointerX, y: this.scene.pointerY };
+      }
+      const rect = this.canvas?.getBoundingClientRect?.();
+      if (rect && rect.width > 0) {
+        return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+      }
+      return { x: evt.clientX ?? 0, y: evt.clientY ?? 0 };
+    };
+    const isMarqueeAllowed = (): boolean =>
+      !this.isPlaceModeActive &&
+      !this.facetEditorActive &&
+      !this.voxelPainter?.isActive &&
+      !this.pathExtrusion?.isActive &&
+      !this.decalController?.isActive &&
+      !this.textMeshController?.isSurfacePlacementActive &&
+      !this.isSculptModeActive() &&
+      !this.isWeightPaintModeActive();
+
     this.scene.onPointerObservable.add((pointerInfo) => {
       if (this.isSceneInteractionLocked) {
         return;
@@ -730,7 +771,7 @@ export class MeshEditorService {
 
         const evt = rawEvt as PointerEvent | undefined;
         if (evt) {
-          const isSnapKey = !!(evt.metaKey || evt.ctrlKey);
+          const isSnapKey = this.touchSnapActive || !!(evt.metaKey || evt.ctrlKey);
           if (this.isSnapModifierActive !== isSnapKey) {
             this.setSnapModifierActive(isSnapKey);
           }
@@ -740,17 +781,15 @@ export class MeshEditorService {
         const isGizmoHit = this.isGizmoMesh(pick?.pickedMesh);
 
         if (isTouch && evt) {
-          // Touch pointers must never trigger desktop left-drag marquee selection
-          this.isMarqueeCandidate = false;
-          this.isMarqueeActive = false;
-          this.hideMarqueeVisual();
-
           const pid = typeof evt.pointerId === 'number' ? evt.pointerId : 0;
           const cx = evt.clientX ?? this.scene.pointerX;
           const cy = evt.clientY ?? this.scene.pointerY;
           this.activeTouchPointers.set(pid, { clientX: cx, clientY: cy });
 
           if (this.activeTouchPointers.size > 1) {
+            this.isMarqueeCandidate = false;
+            this.isMarqueeActive = false;
+            this.hideMarqueeVisual();
             this.touchTapEligible = false;
             this.touchOrbitActive = false;
             this.touchLastSingleClient = null;
@@ -758,25 +797,26 @@ export class MeshEditorService {
           } else {
             touchDownClient = { x: cx, y: cy };
             this.touchTapEligible = !isGizmoHit;
-            this.touchOrbitActive = !isGizmoHit && !this.voxelPainter?.isActive;
+            const useTouchMarquee = this.touchDragMode === 'marquee' && !isGizmoHit && isMarqueeAllowed();
+            if (useTouchMarquee) {
+              this.isMarqueeCandidate = true;
+              this.isMarqueeActive = false;
+              this.marqueeStartPointer = getTouchCanvasPoint(evt);
+              this.marqueeStartClient = { x: cx, y: cy };
+              this.touchOrbitActive = false;
+            } else {
+              this.isMarqueeCandidate = false;
+              this.isMarqueeActive = false;
+              this.hideMarqueeVisual();
+              this.touchOrbitActive = !isGizmoHit && !this.voxelPainter?.isActive;
+            }
             this.touchLastSingleClient = { x: cx, y: cy };
             this.touchLastPinchState = null;
           }
           return;
         }
 
-        if (
-          isLeftButton &&
-          !isGizmoHit &&
-          !this.isPlaceModeActive &&
-          !this.facetEditorActive &&
-          !this.voxelPainter?.isActive &&
-          !this.pathExtrusion?.isActive &&
-          !this.decalController?.isActive &&
-          !(this.textMeshController?.isSurfacePlacementActive && evt?.shiftKey) &&
-          !this.isSculptModeActive() &&
-          !this.isWeightPaintModeActive()
-        ) {
+        if (isLeftButton && !isGizmoHit && isMarqueeAllowed()) {
           this.isMarqueeCandidate = true;
           this.isMarqueeActive = false;
           this.marqueeStartPointer = { x: this.scene.pointerX, y: this.scene.pointerY };
@@ -794,7 +834,7 @@ export class MeshEditorService {
 
         const evt = rawEvt as PointerEvent | undefined;
         if (evt) {
-          const isSnapKey = !!(evt.metaKey || evt.ctrlKey);
+          const isSnapKey = this.touchSnapActive || !!(evt.metaKey || evt.ctrlKey);
           if (this.isSnapModifierActive !== isSnapKey) {
             this.setSnapModifierActive(isSnapKey);
           }
@@ -809,6 +849,9 @@ export class MeshEditorService {
           }
 
           if (this.activeTouchPointers.size >= 2) {
+            this.isMarqueeCandidate = false;
+            this.isMarqueeActive = false;
+            this.hideMarqueeVisual();
             this.touchTapEligible = false;
             if (!this.isAnyGizmoDragging()) {
               const nextPinch = this.getTouchPinchState();
@@ -827,6 +870,22 @@ export class MeshEditorService {
               this.touchTapEligible = false;
             }
             if (
+              this.isMarqueeCandidate &&
+              this.touchDragMode === 'marquee' &&
+              !this.isAnyGizmoDragging() &&
+              !this.isSculptModeActive() &&
+              !this.isWeightPaintModeActive()
+            ) {
+              if (touchDist > 8) {
+                this.isMarqueeActive = true;
+                this.updateMarqueeVisual(
+                  this.marqueeStartClient.x,
+                  this.marqueeStartClient.y,
+                  cx,
+                  cy
+                );
+              }
+            } else if (
               this.touchOrbitActive &&
               this.touchLastSingleClient &&
               !this.isAnyGizmoDragging() &&
@@ -870,7 +929,7 @@ export class MeshEditorService {
 
         const evt = rawEvt as PointerEvent | undefined;
         if (evt) {
-          const isSnapKey = !!(evt.metaKey || evt.ctrlKey);
+          const isSnapKey = this.touchSnapActive || !!(evt.metaKey || evt.ctrlKey);
           if (this.isSnapModifierActive !== isSnapKey) {
             this.setSnapModifierActive(isSnapKey);
           }
@@ -887,22 +946,25 @@ export class MeshEditorService {
           this.scene.pointerY - pointerDownPos.y
         );
 
+        let touchEndPoint: { x: number; y: number } | null = null;
         if (isTouch && evt) {
           const pid = typeof evt.pointerId === 'number' ? evt.pointerId : 0;
           const cx = evt.clientX ?? this.scene.pointerX;
           const cy = evt.clientY ?? this.scene.pointerY;
           dist = Math.hypot(cx - touchDownClient.x, cy - touchDownClient.y);
+          touchEndPoint = getTouchCanvasPoint(evt);
           this.activeTouchPointers.delete(pid);
           if (this.activeTouchPointers.size < 2) {
             this.touchLastPinchState = null;
           }
           const allowTouchTap = this.touchTapEligible && dist <= 10;
+          const allowTouchMarquee = wasMarquee && this.touchDragMode === 'marquee' && dist > 8;
           if (this.activeTouchPointers.size === 0) {
             this.touchOrbitActive = false;
             this.touchLastSingleClient = null;
             this.touchTapEligible = false;
           }
-          if (!allowTouchTap) {
+          if (!allowTouchTap && !allowTouchMarquee) {
             return;
           }
         }
@@ -924,20 +986,24 @@ export class MeshEditorService {
           this.voxelPainter?.isActive ||
           this.pathExtrusion?.isActive ||
           this.decalController?.isActive ||
-          (this.textMeshController?.isSurfacePlacementActive && evt?.shiftKey) ||
+          this.textMeshController?.isSurfacePlacementActive ||
           this.isSculptModeActive() ||
           this.isWeightPaintModeActive()
         ) {
           return;
         }
 
-        // If a marquee selection rectangle was dragged (> 6px)
-        if (!isTouch && wasMarquee && dist > 6) {
-          const minX = Math.min(startPointer.x, this.scene.pointerX);
-          const maxX = Math.max(startPointer.x, this.scene.pointerX);
-          const minY = Math.min(startPointer.y, this.scene.pointerY);
-          const maxY = Math.max(startPointer.y, this.scene.pointerY);
-          const isAdditive = !!(evt && (evt.shiftKey || evt.metaKey || evt.ctrlKey));
+        const isAdditive =
+          !!(evt && (evt.shiftKey || evt.metaKey || evt.ctrlKey)) ||
+          (isTouch && this.touchMultiSelectActive);
+
+        // If a marquee selection rectangle was dragged (> 6px desktop or > 8px touch marquee mode)
+        if (wasMarquee && ((isTouch && dist > 8) || (!isTouch && dist > 6))) {
+          const endPt = touchEndPoint ?? { x: this.scene.pointerX, y: this.scene.pointerY };
+          const minX = Math.min(startPointer.x, endPt.x);
+          const maxX = Math.max(startPointer.x, endPt.x);
+          const minY = Math.min(startPointer.y, endPt.y);
+          const maxY = Math.max(startPointer.y, endPt.y);
 
           this.selectMeshesInScreenRect(minX, minY, maxX, maxY, isAdditive);
           return;
@@ -953,7 +1019,7 @@ export class MeshEditorService {
             return;
           }
           if (this.isEditorHelper(mesh) || mesh === this.gridMesh) {
-            if (!evt || (!evt.shiftKey && !evt.metaKey && !evt.ctrlKey)) {
+            if (!isAdditive) {
               this.selectNodes([]);
             }
             return;
@@ -964,13 +1030,13 @@ export class MeshEditorService {
             targetNode = mesh.parent as TransformNode;
           }
 
-          if (evt && (evt.shiftKey || evt.metaKey || evt.ctrlKey)) {
+          if (isAdditive) {
             this.toggleNodeSelection(targetNode);
           } else {
             this.selectNodes([targetNode], false, pick.subMeshId);
           }
         } else {
-          if (!evt || (!evt.shiftKey && !evt.metaKey && !evt.ctrlKey)) {
+          if (!isAdditive) {
             this.selectNodes([]);
           }
         }

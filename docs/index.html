@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mesh Editor — 3D Model Studio &amp; AI Mesh Manipulation Workbench</title>
-  <meta name="description" content="Mesh Editor is a modern, modular 3D model studio and game asset pipeline workbench. Co-create 3D meshes with the AI of your choice, sculpt with non-destructive CSG booleans &amp; bevels, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs, bake Normal &amp; AO maps, rig skeletons with weight painting, and deploy across Web, Desktop, and Web Components.">
+  <meta name="description" content="Mesh Editor is a modern, modular 3D model studio and game asset pipeline workbench for Desktop, Tablet & Touch Devices (iPad, iPhone, Android). Co-create 3D meshes with the AI of your choice, sculpt with non-destructive CSG booleans &amp; bevels, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs, bake Normal &amp; AO maps, rig skeletons with weight painting, and deploy across Web, Desktop, and Web Components.">
   <link rel="icon" type="image/svg+xml" href="app-icon.svg">
   <link rel="stylesheet" href="style.css">
   <!-- Babylon.js CDN for Realtime 3D Model Viewport & GLB Sandbox Previews -->
@@ -60,8 +60,8 @@
             3D Modeling Made Easy.<br/>No Subscription, No Costs.<br/>You and your AI - <span class="text-gradient">Together.</span>
           </h1>
           <p class="hero-subtitle">
-            Mesh Editor is an open, modular 3D model studio and complete game asset workbench. 
-            Co-sculpt 3D meshes side-by-side with the <strong>AI of your choice</strong>, build with non-destructive CSG booleans &amp; bevels, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs with uniform Texel Density, bake High-to-Low-Poly Normal &amp; AO maps, rig skeletons with Weight Painting, and deploy seamlessly as a <strong>Browser App</strong>, native <strong>Desktop Studio</strong>, or embeddable <strong>Web Component</strong>.
+            Mesh Editor is an open, modular 3D model studio and complete game asset workbench for <strong>Desktop &amp; Touch Devices</strong> (iPad, iPhone, Android, and desktop browsers).
+            Co-sculpt 3D meshes side-by-side with the <strong>AI of your choice</strong>, navigate effortlessly with mouse, keyboard, or <strong>keyboard-free touch gestures</strong>, build with non-destructive CSG booleans &amp; bevels, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs, bake Normal &amp; AO maps, rig skeletons, and deploy seamlessly as a <strong>Browser App</strong>, native <strong>Desktop Studio</strong>, or embeddable <strong>Web Component</strong>.
           </p>
 
           <div class="hero-cta-group">
@@ -227,7 +227,7 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Work precisely with units &amp; snapping:</strong> Navigate with Universal Orbit, Pan, and WASD fly-through. Work with project units, grid, vertex snapping, numeric controls, and focus (<kbd>F</kbd>).</span>
+              <span><strong>Work precisely with mouse, keyboard, or touch:</strong> Navigate via Universal Orbit, Pan, and WASD fly-through on desktop—or 1-finger orbit/tap, 2-finger pinch/pan, and the <strong>keyboard-free Touch Bar</strong> (Box Select, +Select, Snap, Focus) on iPad, iPhone &amp; Android.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -263,13 +263,14 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Deploy across Web, Desktop &amp; Embeds:</strong> Run 100% in your browser with zero installs, use the native macOS, Windows, and Linux desktop app with OS file associations, or embed <code>&lt;mesh-editor&gt;</code> into your own software.</span>
+              <span><strong>Deploy across Desktop, Touch Web &amp; Embeds:</strong> Run 100% in desktop or mobile/tablet touch browsers (iPad, iPhone, Android) with zero installs, use the native macOS, Windows, and Linux desktop app, or embed <code>&lt;mesh-editor&gt;</code> into your own software.</span>
             </li>
           </ul>
 
           <div class="overview-footer-note">
             <span>Choose GLB, OBJ, or STL export units to match your game engine, Blender, or 3D printing workflow.</span>
             <div class="overview-footer-badges">
+              <span class="overview-footer-badge">Desktop &amp; Touch (iPad / iPhone / Android)</span>
               <span class="overview-footer-badge">macOS &bull; Windows &bull; Linux Native</span>
               <span class="overview-footer-badge">Zero-Install Web</span>
               <span class="overview-footer-badge">&lt;mesh-editor&gt; Web Component</span>
@@ -293,8 +294,8 @@
           <div class="stat-label">oMLX, Ollama, Gemini + TRELLIS 2, Hunyuan3D, Hi3D</div>
         </div>
         <div class="stat-item">
-          <div class="stat-val text-gradient-cyan">3 Adapters</div>
-          <div class="stat-label">Browser, Desktop App &amp; Web Component</div>
+          <div class="stat-val text-gradient-cyan">Desktop &amp; Touch</div>
+          <div class="stat-label">Browser, iPad/Phone, Desktop App &amp; Web Component</div>
         </div>
         <div class="stat-item">
           <div class="stat-val text-gradient-cyan">Multi-Format</div>
@@ -1087,12 +1088,16 @@
               </div>
             </div>
             <p class="card-desc">
-              Zero installation required. Launch instantly in Chrome, Firefox, Safari, or Edge. Runs 100% client-side via hardware-accelerated WebGL2 and WebGPU.
+              Zero installation required. Launch instantly on desktop or touch devices (iPad, iPhone, Android) in Chrome, Firefox, Safari, or Edge. Runs 100% client-side via hardware-accelerated WebGL2 and WebGPU.
             </p>
             <ul class="adapter-list">
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span>Instant HTML5 drag-and-drop 3D file loading</span>
+                <span>Keyboard-free Touch &amp; Tablet support (1-finger orbit/tap, 2-finger pinch/pan, Touch Bar)</span>
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Instant HTML5 drag-and-drop &amp; mobile file picker loading</span>
               </li>
               <li>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -1466,6 +1471,17 @@
               Press <kbd>⌘P</kbd> / <kbd>Ctrl+P</kbd> or open <strong>Actions &rarr; Capture Screenshot...</strong> to render grid-free images with a pre-filled or custom filename: <strong>Current Perspective</strong> (1 JPEG), <strong>4 Directions</strong> (+3 &times; 90° ZIP), or <strong>8 Directions</strong> (+7 &times; 45° ZIP) at your exact camera distance and angle.
             </p>
           </div>
+
+          <!-- Feature 18 -->
+          <div class="feature-box">
+            <div class="feature-box-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+            </div>
+            <h4 class="feature-box-title">Touch &amp; Mobile Ready (No Keyboard Needed)</h4>
+            <p class="feature-box-desc">
+              Create and edit on <strong>iPad, iPhone &amp; Android</strong> with 1-finger tap selection, 1-finger camera orbit, 2-finger pinch/pan, responsive auto-minimized panels (&le; 1024px), tap-to-place 3D Text &amp; Splines, Stamp/Erase Decals, touch 2D Profile Canvas, and the floating <strong>Touch Bar</strong> for Box Select, +Select &amp; Snap.
+            </p>
+          </div>
         </div>
 
         <!-- Heightmap Terrain & 3-Texture RGB Splatting Showcase -->
@@ -1649,7 +1665,7 @@
               </li>
               <li>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span>Enhanced touch &amp; tablet trackpad gestures</span>
+                <span>Apple Pencil &amp; stylus tilt/pressure sensitivity for sculpting</span>
               </li>
             </ul>
           </div>

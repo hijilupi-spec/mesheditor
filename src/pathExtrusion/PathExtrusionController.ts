@@ -44,6 +44,7 @@ export class PathExtrusionController {
   // Pointer & Gizmo observers
   private pointerObserver: Observer<PointerInfo> | null = null;
   private gizmoObserver: Observer<any> | null = null;
+  public tapToPlaceMode: boolean = false;
 
   // Callbacks for UI updates
   public onStateChanged?: () => void;
@@ -451,21 +452,30 @@ export class PathExtrusionController {
   private setupPointerEvents(): void {
     if (this.pointerObserver) return;
 
+    let downPos: { x: number; y: number } | null = null;
     this.pointerObserver = this.service.scene.onPointerObservable.add((pointerInfo) => {
       if (!this.isActive || this.service.isSceneInteractionLocked) return;
+      const evt = pointerInfo.event as PointerEvent;
+      if (evt.button !== 0) return;
 
-      if (pointerInfo.type === PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
+      if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
+        downPos = {
+          x: evt.clientX ?? this.service.scene.pointerX,
+          y: evt.clientY ?? this.service.scene.pointerY,
+        };
+        return;
+      }
+
+      if (pointerInfo.type === PointerEventTypes.POINTERUP && downPos) {
+        const cx = evt.clientX ?? this.service.scene.pointerX;
+        const cy = evt.clientY ?? this.service.scene.pointerY;
+        const dist = Math.hypot(cx - downPos.x, cy - downPos.y);
+        downPos = null;
+        if (dist > 10) return;
+
         const pick = pointerInfo.pickInfo;
-        const evt = pointerInfo.event as MouseEvent;
 
-        // Shift+Click: Append or place point
-        if (evt.shiftKey && pick && pick.hit && pick.pickedPoint) {
-          const pt = pick.pickedPoint;
-          this.addPoint(new Vector3(Math.round(pt.x * 10) / 10, pt.y + 0.05, Math.round(pt.z * 10) / 10));
-          return;
-        }
-
-        // Click marker: Select point for Gizmo manipulation
+        // Click / Tap marker: Select point for Gizmo manipulation
         if (pick && pick.hit && pick.pickedMesh) {
           const mesh = pick.pickedMesh as Mesh;
           const meta = (mesh as any).metadata;
@@ -473,7 +483,14 @@ export class PathExtrusionController {
             this.selectedPointIndex = meta.pathPointIndex;
             this.rebuildMarkers();
             this.onStateChanged?.();
+            return;
           }
+        }
+
+        // Shift+Click or Tap-to-Place mode: Append or place point
+        if ((evt.shiftKey || this.tapToPlaceMode) && pick && pick.hit && pick.pickedPoint) {
+          const pt = pick.pickedPoint;
+          this.addPoint(new Vector3(Math.round(pt.x * 10) / 10, pt.y + 0.05, Math.round(pt.z * 10) / 10));
         }
       }
     });

@@ -111,6 +111,11 @@
               <span class="btn-label">Paste</span>
               <span class="shortcut-tag">⌘V</span>
             </button>
+            <button class="dropdown-item" id="btnDuplicateSelected" title="Duplicate selected mesh(es) or group(s) (Cmd+D / Ctrl+D)">
+              <span class="btn-icon"><i class="app-icon" data-lucide="copy-plus"></i></span>
+              <span class="btn-label">Duplicate</span>
+              <span class="shortcut-tag">⌘D</span>
+            </button>
             <div class="dropdown-divider"></div>
             <button class="dropdown-item btn-danger" id="btnDeleteSelected" title="Delete selected mesh or group (Key: Del)">
               <span class="btn-icon"><i class="app-icon" data-lucide="trash-2"></i></span>
@@ -397,6 +402,31 @@
         <%- include('./tools/editor/HeightmapEditorTool.ejs') %>
       </div>
 
+      <!-- Touch & Compact Viewport Controls (shown automatically on touch / <= 1024px viewports) -->
+      <div id="touchViewportControls" class="touch-viewport-controls" role="toolbar" aria-label="Touch Viewport Controls">
+        <button type="button" class="touch-ctrl-btn active" id="btnTouchModeOrbit" title="1-Finger Drag: Orbit Camera">
+          <i class="app-icon" data-lucide="rotate-3d"></i>
+          <span>Orbit</span>
+        </button>
+        <button type="button" class="touch-ctrl-btn" id="btnTouchModeRect" title="1-Finger Drag: Rectangle Box Selection">
+          <i class="app-icon" data-lucide="box-select"></i>
+          <span>Box Select</span>
+        </button>
+        <div class="touch-ctrl-divider"></div>
+        <button type="button" class="touch-ctrl-btn" id="btnTouchMultiSelect" title="Toggle additive multi-selection (replaces Shift/Cmd)">
+          <i class="app-icon" data-lucide="layers"></i>
+          <span>+Select</span>
+        </button>
+        <button type="button" class="touch-ctrl-btn" id="btnTouchSnap" title="Toggle grid & angle snapping (replaces Cmd/Ctrl)">
+          <i class="app-icon" data-lucide="magnet"></i>
+          <span>Snap</span>
+        </button>
+        <button type="button" class="touch-ctrl-btn" id="btnTouchFocus" title="Center camera on selection">
+          <i class="app-icon" data-lucide="crosshair"></i>
+          <span>Focus</span>
+        </button>
+      </div>
+
       <!-- Bottom Status Bar -->
       <footer id="bottom-bar">
         <div class="status-left">
@@ -619,6 +649,28 @@
                   <td>Orbit & rotate camera freely in 3D</td>
                 </tr>
                 
+              </table>
+            </div>
+
+            <div class="help-section">
+              <h4><i class="app-icon" data-lucide="smartphone"></i> Touch &amp; Mobile Controls</h4>
+              <table class="help-table">
+                <tr>
+                  <td>Tap (1 Finger)</td>
+                  <td>Select mesh, facet, or drag 3D transform gizmo handles</td>
+                </tr>
+                <tr>
+                  <td>Drag (1 Finger)</td>
+                  <td>Orbit camera around the scene (or drag selection box in <em>Box Select</em> mode)</td>
+                </tr>
+                <tr>
+                  <td>Pinch &amp; Drag (2 Fingers)</td>
+                  <td>Zoom in/out and pan camera smoothly</td>
+                </tr>
+                <tr>
+                  <td>Touch Bar (Bottom Left)</td>
+                  <td>Switch <em>Orbit / Box Select</em>, toggle <em>+Select</em> (multi-select), <em>Snap</em>, and <em>Focus</em> without a keyboard</td>
+                </tr>
               </table>
             </div>
 

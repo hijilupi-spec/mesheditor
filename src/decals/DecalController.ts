@@ -140,8 +140,10 @@ export class DecalController {
   private lastPickedMesh: Nullable<Mesh> = null;
   private lastPickedPoint: Nullable<Vector3> = null;
   private lastPickedNormal: Nullable<Vector3> = null;
+  private leftMouseDownPos: { x: number; y: number } | null = null;
   private rightMouseDownPos: { x: number; y: number } | null = null;
   private decalCounter = 1;
+  public interactionMode: 'stamp' | 'erase' = 'stamp';
 
   public onDecalsChanged?: () => void;
   public onConfigChanged?: (config: DecalPlacementConfig) => void;
@@ -869,13 +871,30 @@ export class DecalController {
       } else if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
         const evt = pointerInfo.event as PointerEvent;
         if (evt.button === 0) {
-          this.handleLeftClick();
+          this.leftMouseDownPos = {
+            x: evt.clientX ?? this.service.scene.pointerX,
+            y: evt.clientY ?? this.service.scene.pointerY,
+          };
         } else if (evt.button === 2) {
           this.rightMouseDownPos = { x: this.service.scene.pointerX, y: this.service.scene.pointerY };
         }
       } else if (pointerInfo.type === PointerEventTypes.POINTERUP) {
         const evt = pointerInfo.event as PointerEvent;
-        if (evt.button === 2 && this.rightMouseDownPos) {
+        if (evt.button === 0 && this.leftMouseDownPos) {
+          const cx = evt.clientX ?? this.service.scene.pointerX;
+          const cy = evt.clientY ?? this.service.scene.pointerY;
+          const dx = Math.abs(cx - this.leftMouseDownPos.x);
+          const dy = Math.abs(cy - this.leftMouseDownPos.y);
+          this.leftMouseDownPos = null;
+          if (dx <= 10 && dy <= 10) {
+            if (this.interactionMode === 'erase') {
+              this.handleRightClickDelete();
+            } else {
+              this.handlePointerMove();
+              this.handleLeftClick();
+            }
+          }
+        } else if (evt.button === 2 && this.rightMouseDownPos) {
           const dx = Math.abs(this.service.scene.pointerX - this.rightMouseDownPos.x);
           const dy = Math.abs(this.service.scene.pointerY - this.rightMouseDownPos.y);
           this.rightMouseDownPos = null;
