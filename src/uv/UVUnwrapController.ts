@@ -132,7 +132,7 @@ export class UVUnwrapController {
    */
   private initPointerHandling(): void {
     this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
-      if (!this.isActive || !this.seamPickMode) return;
+      if (!this.isActive || !this.seamPickMode || this.service.isSceneInteractionLocked) return;
       if (pointerInfo.type !== PointerEventTypes.POINTERDOWN) return;
       const evt = pointerInfo.event as MouseEvent;
       if (evt && evt.button !== 0) return;

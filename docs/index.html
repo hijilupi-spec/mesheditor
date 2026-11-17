@@ -251,6 +251,10 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span><strong>Capture grid-free screenshots &amp; turnarounds:</strong> Trigger <strong>Actions &rarr; Capture Screenshot...</strong> (<kbd>⌘P</kbd> / <kbd>Ctrl+P</kbd>) to download a single JPEG from the current perspective or a multi-angle <strong>4 Directions</strong> (90°) / <strong>8 Directions</strong> (45°) turntable ZIP archive with the ground grid automatically hidden.</span>
+            </li>
+            <li class="overview-bullet-item">
+              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
               <span><strong>Import &amp; export universal 3D formats:</strong> Import GLB, GLTF, DAE (with multi-file textures), OBJ, STL, PLY, and Babylon scenes. Export textured binary GLB bundles, glTF, Wavefront OBJ, STL meshes for 3D printing, or full <code>.babylon</code> scenes.</span>
             </li>
             <li class="overview-bullet-item">
@@ -1451,6 +1455,17 @@
               Spawn Humanoid, Quadruped, or Spine skeletons, auto-bind 4-bone capsule weights, paint vertex heatmaps with X-symmetry, and test joint poses.
             </p>
           </div>
+
+          <!-- Feature 17 -->
+          <div class="feature-box">
+            <div class="feature-box-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+            </div>
+            <h4 class="feature-box-title">Capture Screenshots &amp; Multi-Angle ZIP</h4>
+            <p class="feature-box-desc">
+              Press <kbd>⌘P</kbd> / <kbd>Ctrl+P</kbd> or open <strong>Actions &rarr; Capture Screenshot...</strong> to render grid-free images with a pre-filled or custom filename: <strong>Current Perspective</strong> (1 JPEG), <strong>4 Directions</strong> (+3 &times; 90° ZIP), or <strong>8 Directions</strong> (+7 &times; 45° ZIP) at your exact camera distance and angle.
+            </p>
+          </div>
         </div>
 
         <!-- Heightmap Terrain & 3-Texture RGB Splatting Showcase -->
@@ -1837,6 +1852,13 @@
         sub: 'In Mario style...',
         screenshot: 'screenshots/star.jpg',
         model: 'models/star.glb'
+      },
+      {
+        id: 'golden_flower',
+        title: 'Golden Flower',
+        sub: 'In Mario style...',
+        screenshot: 'screenshots/golden_flower.jpg',
+        model: 'models/golden_flower.glb'
       },
       {
         id: 'stone_pillar',

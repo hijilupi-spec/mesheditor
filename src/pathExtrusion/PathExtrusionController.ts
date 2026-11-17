@@ -452,7 +452,7 @@ export class PathExtrusionController {
     if (this.pointerObserver) return;
 
     this.pointerObserver = this.service.scene.onPointerObservable.add((pointerInfo) => {
-      if (!this.isActive) return;
+      if (!this.isActive || this.service.isSceneInteractionLocked) return;
 
       if (pointerInfo.type === PointerEventTypes.POINTERDOWN && pointerInfo.event.button === 0) {
         const pick = pointerInfo.pickInfo;

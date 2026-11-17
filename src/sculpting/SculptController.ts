@@ -208,7 +208,11 @@ export class SculptController {
         this.endSculptStroke();
       }
       // Restore gizmo on selected mesh when sculpting is deactivated
-      if (this.service.selectedMesh && !this.service.isGizmoMesh(this.service.selectedMesh)) {
+      if (
+        !this.service.isSceneInteractionLocked &&
+        this.service.selectedMesh &&
+        !this.service.isGizmoMesh(this.service.selectedMesh)
+      ) {
         this.service.gizmoManager?.attachToNode(this.service.selectedMesh);
       }
     }
@@ -230,7 +234,7 @@ export class SculptController {
     }
 
     this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
-      if (!this.isActive) return;
+      if (!this.isActive || this.service.isSceneInteractionLocked) return;
 
       const evt = pointerInfo.event as MouseEvent;
       const isLeftButton = evt ? evt.button === 0 : true;

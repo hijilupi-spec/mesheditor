@@ -17,6 +17,7 @@ import {
   Neural3DProtocol,
   Neural3DProvidersMap,
   PrimitiveShape,
+  ScreenshotMode,
 } from './types';
 import { PathExtrusionStudio } from './pathExtrusion';
 import {
@@ -422,6 +423,7 @@ export class MeshEditorApp {
   private sceneLoaderElement: HTMLElement | null = null;
   private sceneLoaderTitle: HTMLElement | null = null;
   private sceneLoaderSub: HTMLElement | null = null;
+  private sceneLoaderStopBtn: HTMLButtonElement | null = null;
   private startupTimerIds: Array<ReturnType<typeof setTimeout>> = [];
   private sceneLoaderTimerId: ReturnType<typeof setTimeout> | null = null;
 
@@ -469,6 +471,7 @@ export class MeshEditorApp {
   // AI Agent UI State
   private aiPendingImages: string[] = [];
   private aiAbortController: AbortController | null = null;
+  private isAIGenerating: boolean = false;
   private initialChatEmptyHtml: string = '';
   private speechRecognition: any = null;
   private isRecordingSpeech: boolean = false;
@@ -707,6 +710,11 @@ export class MeshEditorApp {
     this.sceneLoaderElement = this.getElement<HTMLElement>('sceneInitLoader');
     this.sceneLoaderTitle = this.getElement<HTMLElement>('sceneLoaderTitle');
     this.sceneLoaderSub = this.getElement<HTMLElement>('sceneLoaderSub');
+    this.sceneLoaderStopBtn = this.getElement<HTMLButtonElement>('btnSceneLoaderStop');
+    this.sceneLoaderStopBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.stopAIGeneration();
+    });
 
     this.setStartupProgress(35, 'Initializing Babylon 3D Engine...');
     this.showSceneLoader('Initializing Babylon 3D Scene...', 'WEBGL2 ENGINE • SHADER PIPELINE • MESH GEOMETRY');
@@ -1115,6 +1123,7 @@ export class MeshEditorApp {
     const btnBounds = document.getElementById('btnGizmoBounds');
 
     const updateGizmoButtons = (mode: 'translate' | 'rotate' | 'scale' | 'bounds') => {
+      if (this.isAIGenerating) return;
       btnTranslate?.classList.toggle('active', mode === 'translate');
       btnRotate?.classList.toggle('active', mode === 'rotate');
       btnScale?.classList.toggle('active', mode === 'scale');
@@ -1137,16 +1146,24 @@ export class MeshEditorApp {
     btnBounds?.addEventListener('click', () => updateGizmoButtons('bounds'));
 
     // Undo / Redo
-    document.getElementById('btnUndo')?.addEventListener('click', () => this.service.undo());
-    document.getElementById('btnRedo')?.addEventListener('click', () => this.service.redo());
+    document.getElementById('btnUndo')?.addEventListener('click', () => {
+      if (this.isAIGenerating) return;
+      this.service.undo();
+    });
+    document.getElementById('btnRedo')?.addEventListener('click', () => {
+      if (this.isAIGenerating) return;
+      this.service.redo();
+    });
 
     // File Menu Generic Operations
     this.getElement('btnOpenModel')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.triggerOpenModel();
     });
     this.getElement('btnImportModel')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.triggerImportModel();
     });
     this.getElement('btnSaveBabylonScene')?.addEventListener('click', () => {
@@ -1165,22 +1182,27 @@ export class MeshEditorApp {
     });
     document.getElementById('btnCenterPivot')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.service.centerSelectedPivot();
     });
     document.getElementById('btnExtractSubmesh')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.service.separateSelectedLooseParts();
     });
     document.getElementById('btnMergeMeshes')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.service.mergeSelectedMeshes();
     });
     document.getElementById('btnGroup')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.service.groupSelected();
     });
     document.getElementById('btnUngroup')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.service.ungroupSelected();
     });
     this.getElement('btnCopy')?.addEventListener('click', () => {
@@ -1189,6 +1211,7 @@ export class MeshEditorApp {
     });
     this.getElement('btnPaste')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       if (this.service.lastPointerX === 0 && this.service.lastPointerY === 0 && this.canvas) {
         this.service.pasteAtCursor(
           (this.canvas.clientWidth || this.canvas.width || 800) / 2,
@@ -1200,6 +1223,7 @@ export class MeshEditorApp {
     });
     document.getElementById('btnDeleteSelected')?.addEventListener('click', () => {
       this.closeAllDropdowns();
+      if (this.isAIGenerating) return;
       this.service.deleteSelected();
     });
 
@@ -1219,6 +1243,10 @@ export class MeshEditorApp {
       this.syncSettingsUI();
       this.updatePanelButtonStates();
       this.showToast(`Ground grid ${newGridState ? 'enabled' : 'disabled'}`, 'info');
+    });
+    this.getElement('btnCaptureScreenshot')?.addEventListener('click', () => {
+      this.closeAllDropdowns();
+      this.openScreenshotDialog();
     });
 
     // Layout Mode (Floating vs Stack)
@@ -1289,6 +1317,7 @@ export class MeshEditorApp {
       if (e.key === 'Escape') {
         this.closeAllDropdowns();
         this.closeExportDialog();
+        this.closeScreenshotDialog();
         this.hidePromptHelp();
       }
     });
@@ -1401,6 +1430,9 @@ export class MeshEditorApp {
 
     // Export Modal Dialog
     this.initExportDialog();
+
+    // Capture Screenshot Modal Dialog
+    this.initScreenshotDialog();
 
     // Outliner wireframe toggle button
     const btnOutlinerWireframe = this.getElement<HTMLButtonElement>('btnOutlinerWireframe');
@@ -3613,7 +3645,11 @@ export class MeshEditorApp {
       if (this.layoutMode === 'stackpanel') {
         this.accordionMinimizeOthers(dialog);
       }
-      tool?.onMaximize?.(this);
+      if (this.isAIGenerating && tool?.isExclusive3DTool) {
+        tool.onUpdateUI?.(this);
+      } else {
+        tool?.onMaximize?.(this);
+      }
     }
 
     const btnMin = dialog.querySelector('.btn-min') as HTMLElement | null;
@@ -3706,7 +3742,11 @@ export class MeshEditorApp {
           }
         }
       }
-      tool?.onOpen?.(this);
+      if (this.isAIGenerating && tool?.isExclusive3DTool) {
+        tool.onUpdateUI?.(this);
+      } else {
+        tool?.onOpen?.(this);
+      }
     } else {
       tool?.onClose?.(this);
     }
@@ -3879,6 +3919,173 @@ export class MeshEditorApp {
       format: 'babylon',
       selectedOnly: false,
     });
+  }
+
+  /* =========================================================================
+     CAPTURE SCREENSHOT MODAL DIALOG
+     ========================================================================= */
+  private selectedScreenshotMode: ScreenshotMode = 'current';
+
+  private initScreenshotDialog(): void {
+    const modal = this.getElement<HTMLDialogElement>('screenshotModal');
+    if (!modal) return;
+
+    const btnClose = this.getElement('btnCloseScreenshot');
+    const btnCancel = this.getElement('btnCancelScreenshot');
+    const btnConfirm = this.getElement('btnConfirmScreenshot');
+    const filenameInput = this.getElement<HTMLInputElement>('screenshotFilenameInput');
+    const modeCards = modal.querySelectorAll<HTMLElement>('.screenshot-mode-option');
+
+    btnClose?.addEventListener('click', () => this.closeScreenshotDialog());
+    btnCancel?.addEventListener('click', () => this.closeScreenshotDialog());
+
+    modal.addEventListener('close', () => {
+      modal.returnValue = '';
+      try {
+        this.canvas?.focus();
+      } catch {
+        // Ignore
+      }
+    });
+
+    // Fallback light-dismiss for browsers without native closedby support
+    if (typeof HTMLDialogElement !== 'undefined' && !('closedBy' in HTMLDialogElement.prototype)) {
+      const isOutside = (e: PointerEvent) => {
+        const rect = modal.getBoundingClientRect();
+        return e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+      };
+      let pressedOutside = false;
+      modal.addEventListener('pointerdown', (e) => {
+        pressedOutside = isOutside(e);
+      });
+      modal.addEventListener('pointerup', (e) => {
+        if (pressedOutside && isOutside(e)) {
+          this.closeScreenshotDialog();
+        }
+      });
+    }
+
+    modeCards.forEach((card) => {
+      card.addEventListener('click', () => {
+        const mode = card.getAttribute('data-mode') as ScreenshotMode | null;
+        if (!mode) return;
+        this.setScreenshotMode(mode);
+      });
+    });
+
+    btnConfirm?.addEventListener('click', () => {
+      this.confirmScreenshot();
+    });
+
+    filenameInput?.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.confirmScreenshot();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.closeScreenshotDialog();
+      }
+    });
+  }
+
+  private setScreenshotMode(mode: ScreenshotMode): void {
+    this.selectedScreenshotMode = mode;
+    const modal = this.getElement<HTMLDialogElement>('screenshotModal');
+    if (!modal) return;
+
+    const modeCards = modal.querySelectorAll<HTMLElement>('.screenshot-mode-option');
+    modeCards.forEach((card) => {
+      const cardMode = card.getAttribute('data-mode');
+      const isSelected = cardMode === mode;
+      card.classList.toggle('active', isSelected);
+      const radio = card.querySelector<HTMLInputElement>('input[type="radio"]');
+      if (radio) radio.checked = isSelected;
+    });
+
+    const badge = this.getElement('screenshotExtensionBadge');
+    if (badge) {
+      badge.textContent = mode === 'current' ? '.jpg' : '.zip';
+    }
+  }
+
+  public openScreenshotDialog(): void {
+    const modal = this.getElement<HTMLDialogElement>('screenshotModal');
+    if (!modal) return;
+
+    const filenameInput = this.getElement<HTMLInputElement>('screenshotFilenameInput');
+    if (filenameInput) {
+      filenameInput.value = this.service.getSuggestedScreenshotName();
+    }
+
+    this.setScreenshotMode(this.selectedScreenshotMode || 'current');
+
+    if (typeof modal.showModal === 'function') {
+      try {
+        if (!modal.open) {
+          modal.showModal();
+        }
+      } catch {
+        modal.setAttribute('open', '');
+      }
+    } else {
+      modal.setAttribute('open', '');
+    }
+
+    this.refreshIcons();
+
+    setTimeout(() => {
+      if (filenameInput) {
+        filenameInput.focus();
+        filenameInput.select();
+      }
+    }, 50);
+  }
+
+  public closeScreenshotDialog(): void {
+    const modal = this.getElement<HTMLDialogElement>('screenshotModal');
+    if (!modal) return;
+
+    if (typeof modal.close === 'function') {
+      try {
+        if (modal.open) {
+          modal.close();
+        }
+      } catch {
+        modal.removeAttribute('open');
+      }
+    } else {
+      modal.removeAttribute('open');
+    }
+
+    try {
+      this.canvas?.focus();
+    } catch {
+      // Ignore
+    }
+  }
+
+  public confirmScreenshot(): void {
+    const filenameInput = this.getElement<HTMLInputElement>('screenshotFilenameInput');
+    const rawFilename = (filenameInput?.value || '').trim();
+    const modal = this.getElement<HTMLDialogElement>('screenshotModal');
+    const activeCard = modal?.querySelector<HTMLElement>('.screenshot-mode-option.active');
+    const mode = (activeCard?.getAttribute('data-mode') || this.selectedScreenshotMode || 'current') as ScreenshotMode;
+
+    try {
+      const result = this.service.captureScreenshots(mode, rawFilename);
+      this.closeScreenshotDialog();
+      this.triggerDownloadBlob(result.blob, result.filename);
+
+      if (result.count === 1) {
+        this.showToast(`Screenshot "${result.filename}" downloaded.`, 'success');
+      } else {
+        this.showToast(`${result.count}-direction screenshots downloaded as "${result.filename}".`, 'success');
+      }
+    } catch (err: any) {
+      console.error('[MeshEditorApp] Screenshot capture failed:', err);
+      this.closeScreenshotDialog();
+      this.showToast(`Screenshot failed: ${err?.message || err}`, 'error');
+    }
   }
 
   private initFacetToolUI(): void {
@@ -5816,7 +6023,7 @@ export class MeshEditorApp {
       this.getToolByDialogId(activeDialog.id) ||
       (activeDialog.id === 'pathExtrusionStudioDialog' ? this.getToolByName('path_extrusion') : null);
 
-    if (targetTool?.isExclusive3DTool && !targetTool.isActive?.(this)) {
+    if (targetTool?.isExclusive3DTool && !targetTool.isActive?.(this) && !this.isAIGenerating) {
       for (const other of this.editorTools) {
         if (other !== targetTool && other.isExclusive3DTool) {
           other.onDeactivate?.(this);
@@ -6263,7 +6470,7 @@ export class MeshEditorApp {
 
       // 1. Visibility toggle
       const btnVis = document.createElement('button');
-      btnVis.className = 'outliner-btn';
+      btnVis.className = 'outliner-btn outliner-btn-mutate';
       const isCurrentlyVisible = (): boolean =>
         node instanceof Mesh ? node.isVisible : descMeshes.some((m) => m.isVisible);
       const isVis = isCurrentlyVisible();
@@ -6271,6 +6478,7 @@ export class MeshEditorApp {
       btnVis.title = 'Toggle visibility';
       btnVis.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (this.isAIGenerating) return;
         const nextVis = !isCurrentlyVisible();
         if (node instanceof Mesh) {
           node.isVisible = nextVis;
@@ -6289,7 +6497,9 @@ export class MeshEditorApp {
       btnCenter.title = 'Center camera on selection';
       btnCenter.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.service.selectNodes([node as any]);
+        if (!this.isAIGenerating) {
+          this.service.selectNodes([node as any]);
+        }
         this.service.focusOnTarget(node as any);
         this.showToast(`Centered on "${node.name}"`, 'success');
       });
@@ -6302,11 +6512,12 @@ export class MeshEditorApp {
           : descMeshes.length > 0 && descMeshes.every((m) => this.service.isMeshWireframe(m));
       const isWire = checkIsWire();
       const btnWire = document.createElement('button');
-      btnWire.className = `outliner-btn ${isWire ? 'active' : ''}`;
+      btnWire.className = `outliner-btn outliner-btn-mutate ${isWire ? 'active' : ''}`;
       btnWire.innerHTML = '<i class="app-icon" data-lucide="scan"></i>';
       btnWire.title = 'Toggle wireframe';
       btnWire.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (this.isAIGenerating) return;
         if (node instanceof Mesh) {
           const state = this.service.toggleMeshWireframe(node);
           this.showToast(`Wireframe ${state ? 'enabled' : 'disabled'} for "${node.name}"`, 'info');
@@ -6324,11 +6535,12 @@ export class MeshEditorApp {
       // 4. Ungroup (if isGroup)
       if (isGroup) {
         const btnUngroup = document.createElement('button');
-        btnUngroup.className = 'outliner-btn';
+        btnUngroup.className = 'outliner-btn outliner-btn-mutate';
         btnUngroup.innerHTML = '<i class="app-icon" data-lucide="folder-minus"></i>';
         btnUngroup.title = 'Ungroup meshes';
         btnUngroup.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (this.isAIGenerating) return;
           this.service.selectNodes([node as any]);
           this.service.ungroupSelected();
         });
@@ -6337,11 +6549,12 @@ export class MeshEditorApp {
 
       // 5. Delete (deletes node and all its children)
       const btnDel = document.createElement('button');
-      btnDel.className = 'outliner-btn';
+      btnDel.className = 'outliner-btn outliner-btn-mutate';
       btnDel.innerHTML = '<i class="app-icon" data-lucide="trash-2"></i>';
       btnDel.title = hasChildren ? 'Delete object and children' : 'Delete object';
       btnDel.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (this.isAIGenerating) return;
         this.service.selectNodes([node as any]);
         this.service.deleteSelected();
       });
@@ -6350,6 +6563,7 @@ export class MeshEditorApp {
       row.appendChild(actions);
 
       row.addEventListener('click', (e: MouseEvent) => {
+        if (this.isAIGenerating) return;
         if (e.metaKey || e.ctrlKey) {
           this.service.toggleNodeSelection(node as any);
         } else if (e.shiftKey) {
@@ -6416,8 +6630,8 @@ export class MeshEditorApp {
     const dropZone = document.getElementById('dropOverlay') || document.getElementById('drop-zone');
 
     window.addEventListener('dragover', (e) => {
-      // Do not activate file drop overlay if an internal tool is being reordered
-      if (this.currentDraggedStackpanelDialog) {
+      // Do not activate file drop overlay if an internal tool is being reordered or AI is generating
+      if (this.currentDraggedStackpanelDialog || this.isAIGenerating) {
         if (dropZone) dropZone.classList.remove('active');
         return;
       }
@@ -6480,7 +6694,7 @@ export class MeshEditorApp {
 
     window.addEventListener('drop', async (e) => {
       if (dropZone) dropZone.classList.remove('active');
-      if (this.currentDraggedStackpanelDialog) return;
+      if (this.currentDraggedStackpanelDialog || this.isAIGenerating) return;
       const types = e.dataTransfer?.types;
       const isFileDrag = types ? Array.from(types).includes('Files') : false;
       if (!isFileDrag) return;
@@ -6573,6 +6787,17 @@ export class MeshEditorApp {
         return;
       }
 
+      const screenshotModal = this.getElement<HTMLDialogElement>('screenshotModal');
+      const isScreenshotOpen = Boolean(screenshotModal && (screenshotModal.open || screenshotModal.hasAttribute('open')));
+      if (isScreenshotOpen) {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
+          e.preventDefault();
+        } else if (e.key === 'Escape') {
+          this.closeScreenshotDialog();
+        }
+        return;
+      }
+
       const activeEl = document.activeElement;
       if (
         activeEl &&
@@ -6627,6 +6852,27 @@ export class MeshEditorApp {
         this.service.setSnapModifierActive(true);
       }
 
+      if (this.isAIGenerating) {
+        if (e.key === 'Escape') {
+          this.closeAllDropdowns();
+          this.closeExportDialog();
+          this.closeScreenshotDialog();
+          this.closeAboutModal();
+        } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && key === 'p') {
+          e.preventDefault();
+          this.openScreenshotDialog();
+        } else if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          this.service.focusOnSelected();
+        } else if ((e.metaKey || e.ctrlKey) && key === 'z') {
+          e.preventDefault();
+        } else if ((e.metaKey || e.ctrlKey) && (key === 'y' || key === 'g' || key === 'v' || key === 'd')) {
+          e.preventDefault();
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+        }
+        return;
+      }
+
       // Undo / Redo
       if ((e.metaKey || e.ctrlKey) && key === 'z') {
         e.preventDefault();
@@ -6651,6 +6897,9 @@ export class MeshEditorApp {
       } else if ((e.metaKey || e.ctrlKey) && key === 'e') {
         e.preventDefault();
         this.openExportDialog();
+      } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && key === 'p') {
+        e.preventDefault();
+        this.openScreenshotDialog();
       } else if (this.service.facetEditorActive && this.service.selectedFaceId !== null && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (!e.shiftKey && key === 'x') {
           e.preventDefault();
@@ -6805,7 +7054,11 @@ export class MeshEditorApp {
 
   public setStatus(text: string, isBusy: boolean = false): void {
     if (this.statusText) this.statusText.textContent = text;
-    if (this.statusIndicator) this.statusIndicator.classList.toggle('busy', isBusy);
+    if (this.statusIndicator) this.statusIndicator.classList.toggle('busy', isBusy || this.isAIGenerating);
+    if (this.isAIGenerating) {
+      this.showSceneLoader(text, 'AI MESH AGENT • LIVE SCENE GENERATION', { topHud: true, showStop: true });
+      return;
+    }
     if (isBusy) {
       this.showSceneLoader(text, 'BABYLON.JS 3D SCENE • PROCESSING MESH PIPELINE');
     } else {
@@ -6888,10 +7141,20 @@ export class MeshEditorApp {
     this.startupLoaderElement?.classList.add('is-hidden');
   }
 
-  public showSceneLoader(title?: string, subtitle?: string): void {
+  public showSceneLoader(
+    title?: string,
+    subtitle?: string,
+    options?: { topHud?: boolean; showStop?: boolean }
+  ): void {
     if (this.sceneLoaderTimerId) {
       clearTimeout(this.sceneLoaderTimerId);
       this.sceneLoaderTimerId = null;
+    }
+    const useTopHud = options?.topHud ?? this.isAIGenerating;
+    const showStop = options?.showStop ?? this.isAIGenerating;
+    this.sceneLoaderElement?.classList.toggle('is-top-hud', useTopHud);
+    if (this.sceneLoaderStopBtn) {
+      this.sceneLoaderStopBtn.style.display = showStop ? 'inline-flex' : 'none';
     }
     if (title && this.sceneLoaderTitle) {
       this.sceneLoaderTitle.textContent = title;
@@ -6902,8 +7165,49 @@ export class MeshEditorApp {
     this.sceneLoaderElement?.classList.remove('is-hidden');
   }
 
-  public hideSceneLoader(): void {
+  public hideSceneLoader(force: boolean = false): void {
+    if (this.isAIGenerating && !force) return;
     this.sceneLoaderElement?.classList.add('is-hidden');
+    if (this.sceneLoaderStopBtn) {
+      this.sceneLoaderStopBtn.style.display = 'none';
+    }
+  }
+
+  public stopAIGeneration(): void {
+    if (this.aiAbortController) {
+      this.aiAbortController.abort();
+      this.aiAbortController = null;
+    }
+  }
+
+  private setAIGeneratingState(active: boolean): void {
+    this.isAIGenerating = active;
+    this.rootContainer?.classList.toggle('is-ai-scene-locked', active);
+
+    if (active) {
+      if (this.service.isPlaceModeActive) {
+        this.service.cancelPlacementMode();
+      }
+      for (const tool of this.editorTools) {
+        if (tool.isExclusive3DTool && tool.isActive?.(this)) {
+          tool.onDeactivate?.(this);
+        }
+      }
+      this.service.setSceneInteractionLocked(true);
+      this.updatePanelButtonStates();
+      this.showSceneLoader('AI Agent working...', 'AI MESH AGENT • LIVE SCENE GENERATION', {
+        topHud: true,
+        showStop: true,
+      });
+      this.refreshIcons();
+    } else {
+      this.service.setSceneInteractionLocked(false);
+      this.hideSceneLoader(true);
+      this.sceneLoaderElement?.classList.remove('is-top-hud');
+      if (this.statusIndicator) this.statusIndicator.classList.remove('busy');
+      this.updateOutliner();
+      this.updatePanelButtonStates();
+    }
   }
 
   /* =========================================================================
@@ -7597,10 +7901,7 @@ export class MeshEditorApp {
     });
 
     this.getElement('btnAIStop')?.addEventListener('click', () => {
-      if (this.aiAbortController) {
-        this.aiAbortController.abort();
-        this.aiAbortController = null;
-      }
+      this.stopAIGeneration();
     });
 
     promptInput?.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -7953,6 +8254,9 @@ export class MeshEditorApp {
   }
 
   public async runAIAgentPrompt(promptOverride?: string): Promise<void> {
+    if (this.isAIGenerating) {
+      return;
+    }
     if (this.isRecordingSpeech) {
       this.stopSpeechRecognition();
     }
@@ -8116,6 +8420,7 @@ export class MeshEditorApp {
     if (btnGenerate) btnGenerate.disabled = true;
     if (btnStop) btnStop.style.display = 'inline-flex';
     this.aiAbortController = new AbortController();
+    this.setAIGeneratingState(true);
 
     try {
       const modeVal =
@@ -8130,8 +8435,15 @@ export class MeshEditorApp {
           : this.service.aiAgent.getConfig().visualCritique,
         signal: this.aiAbortController.signal,
         onStep: (step: AIAgentToolExecutionStep) => {
+          const stepLabel = `Executing tool: ${step.toolName.replace(/^modeler_/, '')}...`;
           if (thinkingTextEl) {
-            thinkingTextEl.textContent = `Executing tool: ${step.toolName.replace(/^modeler_/, '')}...`;
+            thinkingTextEl.textContent = stepLabel;
+          }
+          if (this.isAIGenerating) {
+            this.showSceneLoader(stepLabel, 'AI MESH AGENT • LIVE SCENE GENERATION', {
+              topHud: true,
+              showStop: true,
+            });
           }
           const isErr = !!step.isError;
           const statusClass = isErr ? 'error' : 'success';
@@ -8164,6 +8476,12 @@ export class MeshEditorApp {
         onStatus: (statusText: string) => {
           if (thinkingTextEl) {
             thinkingTextEl.textContent = statusText;
+          }
+          if (this.isAIGenerating) {
+            this.showSceneLoader(statusText, 'AI MESH AGENT • LIVE SCENE GENERATION', {
+              topHud: true,
+              showStop: true,
+            });
           }
           if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;
         },
@@ -8208,6 +8526,7 @@ export class MeshEditorApp {
       }
     } finally {
       this.aiAbortController = null;
+      this.setAIGeneratingState(false);
       if (btnGenerate) btnGenerate.disabled = false;
       if (btnStop) btnStop.style.display = 'none';
       if (chatLog) chatLog.scrollTop = chatLog.scrollHeight;

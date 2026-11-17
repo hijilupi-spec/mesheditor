@@ -862,7 +862,7 @@ export class DecalController {
     this.detachEvents();
 
     this.pointerObserver = this.service.scene.onPointerObservable.add((pointerInfo) => {
-      if (!this.isActive) return;
+      if (!this.isActive || this.service.isSceneInteractionLocked) return;
 
       if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
         this.handlePointerMove();

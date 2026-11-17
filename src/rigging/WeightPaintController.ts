@@ -179,7 +179,11 @@ export class WeightPaintController {
         if (!m.isDisposed()) this.restoreOriginalVertexColors(m);
       }
       this.clearBoneOverlay();
-      if (this.service.selectedMesh && !this.service.isGizmoMesh(this.service.selectedMesh)) {
+      if (
+        !this.service.isSceneInteractionLocked &&
+        this.service.selectedMesh &&
+        !this.service.isGizmoMesh(this.service.selectedMesh)
+      ) {
         this.service.gizmoManager?.attachToNode(this.service.selectedMesh);
       }
     }
@@ -1527,7 +1531,7 @@ export class WeightPaintController {
     }
 
     this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
-      if (!this.isActive) return;
+      if (!this.isActive || this.service.isSceneInteractionLocked) return;
       const evt = pointerInfo.event as MouseEvent;
       const isLeft = evt ? evt.button === 0 : true;
 

@@ -59,6 +59,15 @@ export interface ExportOptions {
   selectedOnly?: boolean;
 }
 
+export type ScreenshotMode = 'current' | '4-directions' | '8-directions';
+
+export interface ScreenshotCaptureResult {
+  blob: Blob;
+  filename: string;
+  count: number;
+  mode: ScreenshotMode;
+}
+
 export interface MeshEditorServiceEvents {
   onSelectionChanged?: (nodes: TransformNode[], activeMesh: Mesh | null, subMeshId: number | null) => void;
   onSceneModified?: () => void;

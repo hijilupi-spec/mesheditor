@@ -1,4 +1,4 @@
-import { NullEngine } from '@babylonjs/core';
+import { MeshBuilder, NullEngine, PointerEventTypes } from '@babylonjs/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_AGENT_STORAGE_KEY, DEFAULT_AI_AGENT_CONFIG } from '../../src/AIAgentService';
 import { HostAppAdapter } from '../../src/adapters/HostAppAdapter';
@@ -1086,5 +1086,104 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
       expect(btn.getAttribute('aria-pressed')).toBe('false');
       expect(btn.getAttribute('aria-label')).toBe('Show API Key');
     }
+  });
+
+  it('shows backdrop-free top HUD loader, locks scene mutations while allowing panel navigation and camera focus during AI generation', async () => {
+    expect(MESH_EDITOR_CSS).toMatch(/\.me-scene-loader\.is-top-hud\s*\{[^}]*background:\s*transparent;/);
+    expect(MESH_EDITOR_CSS).toMatch(/\.me-scene-loader\.is-top-hud\s*\{[^}]*backdrop-filter:\s*none;/);
+
+    app = new MeshEditorApp({
+      container,
+      engine,
+      layoutMode: 'floating',
+    });
+
+    const scene = app.service.getScene();
+    const box = MeshBuilder.CreateBox('TestBox', { size: 1 }, scene);
+    app.service.importedMeshes.push(box);
+    app.service.selectMesh(box);
+    app.updateOutliner();
+
+    let resolvePrompt!: (val: any) => void;
+    const runPromptSpy = vi.spyOn(app.service.aiAgent, 'runPrompt').mockImplementation((opts) => {
+      opts.onStatus?.('Executing tool: create_box...');
+      return new Promise((resolve) => {
+        resolvePrompt = resolve;
+      });
+    });
+
+    const promptInput = container.querySelector('#aiPromptInput') as HTMLTextAreaElement;
+    promptInput.value = 'Build a futuristic crate';
+    const runPromise = app.runAIAgentPrompt();
+
+    const appContainer = container.querySelector('#app-container') as HTMLElement;
+    const sceneLoader = container.querySelector('#sceneInitLoader') as HTMLElement;
+    const sceneLoaderTitle = container.querySelector('#sceneLoaderTitle') as HTMLElement;
+    const stopHudBtn = container.querySelector('#btnSceneLoaderStop') as HTMLButtonElement;
+
+    // 1. Top HUD is shown without backdrop, with Stop button and live status
+    expect(sceneLoader.classList.contains('is-hidden')).toBe(false);
+    expect(sceneLoader.classList.contains('is-top-hud')).toBe(true);
+    expect(sceneLoaderTitle.textContent).toBe('Executing tool: create_box...');
+    expect(stopHudBtn.style.display).toBe('inline-flex');
+    expect(appContainer.classList.contains('is-ai-scene-locked')).toBe(true);
+    expect(app.service.isSceneInteractionLocked).toBe(true);
+
+    // Gizmo should be detached while locked and exclusive 3D tools deactivated
+    expect(app.service.gizmoManager.attachedNode).toBeNull();
+    expect(app.service.facetEditorActive).toBe(false);
+
+    // 2. Intermediate non-AI status resets do not prematurely hide the loader or unlock the scene
+    app.setStatus('Ready', false);
+    expect(sceneLoader.classList.contains('is-hidden')).toBe(false);
+    expect(app.service.isSceneInteractionLocked).toBe(true);
+
+    // 3. Viewport pointer selection is blocked while locked
+    app.service.scene.onPointerObservable.notifyObservers({
+      type: PointerEventTypes.POINTERUP,
+      event: new MouseEvent('pointerup', { button: 0 }) as any,
+      pickInfo: { hit: false, pickedMesh: null } as any,
+    } as any);
+    expect(app.service.selectedMesh).toBe(box);
+
+    // 4. Outliner mutation buttons and selection clicks are blocked while locked
+    const outlinerDelBtn = container.querySelector('.outliner-btn-mutate[title*="Delete"]') as HTMLButtonElement;
+    expect(outlinerDelBtn).toBeTruthy();
+    outlinerDelBtn.click();
+    expect(app.service.importedMeshes).toContain(box);
+
+    // Delete keyboard shortcut is blocked while locked
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(app.service.importedMeshes).toContain(box);
+
+    // 5. Panel navigation works freely without activating exclusive 3D edit modes
+    const facetSpy = vi.spyOn(app.service, 'toggleFacetEditor');
+    app.toggleDialog('dialog-material', true);
+    expect(app.isDialogOpen('dialog-material')).toBe(true);
+    app.toggleDialog('dialog-facet', true);
+    expect(facetSpy).not.toHaveBeenCalled();
+    expect(app.isDialogOpen('dialog-facet')).toBe(true);
+    expect(app.service.facetEditorActive).toBe(false);
+    app.toggleDialog('dialog-sculpt', true);
+    expect(app.isDialogOpen('dialog-sculpt')).toBe(true);
+    expect(app.service.isSculptModeActive()).toBe(false);
+
+    // 6. Resolving AI generation unlocks scene, restores gizmo, and hides top HUD
+    resolvePrompt({
+      id: 'msg_1',
+      role: 'assistant',
+      content: 'Done.',
+      toolSteps: [],
+      timestamp: Date.now(),
+    });
+    await runPromise;
+
+    expect(runPromptSpy).toHaveBeenCalledTimes(1);
+    expect(sceneLoader.classList.contains('is-hidden')).toBe(true);
+    expect(sceneLoader.classList.contains('is-top-hud')).toBe(false);
+    expect(stopHudBtn.style.display).toBe('none');
+    expect(appContainer.classList.contains('is-ai-scene-locked')).toBe(false);
+    expect(app.service.isSceneInteractionLocked).toBe(false);
+    expect(app.service.gizmoManager.attachedNode).toBe(box);
   });
 });

@@ -100,7 +100,7 @@ export class TextMeshController {
   private attachPointerObserver(): void {
     this.detachPointerObserver();
     this.pointerObserver = this.service.scene.onPointerObservable.add((pointerInfo) => {
-      if (!this.isSurfacePlacementActive) return;
+      if (!this.isSurfacePlacementActive || this.service.isSceneInteractionLocked) return;
       if (pointerInfo.type !== PointerEventTypes.POINTERDOWN) return;
       const evt = pointerInfo.event as PointerEvent;
       if (evt.button !== 0 || !evt.shiftKey) return;

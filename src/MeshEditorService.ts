@@ -146,9 +146,12 @@ import {
   MeshEditorProjectData,
   MeshEditorServiceEvents,
   PrimitiveConfig,
+  ScreenshotCaptureResult,
+  ScreenshotMode,
   TextureOptimizationInfo,
   TransformSnapshot,
 } from './types';
+import { createZipArchive, ZipEntryInput } from './utils/zipBuilder';
 
 // Register WebP extension for GLTF serializer
 RegisterEXT_texture_webp();
@@ -263,6 +266,7 @@ export class MeshEditorService {
     rotateSnap: 5,
   };
   public isSnapModifierActive: boolean = false;
+  public isSceneInteractionLocked: boolean = false;
   public gizmoMode: 'translate' | 'rotate' | 'scale' | 'bounds' = 'translate';
   public ensureGizmoDragEvents: () => void = () => {};
 
@@ -673,6 +677,9 @@ export class MeshEditorService {
     // Pointer Picking for Mesh Selection & Facet Editing
     let pointerDownPos = { x: 0, y: 0 };
     this.scene.onPointerObservable.add((pointerInfo) => {
+      if (this.isSceneInteractionLocked) {
+        return;
+      }
       if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
         pointerDownPos = { x: this.scene.pointerX, y: this.scene.pointerY };
         this.lastPointerX = this.scene.pointerX;
@@ -890,6 +897,7 @@ export class MeshEditorService {
   public isSculptModeActive(): boolean {
     if (!this.sculptController) return false;
     if (this.sculptController.isActive) return true;
+    if (this.isSceneInteractionLocked) return false;
     if (typeof document !== 'undefined') {
       const sculptDialog = document.getElementById('dialog-sculpt');
       if (
@@ -911,6 +919,7 @@ export class MeshEditorService {
   public isWeightPaintModeActive(): boolean {
     if (!this.weightPaintController) return false;
     if (this.weightPaintController.isActive) return true;
+    if (this.isSceneInteractionLocked) return false;
     if (typeof document !== 'undefined') {
       const riggingDialog = document.getElementById('dialog-rigging');
       if (
@@ -1140,7 +1149,7 @@ export class MeshEditorService {
     }
 
     this.selectionProxyActive = true;
-    this.gizmoManager.attachToNode(this.selectionProxyNode);
+    this.gizmoManager.attachToNode(this.isSceneInteractionLocked ? null : this.selectionProxyNode);
   }
 
   public selectNodes(nodes: TransformNode[], preserveSelection: boolean = false, subMeshId?: number | null): void {
@@ -1203,13 +1212,13 @@ export class MeshEditorService {
       }
       if (this.facetEditorActive && this.facetEditMode === 'vertex') {
         this.refreshVertexHandles();
-        if (this.selectedVertexIndex !== null) {
+        if (this.selectedVertexIndex !== null && !this.isSceneInteractionLocked) {
           this.attachVertexGizmo();
         } else {
           this.gizmoManager.attachToNode(null);
         }
       } else {
-        this.gizmoManager.attachToNode(single);
+        this.gizmoManager.attachToNode(this.isSceneInteractionLocked ? null : single);
       }
     } else {
       this.selectedMesh = null;
@@ -3033,9 +3042,7 @@ export class MeshEditorService {
       this.detachVertexGizmo();
       this.events.onFaceSelected?.(null);
       this.events.onVertexSelected?.(null);
-      if (this.selectedMesh) {
-        this.gizmoManager.attachToNode(this.selectedMesh);
-      }
+      this.refreshGizmoAttachment();
     } else {
       if (this.facetEditMode === 'vertex') {
         if (this.selectedMesh) {
@@ -8278,7 +8285,23 @@ export class MeshEditorService {
     this.refreshGizmoAttachment();
   }
 
+  public setSceneInteractionLocked(locked: boolean): void {
+    this.isSceneInteractionLocked = locked;
+    if (locked) {
+      this.isMarqueeCandidate = false;
+      this.isMarqueeActive = false;
+      this.hideMarqueeVisual();
+      this.gizmoManager.attachToNode(null);
+    } else {
+      this.refreshGizmoAttachment();
+    }
+  }
+
   public refreshGizmoAttachment(): void {
+    if (this.isSceneInteractionLocked) {
+      this.gizmoManager.attachToNode(null);
+      return;
+    }
     if (this.selectedNodes.length === 0) {
       this.gizmoManager.attachToNode(null);
     } else if (this.selectedNodes.length === 1) {
@@ -8315,5 +8338,236 @@ export class MeshEditorService {
       totalPolys += Math.floor((m.getTotalIndices ? m.getTotalIndices() : 0) / 3);
     }
     this.events.onStatsUpdated?.(count, totalPolys);
+  }
+
+  /* =========================================================================
+     17. SCREENSHOT CAPTURE
+     ========================================================================= */
+
+  /**
+   * Returns a suggested base filename (without extension) if a model or named object is active,
+   * or an empty string when no meaningful name is available.
+   */
+  public getSuggestedScreenshotName(): string {
+    const hasSceneContent =
+      this.importedMeshes.length > 0 ||
+      this.groups.length > 0 ||
+      (this.voxelPainter && this.voxelPainter.blocks.size > 0) ||
+      (this.pathExtrusion && this.pathExtrusion.paths.length > 0);
+
+    if (hasSceneContent) {
+      const currentBase = (this.currentFilename || '').replace(/\.[^/.]+$/, '').trim();
+      const exportName = (this.exportParams?.filename || '').trim();
+      const defaultDerivedExport = currentBase ? `${currentBase}_edited` : '';
+
+      if (exportName && exportName !== 'model_edited' && exportName !== defaultDerivedExport) {
+        return exportName;
+      }
+      if (this.currentFilename && this.currentFilename !== 'model.glb' && currentBase) {
+        return currentBase;
+      }
+    }
+
+    if (this.selectedNodes.length === 1) {
+      const name = (this.selectedNodes[0]?.name || '').trim();
+      if (name && name !== '__root__') return name;
+    }
+
+    if (this.selectedMesh?.name) {
+      const name = this.selectedMesh.name.trim();
+      if (name && name !== '__root__') return name;
+    }
+
+    if (this.currentModelRoot?.name) {
+      const name = this.currentModelRoot.name.trim();
+      if (name && name !== '__root__') return name;
+    }
+
+    if (this.groups.length === 1 && this.groups[0]?.name) {
+      const name = this.groups[0].name.trim();
+      if (name && name !== '__root__') return name;
+    }
+
+    if (this.importedMeshes.length === 1 && this.importedMeshes[0]?.name) {
+      const name = this.importedMeshes[0].name.trim();
+      if (name && name !== '__root__') return name;
+    }
+
+    return '';
+  }
+
+  private sanitizeScreenshotBaseName(rawName?: string): string {
+    const stripped = (rawName || '')
+      .trim()
+      .replace(/\.(jpe?g|png|zip)$/i, '')
+      .replace(/[\\/?%*:|"<>]/g, '_')
+      .trim();
+    return stripped || 'screenshot';
+  }
+
+  private computeScreenshotOrbitPivot(cam: UniversalCamera): Vector3 {
+    const validMeshes = this.scene.meshes.filter(
+      (m) =>
+        !this.isEditorHelper(m) &&
+        m !== this.gridMesh &&
+        m instanceof Mesh &&
+        m.getTotalVertices() > 0 &&
+        m.isVisible &&
+        m.isEnabled()
+    ) as Mesh[];
+
+    let min = new Vector3(Infinity, Infinity, Infinity);
+    let max = new Vector3(-Infinity, -Infinity, -Infinity);
+    let hasBounds = false;
+
+    for (const m of validMeshes) {
+      m.computeWorldMatrix(true);
+      const b = m.getBoundingInfo()?.boundingBox;
+      if (!b) continue;
+      const minW = b.minimumWorld;
+      const maxW = b.maximumWorld;
+      if (
+        isFinite(minW.x) &&
+        isFinite(minW.y) &&
+        isFinite(minW.z) &&
+        isFinite(maxW.x) &&
+        isFinite(maxW.y) &&
+        isFinite(maxW.z)
+      ) {
+        min = Vector3.Minimize(min, minW);
+        max = Vector3.Maximize(max, maxW);
+        hasBounds = true;
+      }
+    }
+
+    cam.computeWorldMatrix();
+    const forward = cam.getDirection(Vector3.Forward()).normalize();
+
+    if (hasBounds) {
+      const center = min.add(max).scale(0.5);
+      const toCenter = center.subtract(cam.position);
+      if (Vector3.Dot(toCenter, forward) > 0.01) {
+        return center;
+      }
+      const fallbackDist = Math.max(toCenter.length(), 4);
+      return cam.position.add(forward.scale(fallbackDist));
+    }
+
+    const defaultTarget = new Vector3(0, 1, 0);
+    if (Vector3.Dot(defaultTarget.subtract(cam.position), forward) > 0.01) {
+      return defaultTarget;
+    }
+    return cam.position.add(forward.scale(6));
+  }
+
+  private decodeDataUrlToBytes(dataUrl: string): Uint8Array {
+    const commaIdx = dataUrl.indexOf(',');
+    const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  private captureCanvasJpegBytes(quality = 0.92): Uint8Array {
+    this.scene.render();
+    const dataUrl =
+      this.canvas && typeof this.canvas.toDataURL === 'function'
+        ? this.canvas.toDataURL('image/jpeg', quality)
+        : '';
+    if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+      throw new Error('Could not capture JPEG image from the 3D viewport canvas.');
+    }
+    return this.decodeDataUrlToBytes(dataUrl);
+  }
+
+  /**
+   * Captures one JPEG ('current') or a turntable ZIP archive ('4-directions' / '8-directions')
+   * of JPEG images with the ground grid temporarily hidden.
+   */
+  public captureScreenshots(mode: ScreenshotMode, baseFilename?: string): ScreenshotCaptureResult {
+    const baseName = this.sanitizeScreenshotBaseName(baseFilename);
+    const cam = this.camera;
+
+    const wasGridEnabled = this.gridMesh ? this.gridMesh.isEnabled() : this.sceneParams.grid;
+    if (this.gridMesh) {
+      this.gridMesh.setEnabled(false);
+    }
+
+    const savedPos = cam ? cam.position.clone() : Vector3.Zero();
+    const savedRot = cam ? cam.rotation.clone() : Vector3.Zero();
+    const savedQuat = cam && cam.rotationQuaternion ? cam.rotationQuaternion.clone() : null;
+
+    try {
+      if (mode === 'current') {
+        const bytes = this.captureCanvasJpegBytes(0.92);
+        const blob = new Blob([bytes as unknown as BlobPart], { type: 'image/jpeg' });
+        return {
+          blob,
+          filename: `${baseName}.jpg`,
+          count: 1,
+          mode,
+        };
+      }
+
+      const directionCount = mode === '8-directions' ? 8 : 4;
+      const stepDeg = 360 / directionCount;
+      const entries: ZipEntryInput[] = [];
+
+      this.scene.render();
+      const pivot = cam ? this.computeScreenshotOrbitPivot(cam) : Vector3.Zero();
+      const offset = savedPos.subtract(pivot);
+
+      for (let i = 0; i < directionCount; i++) {
+        const deg = i * stepDeg;
+        const angleRad = (deg * Math.PI) / 180;
+
+        if (cam && i > 0) {
+          const rotMat = Matrix.RotationY(angleRad);
+          const rotatedOffset = Vector3.TransformCoordinates(offset, rotMat);
+          cam.position.copyFrom(pivot.add(rotatedOffset));
+
+          if (savedQuat) {
+            cam.rotationQuaternion = Quaternion.RotationAxis(Vector3.Up(), angleRad).multiply(savedQuat);
+          } else {
+            cam.rotationQuaternion = null;
+            cam.rotation.set(savedRot.x, savedRot.y + angleRad, savedRot.z);
+          }
+        }
+
+        const bytes = this.captureCanvasJpegBytes(0.92);
+        const indexLabel = String(i + 1).padStart(2, '0');
+        const degLabel = String(deg).padStart(3, '0');
+        entries.push({
+          name: `${baseName}_${indexLabel}_${degLabel}deg.jpg`,
+          data: bytes,
+        });
+      }
+
+      const zipBytes = createZipArchive(entries);
+      const blob = new Blob([zipBytes as unknown as BlobPart], { type: 'application/zip' });
+      return {
+        blob,
+        filename: `${baseName}.zip`,
+        count: directionCount,
+        mode,
+      };
+    } finally {
+      if (cam) {
+        cam.position.copyFrom(savedPos);
+        cam.rotation.copyFrom(savedRot);
+        cam.rotationQuaternion = savedQuat ? savedQuat.clone() : null;
+      }
+      if (this.gridMesh) {
+        this.gridMesh.setEnabled(wasGridEnabled);
+      }
+      try {
+        this.scene.render();
+      } catch {
+        // Ignore in headless/disposed environments
+      }
+    }
   }
 }

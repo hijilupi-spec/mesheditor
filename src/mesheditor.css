@@ -3655,6 +3655,164 @@ progress.loading-spinner:indeterminate {
   opacity: 0.85;
 }
 
+.me-scene-loader-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 81, 73, 0.55);
+  background: rgba(248, 81, 73, 0.16);
+  color: #ff7b72;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.me-scene-loader-stop:hover {
+  background: rgba(248, 81, 73, 0.28);
+  border-color: rgba(248, 81, 73, 0.85);
+  color: #ffffff;
+}
+
+.me-scene-loader-stop:active {
+  transform: scale(0.96);
+}
+
+.me-scene-loader-stop .app-icon,
+.me-scene-loader-stop svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Top HUD Loader Mode (No viewport backdrop, unobstructed live 3D viewing) */
+.me-scene-loader.is-top-hud {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  justify-content: flex-start;
+  padding-top: 64px;
+}
+
+.me-scene-loader.is-top-hud .me-scene-loader-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 16px 9px 12px;
+  max-width: min(560px, calc(100vw - 48px));
+  background: rgba(16, 21, 30, 0.84);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.52),
+    0 0 24px rgba(31, 111, 235, 0.28),
+    inset 0 0 14px rgba(31, 111, 235, 0.12);
+}
+
+.me-scene-loader.is-top-hud .me-icosahedron-stage {
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
+}
+
+.me-scene-loader.is-top-hud .me-gizmo-arc {
+  inset: 2px;
+}
+
+.me-scene-loader.is-top-hud .me-gizmo-arc-y {
+  inset: 6px;
+}
+
+.me-scene-loader.is-top-hud .me-gizmo-arc-z {
+  inset: 11px;
+}
+
+.me-scene-loader.is-top-hud .me-icosahedron-svg {
+  width: 44px;
+  height: 44px;
+}
+
+.me-scene-loader.is-top-hud .me-scene-loader-hud {
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.me-scene-loader.is-top-hud .me-scene-loader-header {
+  gap: 8px;
+  max-width: 100%;
+}
+
+.me-scene-loader.is-top-hud .me-scene-loader-title {
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.me-scene-loader.is-top-hud .me-scene-loader-sub {
+  font-size: 9px;
+  letter-spacing: 0.9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+}
+
+/* AI Scene Lock: prevent scene mutations while preserving camera orbit & panel navigation */
+#app-container.is-ai-scene-locked #btnUndo,
+#app-container.is-ai-scene-locked #btnRedo,
+#app-container.is-ai-scene-locked #btnGizmoTranslate,
+#app-container.is-ai-scene-locked #btnGizmoRotate,
+#app-container.is-ai-scene-locked #btnGizmoScale,
+#app-container.is-ai-scene-locked #btnGizmoBounds,
+#app-container.is-ai-scene-locked #btnOpenModel,
+#app-container.is-ai-scene-locked #btnImportModel,
+#app-container.is-ai-scene-locked #btnCenterPivot,
+#app-container.is-ai-scene-locked #btnExtractSubmesh,
+#app-container.is-ai-scene-locked #btnMergeMeshes,
+#app-container.is-ai-scene-locked #btnGroup,
+#app-container.is-ai-scene-locked #btnUngroup,
+#app-container.is-ai-scene-locked #btnPaste,
+#app-container.is-ai-scene-locked #btnDeleteSelected,
+#app-container.is-ai-scene-locked .outliner-btn-mutate {
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+#app-container.is-ai-scene-locked .outliner-item {
+  cursor: default;
+}
+
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body button:not(.prompt-tab-btn):not([role="tab"]):not(#heightmapTabBtnHeight):not(#heightmapTabBtnMix),
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body input,
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body select,
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body textarea,
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body .mesh-edit-item,
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body .sculpt-btn,
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body .voxel-swatch,
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body .dg .c,
+#app-container.is-ai-scene-locked .floating-dialog:not(#dialog-ai-agent):not(#dialog-outliner) .dialog-body .dg .cr.function {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+#app-container.is-ai-scene-locked #aiActionModeSelect,
+#app-container.is-ai-scene-locked #aiCheckboxRow,
+#app-container.is-ai-scene-locked #btnAIQuickSelect,
+#app-container.is-ai-scene-locked #btnAIClearChat,
+#app-container.is-ai-scene-locked #btnAIRecordSpeech,
+#app-container.is-ai-scene-locked #btnAIAttachImage,
+#app-container.is-ai-scene-locked #btnAICaptureView {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* Keyframes for 3D Mesh Animations */
 @keyframes meCubeRotate {
   0% {
@@ -7296,6 +7454,112 @@ dialog#settingsModal::backdrop {
   padding: 5px 10px;
   align-items: center;
 }
+
+/* =========================================================================
+   Screenshot Capture Modal Dialog
+   ========================================================================= */
+dialog#screenshotModal {
+  width: 440px;
+  min-width: min(320px, 92vw);
+  max-width: 92vw;
+  max-height: 85vh;
+  margin: auto;
+  padding: 0;
+  background: var(--bg-header);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+dialog#screenshotModal[open] {
+  display: flex;
+  flex-direction: column;
+  animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+dialog#screenshotModal:modal {
+  overscroll-behavior: contain;
+}
+
+dialog#screenshotModal::backdrop {
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.screenshot-modal-header {
+  background: var(--bg-panel);
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+
+.screenshot-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.screenshot-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.screenshot-mode-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.screenshot-mode-option:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.screenshot-mode-option.active {
+  background: rgba(31, 111, 235, 0.15);
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-color);
+}
+
+.screenshot-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.screenshot-note .app-icon {
+  flex-shrink: 0;
+  color: var(--accent-color);
+}
+
+.screenshot-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 
 
 

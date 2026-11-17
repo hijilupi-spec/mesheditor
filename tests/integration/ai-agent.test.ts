@@ -1907,6 +1907,73 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(generateImageSpy.mock.calls.every((c) => c[0].backend === 'sd_webui')).toBe(true);
       generateImageSpy.mockRestore();
     });
+
+    it('executes unfenced concatenated {"tool_calls": [...]} JSON blocks emitted as plain text', async () => {
+      const rawTextToolCalls =
+        JSON.stringify(
+          {
+            tool_calls: [
+              {
+                name: 'modeler_create_material',
+                arguments: {
+                  materialName: 'fallback_gold_mat',
+                  albedoColor: '#ffd700',
+                  metallic: 0.9,
+                  roughness: 0.2,
+                },
+              },
+            ],
+          },
+          null,
+          2
+        ) +
+        '\n' +
+        JSON.stringify(
+          {
+            tool_calls: [
+              {
+                name: 'modeler_create_primitive',
+                arguments: {
+                  name: 'fallback_gold_orb',
+                  type: 'sphere',
+                  options: { diameter: 1.0, segments: 8 },
+                  materialName: 'fallback_gold_mat',
+                },
+              },
+            ],
+          },
+          null,
+          2
+        );
+
+      (globalThis as any).fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'chatcmpl-fallback-json',
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: rawTextToolCalls,
+                tool_calls: [],
+              },
+            },
+          ],
+        }),
+      });
+
+      const res = await service.aiAgent.runPrompt({
+        prompt: 'Build a gold orb',
+        visualCritique: false,
+      });
+
+      expect(res.toolSteps).toHaveLength(2);
+      expect(res.toolSteps?.[0].toolName).toBe('modeler_create_material');
+      expect(res.toolSteps?.[1].toolName).toBe('modeler_create_primitive');
+      expect(service.importedMeshes.some((m) => m.name === 'fallback_gold_orb')).toBe(true);
+      expect(res.content).toContain('2 3D modeling operation(s) successfully executed');
+    });
   });
 });
 

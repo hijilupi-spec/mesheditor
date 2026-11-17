@@ -109,7 +109,7 @@ export class VoxelPainterController {
 
   private initPointerHandling(): void {
     this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
-      if (!this.isActive) return;
+      if (!this.isActive || this.service.isSceneInteractionLocked) return;
 
       switch (pointerInfo.type) {
         case PointerEventTypes.POINTERMOVE:

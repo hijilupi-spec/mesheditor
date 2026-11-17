@@ -1273,21 +1273,58 @@ ${textureRule}
     const calls: Array<{ name: string; arguments: any }> = [];
     if (!content) return calls;
 
+    const parseArgs = (raw: any): any => {
+      if (typeof raw === 'string') {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return { raw };
+        }
+      }
+      return raw && typeof raw === 'object' ? raw : {};
+    };
+
+    const collectCallsFromParsed = (parsed: any): void => {
+      if (!parsed) return;
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          collectCallsFromParsed(item);
+        }
+        return;
+      }
+      if (typeof parsed !== 'object') return;
+      if (Array.isArray(parsed.tool_calls)) {
+        for (const tc of parsed.tool_calls) {
+          collectCallsFromParsed(tc);
+        }
+        return;
+      }
+      const fnName = parsed.function?.name;
+      if (typeof fnName === 'string' && fnName.startsWith('modeler_')) {
+        calls.push({
+          name: fnName,
+          arguments: parseArgs(parsed.function?.arguments ?? parsed.arguments ?? parsed.args ?? parsed.parameters),
+        });
+      } else if (typeof parsed.name === 'string' && parsed.name.startsWith('modeler_')) {
+        calls.push({
+          name: parsed.name,
+          arguments: parseArgs(parsed.arguments ?? parsed.args ?? parsed.parameters),
+        });
+      } else if (typeof parsed.tool === 'string' && parsed.tool.startsWith('modeler_')) {
+        calls.push({
+          name: parsed.tool,
+          arguments: parseArgs(parsed.arguments ?? parsed.args ?? parsed.parameters),
+        });
+      }
+    };
+
     // 1. Check for ```json ... ``` blocks containing tool calls
     const jsonFenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
     let match: RegExpExecArray | null;
     while ((match = jsonFenceRegex.exec(content)) !== null) {
       const block = match[1].trim();
       try {
-        const parsed = JSON.parse(block);
-        const items = Array.isArray(parsed) ? parsed : [parsed];
-        for (const item of items) {
-          if (item && typeof item.name === 'string' && item.name.startsWith('modeler_')) {
-            calls.push({ name: item.name, arguments: item.arguments || item.args || item.parameters || {} });
-          } else if (item && typeof item.tool === 'string' && item.tool.startsWith('modeler_')) {
-            calls.push({ name: item.tool, arguments: item.arguments || item.args || item.parameters || {} });
-          }
-        }
+        collectCallsFromParsed(JSON.parse(block));
       } catch {
         // Not a JSON tool block
       }
@@ -1295,7 +1332,63 @@ ${textureRule}
 
     if (calls.length > 0) return calls;
 
-    // 2. Check for ```javascript / ```js / ```ts / ```babylon code blocks that construct Babylon meshes/materials
+    // 2. Check for unfenced JSON objects/arrays (including concatenated {"tool_calls": [...]} blocks)
+    let i = 0;
+    while (i < content.length) {
+      const ch = content[i];
+      if (ch !== '{' && ch !== '[') {
+        i++;
+        continue;
+      }
+      const openChar = ch;
+      const closeChar = openChar === '{' ? '}' : ']';
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      let endIdx = -1;
+
+      for (let j = i; j < content.length; j++) {
+        const c = content[j];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (c === '\\') {
+            escaped = true;
+          } else if (c === '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (c === '"') {
+          inString = true;
+        } else if (c === openChar) {
+          depth++;
+        } else if (c === closeChar) {
+          depth--;
+          if (depth === 0) {
+            endIdx = j;
+            break;
+          }
+        }
+      }
+
+      if (endIdx !== -1) {
+        const candidate = content.slice(i, endIdx + 1);
+        try {
+          const parsed = JSON.parse(candidate);
+          collectCallsFromParsed(parsed);
+        } catch {
+          // Ignore malformed JSON candidate
+        }
+        i = endIdx + 1;
+      } else {
+        i++;
+      }
+    }
+
+    if (calls.length > 0) return calls;
+
+    // 3. Check for ```javascript / ```js / ```ts / ```babylon code blocks that construct Babylon meshes/materials
     const codeFenceRegex = /```(?:javascript|js|typescript|ts|babylon)\s*([\s\S]*?)```/gi;
     while ((match = codeFenceRegex.exec(content)) !== null) {
       const code = match[1].trim();
@@ -1565,6 +1658,9 @@ ${textureRule}
           }
           this.service.updateStats();
           this.service.events.onSceneModified?.();
+          if (/^\s*[\[{]/.test(assistantContent)) {
+            finalAssistantText = '';
+          }
         }
 
         // Optional Multi-View Visual Critique & Self-Correction Phase (uses the same active 3D model)

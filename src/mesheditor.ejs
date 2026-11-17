@@ -123,6 +123,15 @@
               <span class="btn-icon"><i class="app-icon" data-lucide="grid-3x3"></i></span>
               <span class="btn-label">Ground Grid</span>
             </button>
+            <button
+              class="dropdown-item"
+              id="btnCaptureScreenshot"
+              title="Capture screenshot of current scene (Cmd+P / Ctrl+P)"
+            >
+              <span class="btn-icon"><i class="app-icon" data-lucide="camera"></i></span>
+              <span class="btn-label">Capture Screenshot...</span>
+              <span class="shortcut-tag">⌘P</span>
+            </button>
             
             <div class="dropdown-divider" id="menuActionsPluginsDivider" style="display: none"></div>
             <div id="menuActionsPlugins"></div>
@@ -340,6 +349,17 @@
             </div>
             <div class="me-scene-loader-sub" id="sceneLoaderSub">WEBGL2 ENGINE • SHADER PIPELINE • MESH GEOMETRY</div>
           </div>
+          <button
+            type="button"
+            id="btnSceneLoaderStop"
+            class="me-scene-loader-stop"
+            style="display: none"
+            title="Stop AI Generation"
+            aria-label="Stop AI Generation"
+          >
+            <i class="app-icon" data-lucide="square"></i>
+            <span>Stop</span>
+          </button>
         </div>
       </div>
 
@@ -660,6 +680,10 @@
                 <tr>
                   <td><span class="shortcut-tag">Cmd+E / Ctrl+E</span></td>
                   <td>Open Export 3D Model dialog</td>
+                </tr>
+                <tr>
+                  <td><span class="shortcut-tag">Cmd+P / Ctrl+P</span></td>
+                  <td>Capture Screenshot (Current / 4 / 8 Directions)</td>
                 </tr>
                 <tr>
                   <td><span class="shortcut-tag">Del / Backspace</span></td>
@@ -1305,6 +1329,76 @@
           </div>
         </div>
       </div>
+
+      <!-- Capture Screenshot Modal Dialog -->
+      <dialog id="screenshotModal" class="screenshot-dialog" closedby="any" aria-labelledby="screenshotModalTitle">
+        <div class="modal-header screenshot-modal-header">
+          <h3 id="screenshotModalTitle"><i class="app-icon" data-lucide="camera"></i> Capture Screenshot</h3>
+          <button type="button" class="dialog-btn btn-close" id="btnCloseScreenshot" title="Close" aria-label="Close">
+            <i class="app-icon" data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body screenshot-modal-body">
+          <div class="export-form-group">
+            <label for="screenshotFilenameInput" class="export-form-label">Filename</label>
+            <div class="export-input-wrap">
+              <input
+                type="text"
+                id="screenshotFilenameInput"
+                class="export-text-input"
+                placeholder="screenshot"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <span id="screenshotExtensionBadge" class="export-ext-badge">.jpg</span>
+            </div>
+          </div>
+
+          <div class="export-form-group">
+            <label class="export-form-label">Capture Mode</label>
+            <div class="screenshot-mode-options" id="screenshotModeOptions">
+              <label class="screenshot-mode-option active" data-mode="current">
+                <input type="radio" name="screenshotMode" value="current" checked class="export-radio-hidden" />
+                <div class="format-option-header">
+                  <span class="format-option-name">Current Perspective</span>
+                  <span class="format-option-tag recommended">1 JPG</span>
+                </div>
+                <div class="format-option-desc">Single JPEG image from the current camera perspective</div>
+              </label>
+
+              <label class="screenshot-mode-option" data-mode="4-directions">
+                <input type="radio" name="screenshotMode" value="4-directions" class="export-radio-hidden" />
+                <div class="format-option-header">
+                  <span class="format-option-name">4 Directions</span>
+                  <span class="format-option-tag">ZIP · 4 JPG</span>
+                </div>
+                <div class="format-option-desc">Current camera + 3 × 90° angles at the same distance &amp; elevation</div>
+              </label>
+
+              <label class="screenshot-mode-option" data-mode="8-directions">
+                <input type="radio" name="screenshotMode" value="8-directions" class="export-radio-hidden" />
+                <div class="format-option-header">
+                  <span class="format-option-name">8 Directions</span>
+                  <span class="format-option-tag">ZIP · 8 JPG</span>
+                </div>
+                <div class="format-option-desc">Current camera + 7 × 45° angles at the same distance &amp; elevation</div>
+              </label>
+            </div>
+          </div>
+
+          <div class="screenshot-note">
+            <i class="app-icon" data-lucide="info"></i>
+            <span>The ground grid is automatically hidden in captured images.</span>
+          </div>
+        </div>
+        <div class="modal-footer screenshot-modal-footer">
+          <button type="button" class="tool-btn" id="btnCancelScreenshot">Cancel</button>
+          <button type="button" class="tool-btn btn-primary" id="btnConfirmScreenshot">
+            <span class="btn-icon"><i class="app-icon" data-lucide="download"></i></span>
+            <span class="btn-label">OK</span>
+          </button>
+        </div>
+      </dialog>
 
       <!-- Heightmap & Mix Texture 2-Tab Paint Editor Modal Dialog -->
       <div id="heightmapPaintModal">
