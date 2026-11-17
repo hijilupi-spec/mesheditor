@@ -9,6 +9,11 @@ import {
   IMAGE_GENERATOR_PROTOCOL_DEFAULTS,
 } from '../../src/textures/ExternalImageGeneratorService';
 import { AITextureGenerator } from '../../src/textures/AITextureGenerator';
+import {
+  ensureSeamlessTileableRgba,
+  makeSeamlessTileableRgba,
+  measureEdgeSeamRatio,
+} from '../../src/tools/textureUtils';
 
 const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAAXNSR0IArs4c6QAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAABNJREFUCB1j/M/A8J+BgYGBgQEAEPsB/921hJ8AAAAASUVORK5CYII=';
@@ -66,6 +71,21 @@ describe('External AI Image Generator & AI Texture Generator Integration', () =>
       expect(enhanced).toContain('top-down orthogonal view');
       expect(enhanced).toContain('diffused even studio lighting');
       expect(enhanced).toContain('continuous repeating pattern');
+      expect(enhanced).toContain('no isolated objects');
+      expect(enhanced).not.toContain('game asset');
+    });
+
+    it('strips 3D-object wrapper phrases and adapts prompt for decals vs surface textures', () => {
+      const generator = new ExternalImageGeneratorService();
+      const surfacePrompt = generator.enhancePromptForTexture('a 3d model of matte crimson porous texture', true, 'skin');
+      expect(surfacePrompt).toContain('seamless tileable texture of matte crimson porous texture');
+      expect(surfacePrompt).not.toMatch(/a 3d model of/i);
+      expect(surfacePrompt).toContain('organic skin surface');
+      expect(surfacePrompt).toContain('no isolated objects');
+
+      const decalPrompt = generator.enhancePromptForTexture('golden star emblem', false, 'decal');
+      expect(decalPrompt).toContain('flat 2D graphic decal texture of golden star emblem');
+      expect(decalPrompt).not.toContain('no isolated objects');
     });
 
     it('persists and loads active backend and provider overrides in localStorage', () => {
@@ -267,6 +287,8 @@ describe('External AI Image Generator & AI Texture Generator Integration', () =>
       expect(res.dataUrl).toContain('data:image/png;base64,');
       expect(capturedBody.tiling).toBe(true);
       expect(capturedBody.prompt).toContain('weathered medieval oak wood planks');
+      expect(capturedBody.negative_prompt).toContain('isolated object');
+      expect(capturedBody.negative_prompt).toContain('3d render');
     });
 
     it('generates an image via Draw Things with automatic tiled_diffusion fallback when tiling key is rejected', async () => {
@@ -463,6 +485,52 @@ describe('External AI Image Generator & AI Texture Generator Integration', () =>
       expect(service.externalImageGenerator.getActiveBackend()).toBe('openai');
       const prov = service.externalImageGenerator.getProvider('openai');
       expect(prov.apiKey).toBe('sk-sync-key');
+    });
+  });
+
+  describe('6. Seamless 3D Tileability Post-Processing', () => {
+    it('removes hard edge seams from non-tileable AI images while leaving periodic images untouched', () => {
+      const w = 32;
+      const h = 32;
+
+      // 1. Non-tileable image with sharp linear gradients across X and Y
+      const nonSeamless = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          nonSeamless[idx] = Math.round((x / (w - 1)) * 220 + 20);
+          nonSeamless[idx + 1] = Math.round((y / (h - 1)) * 200 + 30);
+          nonSeamless[idx + 2] = 90;
+          nonSeamless[idx + 3] = 255;
+        }
+      }
+      const beforeRatio = measureEdgeSeamRatio(nonSeamless, w, h);
+      expect(beforeRatio).toBeGreaterThan(2.0);
+
+      const repaired = ensureSeamlessTileableRgba(nonSeamless, w, h);
+      expect(repaired.blended).toBe(true);
+      const afterRatio = measureEdgeSeamRatio(repaired.rgba, w, h);
+      expect(afterRatio).toBeLessThan(1.35);
+
+      // Direct toroidal blend guarantees matching opposite edge colors
+      const direct = makeSeamlessTileableRgba(nonSeamless, w, h);
+      expect(Math.abs(direct[0] - direct[(w - 1) * 4])).toBeLessThan(15);
+
+      // 2. Already periodic sine-wave texture should NOT be modified
+      const periodic = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y * w + x) * 4;
+          const vx = Math.sin((2 * Math.PI * x) / w);
+          const vy = Math.cos((2 * Math.PI * y) / h);
+          periodic[idx] = Math.round(128 + vx * 60);
+          periodic[idx + 1] = Math.round(128 + vy * 60);
+          periodic[idx + 2] = 128;
+          periodic[idx + 3] = 255;
+        }
+      }
+      const periodicRes = ensureSeamlessTileableRgba(periodic, w, h);
+      expect(periodicRes.blended).toBe(false);
     });
   });
 });

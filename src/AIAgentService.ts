@@ -29,6 +29,8 @@ import {
   AIAgentRequestOptions,
   AIAgentSkillDefinition,
   AIAgentToolExecutionStep,
+  ImageGeneratorBackendId,
+  ImageGeneratorProviderConfig,
   Neural3DBackendId,
   Neural3DProviderConfig,
   Neural3DProvidersMap,
@@ -477,6 +479,29 @@ export class AIAgentService {
     return (['trellis', 'hunyuan3d', 'hi3d'] as Neural3DBackendId[])
       .map((id) => map[id])
       .filter((p) => p && p.enabled);
+  }
+
+  public getActiveExternalImageGenerator(): ImageGeneratorProviderConfig | null {
+    if (this.config.imageGeneratorEnabled === false) {
+      return null;
+    }
+    const serviceBackend = this.service?.externalImageGenerator?.getActiveBackend();
+    const configuredBackend = this.config.imageGeneratorActiveBackend;
+    const activeBackend =
+      serviceBackend && serviceBackend !== 'procedural'
+        ? serviceBackend
+        : configuredBackend && configuredBackend !== 'procedural'
+          ? configuredBackend
+          : null;
+
+    if (!activeBackend) {
+      return null;
+    }
+
+    const fromService = this.service?.externalImageGenerator?.getProvider(activeBackend as ImageGeneratorBackendId);
+    if (fromService) return fromService;
+    const providers = normalizeImageGeneratorProviders(this.config.imageGeneratorProviders);
+    return providers[activeBackend as ImageGeneratorBackendId] || null;
   }
 
   public setNeural3DProviderConfig(
@@ -998,16 +1023,37 @@ export class AIAgentService {
     const createTextures = this.config.createTextures !== false;
     const createNormalMaps = this.config.createNormalMaps !== false && createTextures;
 
+    const activeImageGenerator = createTextures ? this.getActiveExternalImageGenerator() : null;
+
     const normalMapRule = createNormalMaps
       ? ` Normal maps are ENABLED: use \`normalMapUrl\` / \`bumpTextureUrl\`, \`modeler_generate_texture\` (automatic 4-map de-lit Albedo + Sobel Normal + ORM + Cavity AO), or \`withProceduralMaps: true\` in \`modeler_create_material\` (with \`bumpLevel\`, \`invertNormalMapY\`, or \`useParallax\`) to add realistic tactile depth and surface micro-relief.`
       : ` Normal maps are DISABLED by the user: do not apply bump or normal maps.`;
 
+    const textureGuidance = activeImageGenerator
+      ? `   - **External Image Generator Active (\`${activeImageGenerator.id}\`)**: For primary visible surfaces (e.g. walls, arches, columns, moldings, stairs, floors, roofs, skins, cloth, leather, foliage, wood, props), ALWAYS call \`modeler_generate_texture\` (with a surface-material-only \`prompt\`, matching \`style\`, optional \`materialPreset\`, and \`applyToMesh\`) OR pass \`texturePrompt\` directly to architectural tools (\`modeler_create_column\`, \`modeler_create_wall\`, \`modeler_create_arch\`, \`modeler_create_molding\`, \`modeler_create_roof\`, \`modeler_create_stairs\`) so the configured external image generator synthesizes the textures. Do NOT substitute \`modeler_create_material\` with \`proceduralTexture\` / \`withProceduralMaps\` for primary surfaces when an external image generator is active.
+   - **SURFACE-ONLY PROMPTING RULE (NO OBJECT MOTIFS)**: Diffusion models draw whatever object nouns appear in \`prompt\`. NEVER put the 3D object, character, creature, or part name into \`modeler_generate_texture\` (e.g., NEVER write \`"mushroom"\`, \`"mushroom cap"\`, \`"mushroom stem"\`, \`"frog"\`, \`"sword"\`, \`"robot"\`, \`"chair"\`). Describe ONLY the flat macro surface material filling the entire square frame edge-to-edge (color, micro-grain, pores, fibers, roughness, masonry, weave) — e.g., \`"matte crimson organic fungal skin with fine micro-pores and subtle tonal variation"\` or \`"matte warm cream fibrous organic pith with faint vertical striations"\`. Generate one texture per distinct primary material and reuse it via \`materialName\`; use \`modeler_create_material\` (solid PBR color / \`materialPreset\`) for tiny tertiary accents like eyes, pupils, eyebrows, spots, buttons, or rivets.`
+      : `   - For primary visible surfaces (e.g. walls, floors, columns, skins, cloth, leather, foilage, wood, props), call \`modeler_generate_texture\` (with a surface-material-only \`prompt\`, \`style\`, optional \`materialPreset\`, \`palette\`, and \`applyToMesh\`) OR \`modeler_create_material\` with \`materialPreset\` (\`skin\`, \`velvet\`, \`leather\`, \`fur\`, \`hair\`, \`bone_horn\`, \`glazed_ceramic\`, \`painted_metal\`, \`candy_coat\`, \`brushed_steel\`, \`oak_wood\`, \`sandstone\`, etc.) and \`withProceduralMaps: true\` so a coordinated 4-map PBR set (PBR-safe de-lit Albedo clamped to \`[30, 240]\`, Sobel Normal, ORM Roughness variation, Cavity AO) plus Babylon \`clearcoat\`, \`sheen\`, \`anisotropy\`, and \`subsurfaceTranslucency\` is bound cleanly!
+   - You can also pass \`texturePrompt\` directly to architectural tools (\`modeler_create_column\`, \`modeler_create_wall\`, \`modeler_create_arch\`, \`modeler_create_molding\`, \`modeler_create_roof\`, \`modeler_create_stairs\`), or \`palette\` + \`colorGradient\` + \`proceduralTexture\` in \`modeler_create_material\`.`;
+
     const textureRule = createTextures
       ? `3. **Colors, Textures & Tasteful 4-Map PBR Materials (Textures ENABLED)**:
-   - For primary visible surfaces (e.g. walls, floors, columns, skins, cloth, leather, foilage, wood, props), call \`modeler_generate_texture\` (with a descriptive \`prompt\`, \`style\`, optional \`materialPreset\`, \`palette\`, and \`applyToMesh\`) OR \`modeler_create_material\` with \`materialPreset\` (\`skin\`, \`velvet\`, \`leather\`, \`fur\`, \`hair\`, \`bone_horn\`, \`glazed_ceramic\`, \`painted_metal\`, \`candy_coat\`, \`brushed_steel\`, \`oak_wood\`, \`sandstone\`, etc.) and \`withProceduralMaps: true\` so a coordinated 4-map PBR set (PBR-safe de-lit Albedo clamped to \`[30, 240]\`, Sobel Normal, ORM Roughness variation, Cavity AO) plus Babylon \`clearcoat\`, \`sheen\`, \`anisotropy\`, and \`subsurfaceTranslucency\` is bound cleanly!
-   - You can also pass \`texturePrompt\` directly to architectural tools (\`modeler_create_column\`, \`modeler_create_wall\`, \`modeler_create_roof\`, \`modeler_create_stairs\`), or \`palette\` + \`colorGradient\` + \`proceduralTexture\` in \`modeler_create_material\`.
+${textureGuidance}
    - Never leave the entire model in flat solid untextured colors or blown-out white (\`> 240\`) / pure black (\`< 30\`) albedo when Textures is enabled!${normalMapRule}`
       : `3. **Colors & Materials (Textures DISABLED)**: Texturing is turned OFF by the user. Do NOT generate or apply procedural or image textures (\`proceduralTexture\` / \`textureUrl\`). Use ONLY solid PBR colors (\`color\` / \`albedoColor\`, \`roughness\`, \`metallic\`).`;
+
+    const externalImageGenSection = activeImageGenerator
+      ? `\n## Active External Image Generator (MANDATORY for Surface Textures)
+The user has configured and enabled the following external AI Image Generator:
+- **\`${activeImageGenerator.id}\` (${activeImageGenerator.name})** — Model: \`${activeImageGenerator.modelId || activeImageGenerator.id}\`, Endpoint: \`${activeImageGenerator.endpointUrl}\`
+
+**MANDATORY RULE**: Whenever creating or texturing primary visible surfaces (stone walls, arches, columns, moldings, stairs, roofs, floors, wood, metal, terrain, props, etc.), you **MUST** use this external image generator by calling \`modeler_generate_texture\` (or passing \`texturePrompt\` to architectural tools \`modeler_create_wall\`, \`modeler_create_arch\`, \`modeler_create_column\`, \`modeler_create_molding\`, \`modeler_create_stairs\`, \`modeler_create_roof\`). Do NOT leave primary meshes in flat solid colors or substitute \`modeler_create_material\` with \`proceduralTexture\` / \`withProceduralMaps\` when an external image generator is active, and do NOT pass \`backend: "procedural"\` or \`useAI: false\`. Even if the user's prompt focuses on geometry or specific tool calls without mentioning textures, you MUST still generate and apply AI textures for the created surfaces.
+
+**CRITICAL TEXTURE PROMPT RULE (TILEABLE SURFACE ONLY — NEVER THE 3D SUBJECT)**:
+- \`prompt\` in \`modeler_generate_texture\` MUST describe **ONLY the flat, macro, edge-to-edge surface substance** (pigment, pores, fibers, grain, stone, weave, scratches) — **NEVER** the 3D object, character, creature, or part being modeled!
+- **BAD** (causes the image generator to draw whole objects/illustrations instead of tileable 3D textures): \`"mushroom cap"\`, \`"mushroom stem"\`, \`"red spotted mushroom"\`, \`"cartoon frog"\`, \`"wooden sword"\`.
+- **GOOD** (produces clean, seamless, 3D-tileable surface material maps): \`"matte crimson organic skin with subtle fine pores and warm tonal variation"\`, \`"matte cream-ivory fibrous organic tissue with faint vertical striations"\`, \`"aged oak wood grain with parallel fibers and subtle knots"\`.
+- Reuse generated textures across matching parts via \`materialName\`, and use \`modeler_create_material\` (solid PBR color / \`materialPreset\`) for tiny tertiary details (eyes, pupils, eyebrows, spots, buttons, rivets) instead of generating redundant textures.\n`
+      : '';
 
     const enabledNeural = this.getEnabledNeural3DProviders();
     const neuralDelegationSection =
@@ -1030,7 +1076,7 @@ Your mission is to procedurally build high-quality 3D meshes or accurately updat
 You have built-in Babylon.js modeling tools (\`modeler_*\`) and the following built-in skills available:
 
 ${activeSkillsText}
-${neuralDelegationSection}
+${externalImageGenSection}${neuralDelegationSection}
 ## Current 3D Scene State
 \`\`\`json
 ${sceneStateJson}

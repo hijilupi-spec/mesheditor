@@ -110,6 +110,7 @@ export class DecalTool extends AbstractTool {
       const generated = await context.service.aiTextureGenerator.generateTexture({
         prompt: String(args.prompt),
         style: 'decal',
+        seamless: false,
         size: 256,
         generateNormalMap: false,
         embedInScene: true,

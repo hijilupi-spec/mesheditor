@@ -1762,5 +1762,151 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       }
     });
   });
+
+  describe('8. External Image Generator Enforcement & Architectural texturePrompt', () => {
+    it('injects Active External Image Generator instructions into system prompt when enabled and omits them when disabled', () => {
+      service.aiAgent.saveConfig({
+        createTextures: true,
+        imageGeneratorEnabled: true,
+        imageGeneratorActiveBackend: 'sd_webui',
+        imageGeneratorProviders: {
+          ...service.aiAgent.getConfig().imageGeneratorProviders,
+          sd_webui: {
+            id: 'sd_webui',
+            name: 'Stable Diffusion / Draw Things (Local)',
+            enabled: true,
+            protocol: 'sd_webui',
+            endpointUrl: 'http://127.0.0.1:7860/sdapi/v1/txt2img',
+            apiKey: '',
+            modelId: 'flux-dev',
+          },
+        },
+      });
+
+      const activePrompt = service.aiAgent.buildSystemPrompt();
+      expect(activePrompt).toContain('Active External Image Generator');
+      expect(activePrompt).toContain('sd_webui');
+      expect(activePrompt).toContain('flux-dev');
+      expect(activePrompt).toContain('modeler_create_arch');
+      expect(activePrompt).toContain('modeler_create_molding');
+      expect(activePrompt).toContain('modeler_generate_texture');
+      expect(activePrompt).toContain('SURFACE-ONLY PROMPTING RULE');
+      expect(activePrompt).toContain('CRITICAL TEXTURE PROMPT RULE');
+
+      // Disable external image generator
+      service.aiAgent.saveConfig({
+        imageGeneratorEnabled: false,
+      });
+      const disabledPrompt = service.aiAgent.buildSystemPrompt();
+      expect(disabledPrompt).not.toContain('Active External Image Generator');
+
+      // Re-enable but disable textures globally
+      service.aiAgent.saveConfig({
+        imageGeneratorEnabled: true,
+        createTextures: false,
+      });
+      const noTexPrompt = service.aiAgent.buildSystemPrompt();
+      expect(noTexPrompt).not.toContain('Active External Image Generator');
+    });
+
+    it('awaits external image generator texturePrompt on modeler_create_arch, modeler_create_wall, modeler_create_molding, and modeler_create_stairs', async () => {
+      service.aiAgent.saveConfig({
+        createTextures: true,
+        imageGeneratorEnabled: true,
+        imageGeneratorActiveBackend: 'sd_webui',
+      });
+
+      const generateImageSpy = vi
+        .spyOn(service.externalImageGenerator, 'generateImage')
+        .mockResolvedValue({
+          providerId: 'sd_webui',
+          providerName: 'Stable Diffusion / Draw Things (Local)',
+          dataUrl:
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          width: 512,
+          height: 512,
+        });
+
+      const ctx = service.aiAgent.createToolContext();
+      const archTool = service.aiAgent.toolRegistry.get('modeler_create_arch')!;
+      const wallTool = service.aiAgent.toolRegistry.get('modeler_create_wall')!;
+      const moldingTool = service.aiAgent.toolRegistry.get('modeler_create_molding')!;
+      const stairsTool = service.aiAgent.toolRegistry.get('modeler_create_stairs')!;
+
+      const archRes = JSON.parse(
+        await archTool.execute(
+          {
+            name: 'gothic_arch_1',
+            style: 'pointed',
+            span: 2.2,
+            pierHeight: 2.0,
+            keystone: true,
+            impostCap: true,
+            texturePrompt: 'Weathered Gothic limestone voussoirs',
+          },
+          ctx
+        )
+      );
+      expect(archRes.status).toBe('ok');
+      expect(archRes.textureBackend).toBe('sd_webui');
+      expect(archRes.isAITexture).toBe(true);
+
+      const wallRes = JSON.parse(
+        await wallTool.execute(
+          {
+            name: 'gothic_wall',
+            width: 5,
+            height: 3.4,
+            texturePrompt: 'Ancient medieval ashlar stone masonry',
+          },
+          ctx
+        )
+      );
+      expect(wallRes.status).toBe('ok');
+      expect(wallRes.textureBackend).toBe('sd_webui');
+      expect(wallRes.isAITexture).toBe(true);
+
+      const moldingRes = JSON.parse(
+        await moldingTool.execute(
+          {
+            name: 'gothic_cornice',
+            path: [
+              { x: -2.5, y: 3.4, z: 0 },
+              { x: 2.5, y: 3.4, z: 0 },
+            ],
+            profile: 'cornice',
+            texturePrompt: 'Carved Gothic stone cornice',
+          },
+          ctx
+        )
+      );
+      expect(moldingRes.status).toBe('ok');
+      expect(moldingRes.textureBackend).toBe('sd_webui');
+      expect(moldingRes.isAITexture).toBe(true);
+
+      const stairsRes = JSON.parse(
+        await stairsTool.execute(
+          {
+            name: 'gothic_spiral_stairs',
+            style: 'spiral',
+            totalHeight: 3.4,
+            outerRadius: 1.3,
+            turns: 1.25,
+            centralColumn: true,
+            railing: 'both',
+            texturePrompt: 'Worn medieval stone steps',
+          },
+          ctx
+        )
+      );
+      expect(stairsRes.status).toBe('ok');
+      expect(stairsRes.textureBackend).toBe('sd_webui');
+      expect(stairsRes.isAITexture).toBe(true);
+
+      expect(generateImageSpy).toHaveBeenCalledTimes(4);
+      expect(generateImageSpy.mock.calls.every((c) => c[0].backend === 'sd_webui')).toBe(true);
+      generateImageSpy.mockRestore();
+    });
+  });
 });
 

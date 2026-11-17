@@ -290,25 +290,63 @@ export class ExternalImageGeneratorService {
     }
   }
 
+  private static readonly SEAMLESS_TEXTURE_NEGATIVE_PROMPT =
+    'isolated object, whole object, centered subject, 3d render, 3d model, figurine, character, creature, silhouette, icon, sprite, illustration, cartoon drawing, product photography, studio background, frame, border, vignette, horizon, sky, depth of field, bokeh, hard shadows, dramatic lighting, blurry, low quality, distorted, perspective, watermark, logo, text';
+
+  private static readonly DEFAULT_TEXTURE_NEGATIVE_PROMPT =
+    'blurry, low quality, distorted, perspective, watermark, logo, text';
+
+  private static readonly STYLE_SURFACE_CUES: Record<string, string> = {
+    skin: 'organic skin surface',
+    bark: 'natural bark surface',
+    foliage: 'dense foliage surface',
+    fabric: 'woven textile surface',
+    leather: 'grained leather surface',
+    velvet: 'plush velvet textile surface',
+    fur: 'dense fur pelt surface',
+    hair: 'fine hair strands surface',
+    ceramic: 'glazed ceramic surface',
+    bone: 'matte bone surface',
+    painted_metal: 'painted metal surface',
+    candy_coat: 'glossy coated surface',
+  };
+
   /**
    * Enhances a natural language texture prompt with orthogonal framing,
-   * flat diffused lighting, and seamless tileable modifiers for diffusion models.
+   * flat diffused lighting, and seamless tileable surface-material modifiers
+   * for diffusion models while suppressing whole-object/3D-render depictions.
    */
-  public enhancePromptForTexture(prompt: string, seamless: boolean = true): string {
-    const trimmed = prompt.trim();
-    if (!trimmed) return 'Seamless tileable stone texture, top-down view, evenly lit texture map';
+  public enhancePromptForTexture(prompt: string, seamless: boolean = true, style?: string): string {
+    const trimmed = prompt
+      .trim()
+      .replace(/^(?:a\s+|an\s+)?(?:3d\s+model|3d\s+render|render|picture|photo|photograph|image|illustration|drawing)\s+of\s+/i, '');
+    if (!trimmed) {
+      return 'seamless tileable texture of stone surface, top-down orthogonal view, diffused even studio lighting, flat 2D PBR albedo surface material map, continuous repeating pattern without seams';
+    }
+
+    if (style === 'decal') {
+      return `flat 2D graphic decal texture of ${trimmed}, centered crisp emblem on uniform clean background, orthogonal front view, diffused even studio lighting, no perspective distortion`;
+    }
 
     const hasSeamless = /seamless|tileable|repeating pattern/i.test(trimmed);
     const hasTopDown = /top-down|flat view|orthogonal|texture map/i.test(trimmed);
+    const styleCue = style && style !== 'auto' ? ExternalImageGeneratorService.STYLE_SURFACE_CUES[style] : undefined;
 
     const parts: string[] = [];
     if (seamless && !hasSeamless) {
-      parts.push('seamless tileable texture of');
+      parts.push(`seamless tileable texture of ${trimmed}`);
+    } else {
+      parts.push(trimmed);
     }
-    parts.push(trimmed);
+    if (styleCue && !new RegExp(styleCue.split(' ')[0], 'i').test(trimmed)) {
+      parts.push(styleCue);
+    }
     if (!hasTopDown) {
-      parts.push('top-down orthogonal view, diffused even studio lighting, high resolution PBR texture map, game asset, 8k');
+      parts.push('top-down orthogonal view, diffused even studio lighting, high resolution PBR texture map');
     }
+    parts.push(
+      'full-bleed flat 2D albedo surface material map, macro surface close-up filling entire frame edge to edge, uniform surface grain and color only, no isolated objects, no whole subjects, no 3D models, no illustrations, no borders'
+    );
     if (seamless && !hasSeamless) {
       parts.push('continuous repeating pattern without seams, flat surface, no perspective distortion');
     }
@@ -496,9 +534,11 @@ export class ExternalImageGeneratorService {
 
     const provider = this.getProvider(backendId);
     const size = this.normalizeResolution(request.size ?? 512);
-    const seamless = request.seamless !== false;
+    const seamless = request.style === 'decal' ? false : request.seamless !== false;
     const shouldEnhance = request.enhancePrompt !== false && this.enhancePrompt;
-    const finalPrompt = shouldEnhance ? this.enhancePromptForTexture(request.prompt, seamless) : request.prompt;
+    const finalPrompt = shouldEnhance
+      ? this.enhancePromptForTexture(request.prompt, seamless, request.style)
+      : request.prompt;
     const seed = request.seed ?? Math.floor(Math.random() * 1000000);
 
     let dataUrl: string;
@@ -777,10 +817,13 @@ export class ExternalImageGeneratorService {
     // Try payload variants:
     // 1. Standard Automatic1111 payload (with `tiling: boolean`)
     // 2. Draw Things payload (Draw Things rejects unrecognized `tiling` key, but accepts `tiled_diffusion: boolean`)
+    const negativePrompt = tiling
+      ? ExternalImageGeneratorService.SEAMLESS_TEXTURE_NEGATIVE_PROMPT
+      : ExternalImageGeneratorService.DEFAULT_TEXTURE_NEGATIVE_PROMPT;
     const payloadsToTry = [
       {
         prompt,
-        negative_prompt: 'blurry, low quality, distorted, perspective, watermark, logo, text',
+        negative_prompt: negativePrompt,
         steps: 22,
         width: size,
         height: size,
@@ -789,7 +832,7 @@ export class ExternalImageGeneratorService {
       },
       {
         prompt: tiling ? `${prompt}, seamless texture, tileable pattern` : prompt,
-        negative_prompt: 'blurry, low quality, distorted, perspective, watermark, logo, text',
+        negative_prompt: negativePrompt,
         steps: 22,
         width: size,
         height: size,

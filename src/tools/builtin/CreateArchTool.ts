@@ -1,6 +1,7 @@
 import { buildArchMesh } from '../../geometry/architecture';
 import { AbstractTool } from '../AbstractTool';
 import { ToolExecutionContext } from '../ToolExecutionContext';
+import { applyArchitecturalTexturePrompt } from './architectureTextureHelper';
 
 export class CreateArchTool extends AbstractTool {
   public readonly name = 'modeler_create_arch';
@@ -42,10 +43,19 @@ export class CreateArchTool extends AbstractTool {
       roughness: { type: 'number', description: 'PBR roughness (default: 0.7).' },
       metallic: { type: 'number', description: 'PBR metallic (default: 0.02).' },
       materialName: { type: 'string', description: 'Optional existing material name.' },
+      texturePrompt: {
+        type: 'string',
+        description:
+          'Optional natural language prompt to generate and apply an AI PBR texture (e.g. "Weathered medieval limestone voussoirs with moss").',
+      },
+      uvScale: {
+        type: 'number',
+        description: 'UV tiling multiplier when texturePrompt is provided (default: 2.0).',
+      },
     },
   };
 
-  public execute(args: any, context: ToolExecutionContext): string {
+  public async execute(args: any, context: ToolExecutionContext): Promise<string> {
     const baseName = String(args.name || 'stone_arch').replace(/\s+/g, '_');
     const uniqueName = context.findMeshByNameOrId(baseName)
       ? `${baseName}_${Date.now().toString().slice(-4)}`
@@ -74,11 +84,16 @@ export class CreateArchTool extends AbstractTool {
     context.applyTransformArgs(mesh, args);
     context.registerCreatedMesh(mesh);
 
+    const texResult = await applyArchitecturalTexturePrompt(context, mesh, args, 2.0);
+
     const bb = mesh.getBoundingInfo().boundingBox;
     return JSON.stringify({
       status: 'ok',
       meshName: mesh.name,
       style: args.style || 'round',
+      ...(texResult.generated
+        ? { textureBackend: texResult.generatorBackend, isAITexture: texResult.isAI }
+        : {}),
       vertices: mesh.getTotalVertices(),
       triangles: Math.floor(mesh.getTotalIndices() / 3),
       bounds: {

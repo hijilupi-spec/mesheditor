@@ -58,12 +58,12 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(res.bounds.max.x - res.bounds.min.x).toBeCloseTo(2.0, 2);
   });
 
-  it('builds an architectural wall with door and arched window openings and frames via CreateWallTool', () => {
+  it('builds an architectural wall with door and arched window openings and frames via CreateWallTool', async () => {
     const tool = new CreateWallTool();
     const ctx = service.aiAgent.createToolContext();
 
     const res = JSON.parse(
-      tool.execute(
+      await tool.execute(
         {
           name: 'Cathedral_Facade',
           width: 6.0,
@@ -88,12 +88,12 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(res.bounds.max.y).toBeCloseTo(4.0, 2);
   });
 
-  it('builds Roman round and Gothic pointed arches with piers and keystones via CreateArchTool', () => {
+  it('builds Roman round and Gothic pointed arches with piers and keystones via CreateArchTool', async () => {
     const tool = new CreateArchTool();
     const ctx = service.aiAgent.createToolContext();
 
     const gothic = JSON.parse(
-      tool.execute(
+      await tool.execute(
         {
           name: 'Gothic_Portal',
           style: 'pointed',
@@ -114,12 +114,12 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(gothic.bounds.size.y).toBeGreaterThan(3.5);
   });
 
-  it('builds fluted classical columns with entasis and capitals via CreateColumnTool', () => {
+  it('builds fluted classical columns with entasis and capitals via CreateColumnTool', async () => {
     const tool = new CreateColumnTool();
     const ctx = service.aiAgent.createToolContext();
 
     const ionic = JSON.parse(
-      tool.execute(
+      await tool.execute(
         {
           name: 'Ionic_Pillar',
           order: 'ionic',
@@ -138,12 +138,12 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(ionic.bounds.max.y).toBeCloseTo(3.6, 1);
   });
 
-  it('sweeps a mitered cornice molding around a closed rectangular perimeter via CreateMoldingTool', () => {
+  it('sweeps a mitered cornice molding around a closed rectangular perimeter via CreateMoldingTool', async () => {
     const tool = new CreateMoldingTool();
     const ctx = service.aiAgent.createToolContext();
 
     const molding = JSON.parse(
-      tool.execute(
+      await tool.execute(
         {
           name: 'Roof_Cornice',
           profile: 'cornice',
@@ -167,13 +167,13 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(molding.bounds.max.y).toBeCloseTo(3.22, 2);
   });
 
-  it('builds straight and spiral staircases with railings via CreateStairsTool and roofs via CreateRoofTool', () => {
+  it('builds straight and spiral staircases with railings via CreateStairsTool and roofs via CreateRoofTool', async () => {
     const stairsTool = new CreateStairsTool();
     const roofTool = new CreateRoofTool();
     const ctx = service.aiAgent.createToolContext();
 
     const stairs = JSON.parse(
-      stairsTool.execute(
+      await stairsTool.execute(
         {
           name: 'Grand_Stairs',
           style: 'straight',
@@ -191,7 +191,7 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(stairs.bounds.min.y).toBeCloseTo(0, 2);
 
     const spiral = JSON.parse(
-      stairsTool.execute(
+      await stairsTool.execute(
         {
           name: 'Tower_Spiral_Stairs',
           style: 'spiral',
@@ -207,7 +207,7 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(spiral.triangles).toBeGreaterThan(100);
 
     const roof = JSON.parse(
-      roofTool.execute(
+      await roofTool.execute(
         {
           name: 'Temple_Roof',
           style: 'gable',

@@ -133,6 +133,7 @@ export type ImageGeneratorProvidersMap = Record<ImageGeneratorBackendId, ImageGe
 export interface ImageGenerationRequest {
   backend?: ImageGeneratorBackendId | 'auto';
   prompt: string;
+  style?: string;
   size?: number;
   seamless?: boolean;
   seed?: number;

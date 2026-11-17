@@ -242,6 +242,11 @@ export class AITextureGenerator {
       (explicitBackend !== undefined && explicitBackend !== 'procedural') ||
       (options.useAI !== false && (configuredBackend !== 'procedural' || explicitBackend === 'auto' || options.useAI === true));
 
+    const recipe = this.analyzePrompt(prompt, options);
+    const resolvedStyle = recipe.style;
+    const isDecal = resolvedStyle === 'decal';
+    const effectiveSeamless = isDecal ? false : seamless;
+
     if (shouldUseAI) {
       try {
         const targetBackend =
@@ -254,19 +259,18 @@ export class AITextureGenerator {
         const genResult = await this.externalImageGenerator.generateImage({
           backend: targetBackend as any,
           prompt,
+          style: resolvedStyle,
           size,
-          seamless,
+          seamless: effectiveSeamless,
           seed: options.seed,
           enhancePrompt: options.enhancePrompt,
         });
 
-        const normalStrength = typeof options.normalStrength === 'number' ? options.normalStrength : 2.2;
-        const cleanBaseName = this.sanitizeName(options.name || this.deriveNameFromPrompt(prompt, 'stone'));
+        const normalStrength = typeof options.normalStrength === 'number' ? options.normalStrength : recipe.normalStrength;
+        const cleanBaseName = this.sanitizeName(options.name || this.deriveNameFromPrompt(prompt, resolvedStyle));
         const uniqueName = `${cleanBaseName}_${this.counter++}`;
-        const resolvedStyle = (options.style && options.style !== 'auto' ? options.style : 'stone') as Exclude<TextureStylePreset, 'auto'>;
-        const isDecal = resolvedStyle === 'decal';
 
-        // Compute de-lit albedo + Normal + ORM + Cavity AO maps when AI image decodes in browser
+        // Compute de-lit / seamless albedo + Normal + ORM + Cavity AO maps when AI image decodes in browser
         let finalAlbedoDataUrl = genResult.dataUrl;
         let normalDataUrl: string | undefined;
         let ormDataUrl: string | undefined;
@@ -275,7 +279,7 @@ export class AITextureGenerator {
         let actualWidth = size;
         let actualHeight = size;
 
-        if ((generateNormal || options.delight !== false) && typeof document !== 'undefined') {
+        if ((generateNormal || options.delight !== false || effectiveSeamless) && typeof document !== 'undefined') {
           try {
             const img = new Image();
             img.crossOrigin = 'anonymous';
@@ -303,13 +307,14 @@ export class AITextureGenerator {
                 const maps = extractPbrMapsFromCanvas(canvas, {
                   delight: !isDecal && options.delight !== false,
                   delightStrength: 0.72,
-                  baseRoughness: options.roughness ?? 0.68,
+                  ensureSeamless: effectiveSeamless,
+                  baseRoughness: options.roughness ?? recipe.roughness,
                   roughnessVariation: options.roughnessVariation ?? 0.2,
-                  metallic: options.metallic ?? 0.08,
+                  metallic: options.metallic ?? recipe.metallic,
                   normalStrength,
                   aoStrength: options.aoStrength ?? 0.72,
                 });
-                if (!isDecal && options.delight !== false && maps.albedoDataUrl !== FALLBACK_1X1_PNG) {
+                if (!isDecal && (options.delight !== false || effectiveSeamless) && maps.albedoDataUrl !== FALLBACK_1X1_PNG) {
                   finalAlbedoDataUrl = maps.albedoDataUrl;
                 }
                 if (generateNormal) normalDataUrl = maps.normalDataUrl;
@@ -332,19 +337,19 @@ export class AITextureGenerator {
           style: resolvedStyle,
           size: Math.max(actualWidth, actualHeight),
           seed: options.seed ?? 0,
-          seamless,
+          seamless: effectiveSeamless,
           albedoDataUrl: finalAlbedoDataUrl,
           normalDataUrl,
           ormDataUrl,
           aoDataUrl,
           roughnessDataUrl,
-          roughness: options.roughness ?? 0.7,
-          metallic: options.metallic ?? 0.1,
+          roughness: options.roughness ?? recipe.roughness,
+          metallic: options.metallic ?? recipe.metallic,
           normalStrength,
-          materialPreset: options.materialPreset,
-          primaryColor: options.primaryColor || '#888888',
-          secondaryColor: options.secondaryColor || '#444444',
-          accentColor: options.accentColor || '#222222',
+          materialPreset: options.materialPreset ?? recipe.materialPreset,
+          primaryColor: options.primaryColor || recipe.primaryHex,
+          secondaryColor: options.secondaryColor || recipe.secondaryHex,
+          accentColor: options.accentColor || recipe.accentHex,
           createdAt: Date.now(),
           generatorBackend: genResult.providerId,
           isAI: true,
@@ -388,7 +393,6 @@ export class AITextureGenerator {
       }
     }
 
-    const recipe = this.analyzePrompt(prompt, options);
     const cleanBaseName = this.sanitizeName(options.name || this.deriveNameFromPrompt(prompt, recipe.style));
     const uniqueName = `${cleanBaseName}_${this.counter++}`;
 
@@ -642,6 +646,9 @@ export class AITextureGenerator {
       );
       albedoTex.name = item.embeddedAlbedoName || `${item.name}_albedo.png`;
     }
+    const wrapMode = isDecal ? Texture.CLAMP_ADDRESSMODE : Texture.WRAP_ADDRESSMODE;
+    albedoTex.wrapU = wrapMode;
+    albedoTex.wrapV = wrapMode;
     albedoTex.uScale = uvScale;
     albedoTex.vScale = uvScale;
     albedoTex.hasAlpha = isDecal;

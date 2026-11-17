@@ -1438,6 +1438,153 @@ export function delightImageDataPixels(
 }
 
 /**
+ * Measures how discontinuous the opposite edges of an RGBA image are compared
+ * to typical adjacent-pixel steps in the interior. Values near 1.0 indicate
+ * the image already wraps seamlessly; values noticeably > 1.35 indicate a hard seam.
+ */
+export function measureEdgeSeamRatio(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number
+): number {
+  if (width < 8 || height < 8) return 1.0;
+
+  let seamSum = 0;
+  let seamCount = 0;
+  for (let y = 0; y < height; y++) {
+    const leftIdx = (y * width) * 4;
+    const rightIdx = (y * width + (width - 1)) * 4;
+    seamSum +=
+      Math.abs(rgba[leftIdx] - rgba[rightIdx]) +
+      Math.abs(rgba[leftIdx + 1] - rgba[rightIdx + 1]) +
+      Math.abs(rgba[leftIdx + 2] - rgba[rightIdx + 2]);
+    seamCount++;
+  }
+  for (let x = 0; x < width; x++) {
+    const topIdx = x * 4;
+    const botIdx = ((height - 1) * width + x) * 4;
+    seamSum +=
+      Math.abs(rgba[topIdx] - rgba[botIdx]) +
+      Math.abs(rgba[topIdx + 1] - rgba[botIdx + 1]) +
+      Math.abs(rgba[topIdx + 2] - rgba[botIdx + 2]);
+    seamCount++;
+  }
+
+  let interiorSum = 0;
+  let interiorCount = 0;
+  const stepY = Math.max(1, Math.floor(height / 32));
+  const stepX = Math.max(1, Math.floor(width / 32));
+  for (let y = 0; y < height - 1; y += stepY) {
+    for (let x = 0; x < width - 1; x += stepX) {
+      const idx = (y * width + x) * 4;
+      const rightIdx = idx + 4;
+      const downIdx = ((y + 1) * width + x) * 4;
+      interiorSum +=
+        Math.abs(rgba[idx] - rgba[rightIdx]) +
+        Math.abs(rgba[idx + 1] - rgba[rightIdx + 1]) +
+        Math.abs(rgba[idx + 2] - rgba[rightIdx + 2]);
+      interiorSum +=
+        Math.abs(rgba[idx] - rgba[downIdx]) +
+        Math.abs(rgba[idx + 1] - rgba[downIdx + 1]) +
+        Math.abs(rgba[idx + 2] - rgba[downIdx + 2]);
+      interiorCount += 2;
+    }
+  }
+
+  const meanSeam = seamCount > 0 ? seamSum / seamCount : 0;
+  const meanInterior = interiorCount > 0 ? interiorSum / interiorCount : 0;
+  return meanSeam / Math.max(3.0, meanInterior);
+}
+
+/**
+ * Converts any RGBA image buffer into a seamlessly tileable 2D texture using a
+ * 2-pass 1D toroidal half-shift cosine crossfade along X then Y.
+ * Preserves the central (1 - blendFraction) region untouched while guaranteeing
+ * continuous wraparound across all four borders with zero internal cross seams.
+ */
+export function makeSeamlessTileableRgba(
+  srcRgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  blendFraction: number = 0.22
+): Uint8ClampedArray {
+  if (width < 4 || height < 4) {
+    return new Uint8ClampedArray(srcRgba);
+  }
+  const bf = Math.max(0.05, Math.min(0.45, blendFraction));
+  const keepThreshold = 1.0 - bf;
+  const halfW = Math.floor(width / 2);
+  const halfH = Math.floor(height / 2);
+
+  // Pass 1: Horizontal toroidal blend
+  const horiz = new Uint8ClampedArray(srcRgba.length);
+  for (let x = 0; x < width; x++) {
+    const u = Math.abs((2 * (x + 0.5)) / width - 1);
+    let w = 1.0;
+    if (u > keepThreshold) {
+      const t = Math.min(1.0, (u - keepThreshold) / bf);
+      w = 0.5 * (1.0 + Math.cos(Math.PI * t));
+    }
+    const shiftX = (x + halfW) % width;
+    const invW = 1.0 - w;
+
+    for (let y = 0; y < height; y++) {
+      const dstIdx = (y * width + x) * 4;
+      const altIdx = (y * width + shiftX) * 4;
+      horiz[dstIdx] = Math.round(srcRgba[dstIdx] * w + srcRgba[altIdx] * invW);
+      horiz[dstIdx + 1] = Math.round(srcRgba[dstIdx + 1] * w + srcRgba[altIdx + 1] * invW);
+      horiz[dstIdx + 2] = Math.round(srcRgba[dstIdx + 2] * w + srcRgba[altIdx + 2] * invW);
+      horiz[dstIdx + 3] = Math.round(srcRgba[dstIdx + 3] * w + srcRgba[altIdx + 3] * invW);
+    }
+  }
+
+  // Pass 2: Vertical toroidal blend on horizontally seamless buffer
+  const out = new Uint8ClampedArray(srcRgba.length);
+  for (let y = 0; y < height; y++) {
+    const v = Math.abs((2 * (y + 0.5)) / height - 1);
+    let w = 1.0;
+    if (v > keepThreshold) {
+      const t = Math.min(1.0, (v - keepThreshold) / bf);
+      w = 0.5 * (1.0 + Math.cos(Math.PI * t));
+    }
+    const shiftY = (y + halfH) % height;
+    const invW = 1.0 - w;
+
+    for (let x = 0; x < width; x++) {
+      const dstIdx = (y * width + x) * 4;
+      const altIdx = (shiftY * width + x) * 4;
+      out[dstIdx] = Math.round(horiz[dstIdx] * w + horiz[altIdx] * invW);
+      out[dstIdx + 1] = Math.round(horiz[dstIdx + 1] * w + horiz[altIdx + 1] * invW);
+      out[dstIdx + 2] = Math.round(horiz[dstIdx + 2] * w + horiz[altIdx + 2] * invW);
+      out[dstIdx + 3] = Math.round(horiz[dstIdx + 3] * w + horiz[altIdx + 3] * invW);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Checks whether an RGBA image already wraps cleanly at its borders; if not,
+ * applies toroidal seamless blending so 3D UV tiling shows no hard seams.
+ */
+export function ensureSeamlessTileableRgba(
+  srcRgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  threshold: number = 1.35
+): { rgba: Uint8ClampedArray; blended: boolean; seamRatio: number } {
+  const seamRatio = measureEdgeSeamRatio(srcRgba, width, height);
+  if (seamRatio <= threshold) {
+    return { rgba: new Uint8ClampedArray(srcRgba), blended: false, seamRatio };
+  }
+  return {
+    rgba: makeSeamlessTileableRgba(srcRgba, width, height),
+    blended: true,
+    seamRatio,
+  };
+}
+
+/**
  * Extracts a full 4-channel PBR map set (optionally de-lit Albedo, Normal, ORM, Cavity AO, Roughness)
  * from any source RGBA buffer (AI image, reference crop, or imported texture).
  */
@@ -1448,6 +1595,7 @@ export function extractPbrBuffersFromRgba(
   options: {
     delight?: boolean;
     delightStrength?: number;
+    ensureSeamless?: boolean;
     baseRoughness?: number;
     roughnessVariation?: number;
     metallic?: number;
@@ -1457,10 +1605,13 @@ export function extractPbrBuffersFromRgba(
   } = {}
 ): PbrTextureBuffers {
   const pixelCount = width * height;
+  const seamlessRgba = options.ensureSeamless
+    ? ensureSeamlessTileableRgba(srcRgba, width, height).rgba
+    : srcRgba;
   const doDelight = options.delight !== false;
   const albedoRgba = doDelight
-    ? delightImageDataPixels(srcRgba, width, height, options.delightStrength ?? 0.75)
-    : new Uint8ClampedArray(srcRgba);
+    ? delightImageDataPixels(seamlessRgba, width, height, options.delightStrength ?? 0.75)
+    : new Uint8ClampedArray(seamlessRgba);
 
   const heights = new Float32Array(pixelCount);
   for (let i = 0; i < pixelCount; i++) {
@@ -1555,6 +1706,7 @@ export function extractPbrMapsFromCanvas(
   options: {
     delight?: boolean;
     delightStrength?: number;
+    ensureSeamless?: boolean;
     baseRoughness?: number;
     roughnessVariation?: number;
     metallic?: number;

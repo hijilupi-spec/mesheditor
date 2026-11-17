@@ -15,7 +15,7 @@ export class GenerateTextureTool extends AbstractTool {
       prompt: {
         type: 'string',
         description:
-          'Natural language description of the texture to generate (e.g. "Weathered dungeon cobblestone floor with mossy crevices", "Futuristic dark sci-fi hull plating with glowing cyan seams").',
+          'Pure flat surface-material description (color, micro-grain, pores, fibers, masonry, weave, scratches) filling the frame edge-to-edge. CRITICAL: Describe ONLY the surface material itself — NEVER include the 3D object, character, creature, or part name (e.g. write "matte crimson organic skin with fine pores and subtle tonal variation" instead of "mushroom cap", or "matte cream fibrous organic pith with fine vertical grain" instead of "mushroom stem", or "Weathered dungeon cobblestone floor with mossy crevices").',
       },
       name: {
         type: 'string',
@@ -200,6 +200,9 @@ export class GenerateTextureTool extends AbstractTool {
       );
       albedoTex.name = item.embeddedAlbedoName || `${item.name}_albedo.png`;
     }
+    const wrapMode = isDecal ? Texture.CLAMP_ADDRESSMODE : Texture.WRAP_ADDRESSMODE;
+    albedoTex.wrapU = wrapMode;
+    albedoTex.wrapV = wrapMode;
     albedoTex.uScale = uvScale;
     albedoTex.vScale = uvScale;
     albedoTex.hasAlpha = isDecal;

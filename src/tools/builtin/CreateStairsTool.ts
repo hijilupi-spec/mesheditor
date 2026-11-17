@@ -1,6 +1,7 @@
 import { buildStairsMesh } from '../../geometry/architecture';
 import { AbstractTool } from '../AbstractTool';
 import { ToolExecutionContext } from '../ToolExecutionContext';
+import { applyArchitecturalTexturePrompt } from './architectureTextureHelper';
 
 export class CreateStairsTool extends AbstractTool {
   public readonly name = 'modeler_create_stairs';
@@ -60,7 +61,7 @@ export class CreateStairsTool extends AbstractTool {
     },
   };
 
-  public execute(args: any, context: ToolExecutionContext): string {
+  public async execute(args: any, context: ToolExecutionContext): Promise<string> {
     const baseName = String(args.name || 'staircase').replace(/\s+/g, '_');
     const uniqueName = context.findMeshByNameOrId(baseName)
       ? `${baseName}_${Date.now().toString().slice(-4)}`
@@ -92,25 +93,16 @@ export class CreateStairsTool extends AbstractTool {
     context.applyTransformArgs(mesh, args);
     context.registerCreatedMesh(mesh);
 
-    if (args.texturePrompt && context.service.aiTextureGenerator) {
-      context.service.aiTextureGenerator
-        .generateTexture({
-          prompt: args.texturePrompt,
-          applyToMesh: mesh.name,
-          uvScale: typeof args.uvScale === 'number' ? args.uvScale : 2.0,
-          useAI: true,
-          fallbackToProcedural: true,
-        })
-        .catch((err: any) => {
-          console.warn(`Texture generation for ${mesh.name} failed:`, err);
-        });
-    }
+    const texResult = await applyArchitecturalTexturePrompt(context, mesh, args, 2.0);
 
     const bb = mesh.getBoundingInfo().boundingBox;
     return JSON.stringify({
       status: 'ok',
       meshName: mesh.name,
       style: args.style || 'straight',
+      ...(texResult.generated
+        ? { textureBackend: texResult.generatorBackend, isAITexture: texResult.isAI }
+        : {}),
       vertices: mesh.getTotalVertices(),
       triangles: Math.floor(mesh.getTotalIndices() / 3),
       bounds: {

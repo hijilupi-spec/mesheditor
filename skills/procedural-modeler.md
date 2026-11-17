@@ -90,6 +90,11 @@ When building or texturing 3D meshes, you can call `modeler_generate_texture` di
   "normalStrength": 2.2
 }
 ```
+**Surface-Only Prompting Rule (Critical for External AI Generators):**
+- Diffusion models draw whatever object nouns appear in `prompt`. **NEVER** include the 3D object, character, creature, or part name in `modeler_generate_texture` (e.g., NEVER write `"mushroom cap"`, `"mushroom stem"`, `"frog"`, `"wooden sword"`, `"robot"`).
+- Always describe **strictly the flat, macro, edge-to-edge surface material** (pigment, pores, fibers, grain, masonry, weave, scratches) — e.g., `"matte crimson organic skin with fine pores and subtle tonal variation"`, `"matte warm cream fibrous organic pith with faint vertical striations"`.
+- Generate one texture per distinct primary material and reuse it across matching meshes via `materialName`; use `modeler_create_material` (solid color / `materialPreset`) for tiny tertiary accents (eyes, pupils, eyebrows, spots, rivets).
+
 **What `modeler_generate_texture` automatically handles:**
 1. **AI Image Synthesis**: Sends the request to the user's active/configured image generator engine (or falls back seamlessly to procedural synthesis if offline or unconfigured).
 2. **Seamless Prompt Optimization**: Automatically enhances the prompt with orthogonal top-down, shadowless lighting, and tileable repeating pattern keywords.
