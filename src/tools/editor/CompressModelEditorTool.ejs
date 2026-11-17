@@ -14,17 +14,17 @@
       <label class="tool-label" for="compressModelSourceSelect">Source</label>
       <select id="compressModelSourceSelect" class="tool-select">
         <option value="scene" selected>Active Scene / Selection</option>
-        <option value="file">Import 3D File (.glb, .gltf, .obj, .stl, .ply, .fbx)</option>
+        <option value="file">Import 3D File (.glb, .gltf, .obj, .stl, .ply, .fbx, .dae)</option>
       </select>
     </div>
 
     <!-- Drag & Drop Zone for Files -->
     <div id="compressDropZone" class="compress-dropzone" style="display: none">
-      <input type="file" id="compressFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx" />
+      <input type="file" id="compressFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx,.dae,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tga" multiple />
       <div class="compress-dropzone-inner" id="compressDropZoneInner">
         <i class="app-icon" data-lucide="upload-cloud"></i>
         <div class="compress-dropzone-text">Drop 3D file here or <span class="compress-browse-link" id="compressBrowseLink">Browse</span></div>
-        <div class="compress-dropzone-sub">GLB, GLTF, OBJ, STL, PLY, FBX</div>
+        <div class="compress-dropzone-sub">GLB, GLTF, OBJ, STL, PLY, FBX, DAE</div>
       </div>
       <div id="compressLoadedFileInfo" class="compress-file-info" style="display: none">
         <i class="app-icon" data-lucide="file-check"></i>

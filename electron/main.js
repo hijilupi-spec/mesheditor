@@ -16,6 +16,7 @@ const MIME_MAP = {
   '.obj': 'text/plain',
   '.stl': 'application/sla',
   '.ply': 'application/octet-stream',
+  '.dae': 'model/vnd.collada+xml',
   '.babylon': 'application/json',
   '.bin': 'application/octet-stream',
   '.png': 'image/png',
@@ -24,11 +25,12 @@ const MIME_MAP = {
   '.webp': 'image/webp',
   '.bmp': 'image/bmp',
   '.gif': 'image/gif',
+  '.tga': 'image/x-tga',
   '.dds': 'application/octet-stream',
   '.ktx2': 'image/ktx2',
 };
 
-const MODEL_EXTENSIONS = new Set(['.glb', '.gltf', '.obj', '.stl', '.ply', '.babylon']);
+const MODEL_EXTENSIONS = new Set(['.glb', '.gltf', '.obj', '.stl', '.ply', '.dae', '.babylon']);
 
 function getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -82,6 +84,43 @@ function resolveFilePayloads(filePaths) {
         }
       } catch (err) {
         console.warn('[Electron] Could not auto-resolve companion files for .gltf:', err);
+      }
+    }
+
+    // If a .dae file was selected, automatically include companion texture files referenced via <init_from>
+    if (path.extname(filePath).toLowerCase() === '.dae') {
+      try {
+        const baseDir = path.dirname(filePath);
+        const daeText = fs.readFileSync(filePath, 'utf8');
+        const initFromRegex = /<init_from[^>]*>([\s\S]*?)<\/init_from>/gi;
+        let match;
+        while ((match = initFromRegex.exec(daeText)) !== null) {
+          let rawUri = match[1];
+          const refMatch = rawUri.match(/<ref[^>]*>([\s\S]*?)<\/ref>/i);
+          if (refMatch) rawUri = refMatch[1];
+          rawUri = rawUri.replace(/<[^>]+>/g, '').trim();
+          if (!rawUri || rawUri.startsWith('data:') || rawUri.startsWith('http://') || rawUri.startsWith('https://')) continue;
+          if (rawUri.startsWith('file:')) {
+            try {
+              rawUri = decodeURIComponent(rawUri.replace(/^file:(\/\/)?/i, ''));
+            } catch {
+              continue;
+            }
+          } else {
+            try {
+              rawUri = decodeURIComponent(rawUri);
+            } catch {
+              // Keep raw string
+            }
+          }
+          const cleanRel = rawUri.replace(/\\/g, '/');
+          const companionPath = path.isAbsolute(cleanRel) ? path.resolve(cleanRel) : path.resolve(baseDir, cleanRel);
+          if (companionPath.startsWith(baseDir + path.sep) || companionPath === baseDir) {
+            addFilePayload(companionPath, cleanRel.replace(/^(\.\/|\/)+/, ''));
+          }
+        }
+      } catch (err) {
+        console.warn('[Electron] Could not auto-resolve companion files for .dae:', err);
       }
     }
   }
@@ -162,7 +201,7 @@ async function handleMenuOpen() {
       title: 'Open 3D Model',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '3D Models & Assets', extensions: ['glb', 'gltf', 'obj', 'stl', 'ply', 'babylon'] },
+        { name: '3D Models & Assets', extensions: ['glb', 'gltf', 'obj', 'stl', 'ply', 'dae', 'babylon'] },
         { name: 'All Files', extensions: ['*'] },
       ],
     });

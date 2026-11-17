@@ -10,6 +10,7 @@ export * from './builtInSkills';
 export * from './voxel';
 export * from './pathExtrusion';
 export * from './compression/ModelCompressor';
+export * from './loaders/ColladaConverter';
 export * from './geometry/bevelModifier';
 export * from './uv/UVUnwrapController';
 export * from './baking/TextureBaker';

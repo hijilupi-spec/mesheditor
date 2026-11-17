@@ -61,6 +61,7 @@ import {
   transformFacetUVs,
 } from './geometry/facetSurfaceUtils';
 import { subdivideCatmullClarkMesh } from './geometry/organicGeometry';
+import { ColladaConverter } from './loaders/ColladaConverter';
 import { GridMaterial, TerrainMaterial } from '@babylonjs/materials';
 import { GLTF2Export, OBJExport, RegisterEXT_texture_webp, STLExport } from '@babylonjs/serializers';
 import { DataWriter } from '@babylonjs/serializers/glTF/2.0/dataWriter';
@@ -7560,25 +7561,42 @@ export class MeshEditorService {
     return url;
   }
 
+  private async preprocessImportBatch(files: File[]) {
+    const validFiles = files.filter((f) => !f.name.startsWith('.'));
+    if (ColladaConverter.hasColladaFiles(validFiles)) {
+      this.events.onStatusChanged?.('Converting Collada (.dae) to GLB...', true);
+    }
+    const batch = await ColladaConverter.preprocessImportFiles(validFiles);
+    for (const warning of batch.warnings) {
+      this.events.onToast?.(warning, 'warning');
+    }
+    return batch;
+  }
+
   public async loadFiles(files: File[]): Promise<void> {
     if (!files || files.length === 0) return;
-    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.babylon'];
+    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae', '.babylon'];
 
-    const validFiles = files.filter((f) => !f.name.startsWith('.'));
-    if (validFiles.length === 0) return;
+    const initialValid = files.filter((f) => !f.name.startsWith('.'));
+    if (initialValid.length === 0) return;
 
-    const primaryFile =
-      validFiles.find((f) => {
-        const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
-        return modelExtensions.includes(ext);
-      }) || validFiles[0];
-
-    this.events.onStatusChanged?.(`Loading ${primaryFile.name}...`, true);
     try {
+      const batch = await this.preprocessImportBatch(initialValid);
+      const validFiles = batch.files;
+      if (validFiles.length === 0) return;
+
+      const primaryFile =
+        validFiles.find((f) => {
+          const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+          return modelExtensions.includes(ext);
+        }) || validFiles[0];
+      const displayName = batch.originalNames.get(primaryFile) || primaryFile.name;
+
+      this.events.onStatusChanged?.(`Loading ${displayName}...`, true);
       this.clearModel();
       this.registerDroppedFiles(validFiles);
-      this.currentFilename = primaryFile.name;
-      this.exportParams.filename = primaryFile.name.replace(/\.[^/.]+$/, '') + '_edited';
+      this.currentFilename = displayName;
+      this.exportParams.filename = displayName.replace(/\.[^/.]+$/, '') + '_edited';
 
       const result = await SceneLoader.ImportMeshAsync('', 'file:', primaryFile, this.scene);
 
@@ -7597,9 +7615,10 @@ export class MeshEditorService {
         }
       }
 
-      // Ensure any images included in the multi-file drop are immediately applied to materials
+      // Ensure any unconsumed images included in the multi-file drop are immediately applied to materials
       const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.dds', '.ktx2'];
       const imagesInDrop = validFiles.filter((f) => {
+        if (batch.consumedTextureFiles.has(f)) return false;
         const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
         return imageExtensions.includes(ext);
       });
@@ -7607,8 +7626,8 @@ export class MeshEditorService {
         await this.applyDroppedTextures(imagesInDrop);
       }
 
-      this.events.onModelLoaded?.(primaryFile.name);
-      this.events.onToast?.(`File "${primaryFile.name}" loaded successfully!`, 'success');
+      this.events.onModelLoaded?.(displayName);
+      this.events.onToast?.(`File "${displayName}" loaded successfully!`, 'success');
       this.events.onStatusChanged?.('Ready');
     } catch (err: any) {
       console.error('Error loading file:', err);
@@ -7619,33 +7638,44 @@ export class MeshEditorService {
 
   public async importFiles(files: File[]): Promise<void> {
     if (!files || files.length === 0) return;
-    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.babylon'];
+    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae', '.babylon'];
 
-    const validFiles = files.filter((f) => !f.name.startsWith('.'));
-    if (validFiles.length === 0) return;
+    const initialValid = files.filter((f) => !f.name.startsWith('.'));
+    if (initialValid.length === 0) return;
 
-    this.registerDroppedFiles(validFiles);
+    try {
+      const batch = await this.preprocessImportBatch(initialValid);
+      const validFiles = batch.files;
+      if (validFiles.length === 0) return;
 
-    const modelFiles = validFiles.filter((f) => {
-      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
-      return modelExtensions.includes(ext);
-    });
+      this.registerDroppedFiles(validFiles);
 
-    if (modelFiles.length > 0) {
-      for (const m of modelFiles) {
-        await this.importFile(m);
+      const modelFiles = validFiles.filter((f) => {
+        const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+        return modelExtensions.includes(ext);
+      });
+
+      if (modelFiles.length > 0) {
+        for (const m of modelFiles) {
+          await this.importPreparedFile(m, batch.originalNames.get(m) || m.name);
+        }
+      } else {
+        await this.importPreparedFile(validFiles[0], batch.originalNames.get(validFiles[0]) || validFiles[0].name);
       }
-    } else {
-      await this.importFile(validFiles[0]);
-    }
 
-    const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.dds', '.ktx2'];
-    const imagesInDrop = validFiles.filter((f) => {
-      const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
-      return imageExtensions.includes(ext);
-    });
-    if (imagesInDrop.length > 0) {
-      await this.applyDroppedTextures(imagesInDrop);
+      const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.dds', '.ktx2'];
+      const imagesInDrop = validFiles.filter((f) => {
+        if (batch.consumedTextureFiles.has(f)) return false;
+        const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+        return imageExtensions.includes(ext);
+      });
+      if (imagesInDrop.length > 0) {
+        await this.applyDroppedTextures(imagesInDrop);
+      }
+    } catch (err: any) {
+      console.error('Error importing files:', err);
+      this.events.onToast?.(`Failed to import: ${err.message || err}`, 'error');
+      this.events.onStatusChanged?.('Error importing');
     }
   }
 
@@ -7654,12 +7684,20 @@ export class MeshEditorService {
   }
 
   public async importFile(file: File): Promise<void> {
-    this.events.onStatusChanged?.(`Importing ${file.name}...`, true);
+    if (ColladaConverter.isColladaFile(file)) {
+      await this.importFiles([file]);
+      return;
+    }
+    await this.importPreparedFile(file, file.name);
+  }
+
+  private async importPreparedFile(file: File, displayName: string): Promise<void> {
+    this.events.onStatusChanged?.(`Importing ${displayName}...`, true);
     try {
-      this.currentFilename = file.name;
+      this.currentFilename = displayName;
       FilesInputStore.FilesToLoad[file.name.toLowerCase()] = file;
       const result = await SceneLoader.ImportMeshAsync('', 'file:', file, this.scene);
-      this.processImportedMeshes(result.meshes as Mesh[], file.name);
+      this.processImportedMeshes(result.meshes as Mesh[], displayName);
 
       if (file.name.toLowerCase().endsWith('.babylon')) {
         try {
@@ -7673,7 +7711,7 @@ export class MeshEditorService {
         }
       }
 
-      this.events.onToast?.(`"${file.name}" imported into scene!`, 'success');
+      this.events.onToast?.(`"${displayName}" imported into scene!`, 'success');
       this.events.onStatusChanged?.('Ready');
     } catch (err: any) {
       console.error('Error importing file:', err);
@@ -7686,15 +7724,29 @@ export class MeshEditorService {
     const filename = name || url.split('/').pop() || 'model.glb';
     this.events.onStatusChanged?.(`Loading ${filename}...`, true);
     try {
-      this.clearModel();
-      this.currentFilename = filename;
-      this.exportParams.filename = filename.replace(/\.[^/.]+$/, '') + '_edited';
+      let result;
+      if (ColladaConverter.isColladaFile(filename) || ColladaConverter.isColladaFile(url)) {
+        this.events.onStatusChanged?.('Converting Collada (.dae) to GLB...', true);
+        const converted = await ColladaConverter.convertUrlToGlbFile(url, filename);
+        for (const warning of converted.warnings) {
+          this.events.onToast?.(warning, 'warning');
+        }
+        this.clearModel();
+        this.currentFilename = filename;
+        this.exportParams.filename = filename.replace(/\.[^/.]+$/, '') + '_edited';
+        FilesInputStore.FilesToLoad[converted.glbFile.name.toLowerCase()] = converted.glbFile;
+        result = await SceneLoader.ImportMeshAsync('', 'file:', converted.glbFile, this.scene);
+      } else {
+        this.clearModel();
+        this.currentFilename = filename;
+        this.exportParams.filename = filename.replace(/\.[^/.]+$/, '') + '_edited';
 
-      const lastSlash = url.lastIndexOf('/');
-      const rootUrl = lastSlash !== -1 ? url.substring(0, lastSlash + 1) : './';
-      const file = lastSlash !== -1 ? url.substring(lastSlash + 1) : url;
+        const lastSlash = url.lastIndexOf('/');
+        const rootUrl = lastSlash !== -1 ? url.substring(0, lastSlash + 1) : './';
+        const file = lastSlash !== -1 ? url.substring(lastSlash + 1) : url;
 
-      const result = await SceneLoader.ImportMeshAsync('', rootUrl, file, this.scene);
+        result = await SceneLoader.ImportMeshAsync('', rootUrl, file, this.scene);
+      }
       this.processLoadedScene(result.meshes as Mesh[]);
 
       if (filename.toLowerCase().endsWith('.babylon')) {
@@ -7723,11 +7775,22 @@ export class MeshEditorService {
     const filename = name || url.split('/').pop() || 'model.glb';
     this.events.onStatusChanged?.(`Importing ${filename}...`, true);
     try {
-      const lastSlash = url.lastIndexOf('/');
-      const rootUrl = lastSlash !== -1 ? url.substring(0, lastSlash + 1) : './';
-      const file = lastSlash !== -1 ? url.substring(lastSlash + 1) : url;
+      let result;
+      if (ColladaConverter.isColladaFile(filename) || ColladaConverter.isColladaFile(url)) {
+        this.events.onStatusChanged?.('Converting Collada (.dae) to GLB...', true);
+        const converted = await ColladaConverter.convertUrlToGlbFile(url, filename);
+        for (const warning of converted.warnings) {
+          this.events.onToast?.(warning, 'warning');
+        }
+        FilesInputStore.FilesToLoad[converted.glbFile.name.toLowerCase()] = converted.glbFile;
+        result = await SceneLoader.ImportMeshAsync('', 'file:', converted.glbFile, this.scene);
+      } else {
+        const lastSlash = url.lastIndexOf('/');
+        const rootUrl = lastSlash !== -1 ? url.substring(0, lastSlash + 1) : './';
+        const file = lastSlash !== -1 ? url.substring(lastSlash + 1) : url;
 
-      const result = await SceneLoader.ImportMeshAsync('', rootUrl, file, this.scene);
+        result = await SceneLoader.ImportMeshAsync('', rootUrl, file, this.scene);
+      }
       this.processImportedMeshes(result.meshes as Mesh[], filename);
 
       if (filename.toLowerCase().endsWith('.babylon')) {

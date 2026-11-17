@@ -18,6 +18,7 @@ import {
   RegisterKHR_draco_mesh_compression,
   STLExport,
 } from '@babylonjs/serializers';
+import { ColladaConverter } from '../loaders/ColladaConverter';
 
 // Ensure Draco mesh compression serializer extension is registered once
 try {
@@ -721,17 +722,24 @@ export class ModelCompressor {
   }
 
   /**
-   * Loads an arbitrary 3D model file (.glb, .gltf, .obj, .stl, .ply, .fbx) into an isolated memory scene for compression.
+   * Loads an arbitrary 3D model file (.glb, .gltf, .obj, .stl, .ply, .fbx, .dae) into an isolated memory scene for compression.
    */
   public static async loadModelFromFile(
     file: File,
-    engine: Engine
+    engine: Engine,
+    companionFiles: File[] = []
   ): Promise<{ scene: Scene; meshes: Mesh[]; filename: string; fileSize: number; dispose: () => void }> {
     const tempScene = new Scene(engine);
     tempScene.autoClear = false;
 
-    FilesInputStore.FilesToLoad[file.name.toLowerCase()] = file;
-    const result = await SceneLoader.ImportMeshAsync('', 'file:', file, tempScene);
+    let fileToLoad = file;
+    if (ColladaConverter.isColladaFile(file)) {
+      const converted = await ColladaConverter.convertToGlbFile(file, companionFiles);
+      fileToLoad = converted.glbFile;
+    }
+
+    FilesInputStore.FilesToLoad[fileToLoad.name.toLowerCase()] = fileToLoad;
+    const result = await SceneLoader.ImportMeshAsync('', 'file:', fileToLoad, tempScene);
 
     const meshes = (result.meshes || []).filter((m) => m instanceof Mesh) as Mesh[];
 
@@ -743,7 +751,7 @@ export class ModelCompressor {
       dispose: () => {
         try {
           tempScene.dispose();
-          delete FilesInputStore.FilesToLoad[file.name.toLowerCase()];
+          delete FilesInputStore.FilesToLoad[fileToLoad.name.toLowerCase()];
         } catch (e) {
           console.warn('[ModelCompressor] Error disposing temp scene:', e);
         }

@@ -44,6 +44,11 @@ fileAssociations:
     description: Polygon 3D File Format
     role: Editor
     icon: icons/document-3d.icns
+  - ext: dae
+    name: COLLADA 3D Asset
+    description: COLLADA (.dae) 3D Digital Asset Exchange model
+    role: Editor
+    icon: icons/document-3d.icns
   - ext: babylon
     name: Babylon.js 3D Scene
     description: Babylon.js 3D Scene File

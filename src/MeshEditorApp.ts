@@ -413,6 +413,7 @@ export class MeshEditorApp {
 
   // Compress Model Tool State
   public compressLoadedFile: File | null = null;
+  public compressLoadedFiles: File[] = [];
 
   // Loading Animation Elements & Timers
   private startupLoaderElement: HTMLElement | null = null;
@@ -6517,7 +6518,7 @@ export class MeshEditorApp {
       const validFiles = files.filter((f) => !f.name.startsWith('.'));
       if (validFiles.length === 0) return;
 
-      const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.babylon'];
+      const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae', '.babylon'];
       const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.dds', '.ktx2'];
 
       const hasModel = validFiles.some((f) => {
@@ -9174,10 +9175,19 @@ export class MeshEditorApp {
     });
 
     // 2. Drag & Drop / File picking
-    const handleFile = (file: File) => {
-      this.compressLoadedFile = file;
-      if (fileNameEl) fileNameEl.textContent = file.name;
-      if (fileSizeEl) fileSizeEl.textContent = this.formatBytes(file.size);
+    const handleFiles = (files: File[]) => {
+      if (!files || files.length === 0) return;
+      const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae'];
+      const primary =
+        files.find((f) => {
+          const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+          return modelExtensions.includes(ext);
+        }) || files[0];
+
+      this.compressLoadedFiles = files;
+      this.compressLoadedFile = primary;
+      if (fileNameEl) fileNameEl.textContent = primary.name;
+      if (fileSizeEl) fileSizeEl.textContent = this.formatBytes(primary.size);
       if (fileInfo) fileInfo.style.display = 'flex';
       if (dropZoneInner) dropZoneInner.style.display = 'none';
       this.refreshIcons();
@@ -9194,8 +9204,9 @@ export class MeshEditorApp {
     });
 
     fileInput?.addEventListener('change', () => {
-      const f = fileInput.files?.[0];
-      if (f) handleFile(f);
+      if (fileInput.files && fileInput.files.length > 0) {
+        handleFiles(Array.from(fileInput.files));
+      }
     });
 
     dropZone?.addEventListener('dragover', (e) => {
@@ -9210,13 +9221,15 @@ export class MeshEditorApp {
     dropZone?.addEventListener('drop', (e) => {
       e.preventDefault();
       dropZone.classList.remove('dragover');
-      const f = e.dataTransfer?.files?.[0];
-      if (f) handleFile(f);
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        handleFiles(Array.from(e.dataTransfer.files));
+      }
     });
 
     btnClearFile?.addEventListener('click', (e) => {
       e.stopPropagation();
       this.compressLoadedFile = null;
+      this.compressLoadedFiles = [];
       if (fileInput) fileInput.value = '';
       if (fileInfo) fileInfo.style.display = 'none';
       if (dropZoneInner) dropZoneInner.style.display = 'flex';
@@ -9440,16 +9453,17 @@ export class MeshEditorApp {
         }
 
         const file = this.compressLoadedFile;
+        const batchFiles = this.compressLoadedFiles.length > 0 ? this.compressLoadedFiles : [file];
         if (!download) {
           // "Apply to Scene" for file means load it into the editor scene!
-          await this.service.loadFiles([file]);
+          await this.service.loadFiles(batchFiles);
           await this.service.compressActiveModel(options);
           this.showToast(`Imported and compressed "${file.name}" into scene.`, 'success');
           this.updateCompressModelUI();
           return;
         }
 
-        const loaded = await ModelCompressor.loadModelFromFile(file, this.service.engine);
+        const loaded = await ModelCompressor.loadModelFromFile(file, this.service.engine, batchFiles);
         try {
           const stats = await ModelCompressor.optimizeMeshes(loaded.meshes, options);
           const exported = await ModelCompressor.exportCompressedModel(

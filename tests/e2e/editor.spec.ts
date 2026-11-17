@@ -393,5 +393,160 @@ test.describe('Mesh Editor E2E Tests', () => {
     await expect(page.locator('#aiEndpointUrlInput')).toHaveValue('https://e2e-llm.example.com/v1');
     await expect(page.locator('#aiApiKeyInput')).toHaveValue('sk-e2e-key');
   });
+
+  test('10. imports a textured Collada (.dae) model together with companion textures in one batch', async ({
+    page,
+  }) => {
+    await page.goto('/');
+
+    const result = await page.evaluate(async () => {
+      const app = (window as any).meshEditorApp;
+
+      // Create a 64x64 real PNG texture file in the browser
+      const texCanvas = document.createElement('canvas');
+      texCanvas.width = 64;
+      texCanvas.height = 64;
+      const ctx = texCanvas.getContext('2d')!;
+      ctx.fillStyle = '#cc5522';
+      ctx.fillRect(0, 0, 64, 64);
+      ctx.fillStyle = '#33aa66';
+      ctx.fillRect(0, 0, 32, 32);
+
+      const pngBlob: Blob = await new Promise((resolve) =>
+        texCanvas.toBlob((b) => resolve(b!), 'image/png')
+      );
+      const texFile = new File([pngBlob], 'crate_diffuse.png', { type: 'image/png' });
+
+      const daeXml = `<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <unit name="meter" meter="1.0"/>
+    <up_axis>Y_UP</up_axis>
+  </asset>
+  <library_images>
+    <image id="crate_img" name="crate_img">
+      <init_from>textures/crate_diffuse.png</init_from>
+    </image>
+  </library_images>
+  <library_effects>
+    <effect id="Mat-effect">
+      <profile_COMMON>
+        <newparam sid="crate_surface">
+          <surface type="2D"><init_from>crate_img</init_from></surface>
+        </newparam>
+        <newparam sid="crate_sampler">
+          <sampler2D><source>crate_surface</source></sampler2D>
+        </newparam>
+        <technique sid="common">
+          <phong>
+            <diffuse><texture texture="crate_sampler" texcoord="UVMap"/></diffuse>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+  <library_materials>
+    <material id="Mat-material" name="DaeCrateMat">
+      <instance_effect url="#Mat-effect"/>
+    </material>
+  </library_materials>
+  <library_geometries>
+    <geometry id="Quad-mesh" name="QuadMesh">
+      <mesh>
+        <source id="Quad-pos">
+          <float_array id="Quad-pos-array" count="12">0 0 0 1 0 0 1 1 0 0 1 0</float_array>
+          <technique_common>
+            <accessor source="#Quad-pos-array" count="4" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="Quad-norm">
+          <float_array id="Quad-norm-array" count="3">0 0 1</float_array>
+          <technique_common>
+            <accessor source="#Quad-norm-array" count="1" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="Quad-uv">
+          <float_array id="Quad-uv-array" count="8">0 0 1 0 1 1 0 1</float_array>
+          <technique_common>
+            <accessor source="#Quad-uv-array" count="4" stride="2">
+              <param name="S" type="float"/><param name="T" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="Quad-vert">
+          <input semantic="POSITION" source="#Quad-pos"/>
+        </vertices>
+        <triangles material="Mat-material" count="2">
+          <input semantic="VERTEX" source="#Quad-vert" offset="0"/>
+          <input semantic="NORMAL" source="#Quad-norm" offset="1"/>
+          <input semantic="TEXCOORD" source="#Quad-uv" offset="2" set="0"/>
+          <p>0 0 0 1 0 1 2 0 2 0 0 0 2 0 2 3 0 3</p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="QuadNode" name="QuadNode" type="NODE">
+        <instance_geometry url="#Quad-mesh">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="Mat-material" target="#Mat-material">
+                <bind_vertex_input semantic="UVMap" input_semantic="TEXCOORD" input_set="0"/>
+              </instance_material>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene><instance_visual_scene url="#Scene"/></scene>
+</COLLADA>`;
+
+      const daeFile = new File([daeXml], 'textured_crate.dae', { type: 'model/vnd.collada+xml' });
+
+      // 1. Open (.dae + .png together in one batch)
+      await app.service.loadFiles([daeFile, texFile]);
+      await new Promise((r) => setTimeout(r, 150));
+
+      const openMesh = app.service.importedMeshes.find((m: any) => m.name !== '__root__' && m.getTotalVertices() > 0);
+      const openAlbedo = openMesh?.material?.albedoTexture;
+      const openTexSize = openAlbedo?.getSize?.() || { width: 0, height: 0 };
+
+      // 2. Import / Append a second .dae + .png batch into the existing scene
+      const daeFile2 = new File([daeXml], 'second_crate.dae', { type: 'model/vnd.collada+xml' });
+      await app.service.importFiles([daeFile2, texFile]);
+      await new Promise((r) => setTimeout(r, 150));
+
+      const geoMeshesAfterImport = app.service.importedMeshes.filter(
+        (m: any) => m.name !== '__root__' && m.getTotalVertices() > 0
+      );
+
+      return {
+        currentFilename: app.service.currentFilename,
+        openMeshVertices: openMesh?.getTotalVertices() ?? 0,
+        openHasAlbedo: Boolean(openAlbedo),
+        openTexWidth: openTexSize.width,
+        openTexHeight: openTexSize.height,
+        geoMeshCountAfterImport: geoMeshesAfterImport.length,
+        hasSecondGroup: app.service.groups.some((g: any) => g.name.startsWith('second_crate_group_')),
+        modelAcceptAttr: document.getElementById('modelFileInput')?.getAttribute('accept') || '',
+        importAcceptAttr: document.getElementById('importFileInput')?.getAttribute('accept') || '',
+      };
+    });
+
+    expect(result.openMeshVertices).toBeGreaterThanOrEqual(4);
+    expect(result.openHasAlbedo).toBe(true);
+    expect(result.openTexWidth).toBe(64);
+    expect(result.openTexHeight).toBe(64);
+    expect(result.geoMeshCountAfterImport).toBeGreaterThanOrEqual(2);
+    expect(result.hasSecondGroup).toBe(true);
+    expect(result.modelAcceptAttr).toContain('.dae');
+    expect(result.importAcceptAttr).toContain('.dae');
+  });
 });
 

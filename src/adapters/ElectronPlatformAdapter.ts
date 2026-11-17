@@ -198,7 +198,7 @@ export class ElectronPlatformAdapter implements MeshEditorPlatformAdapter {
     const payloads = await this.bridge.openFilesDialog({
       title: 'Open 3D Model',
       multiSelections: true,
-      extensions: ['glb', 'gltf', 'obj', 'stl', 'ply', 'babylon', 'bin', 'png', 'jpg', 'jpeg', 'webp'],
+      extensions: ['glb', 'gltf', 'obj', 'stl', 'ply', 'dae', 'babylon', 'bin', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tga'],
     });
     if (!payloads) return true; // User cancelled native dialog
     if (payloads.length > 0) {
@@ -218,7 +218,7 @@ export class ElectronPlatformAdapter implements MeshEditorPlatformAdapter {
     const payloads = await this.bridge.openFilesDialog({
       title: 'Import 3D Model into Scene',
       multiSelections: true,
-      extensions: ['glb', 'gltf', 'obj', 'stl', 'ply', 'babylon', 'bin', 'png', 'jpg', 'jpeg', 'webp'],
+      extensions: ['glb', 'gltf', 'obj', 'stl', 'ply', 'dae', 'babylon', 'bin', 'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tga'],
     });
     if (!payloads) return true;
     if (payloads.length > 0) {

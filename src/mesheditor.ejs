@@ -10,8 +10,8 @@
   <body class="layout-stackpanel">
     <div id="app-container" class="layout-stackpanel">
       <!-- Hidden file inputs -->
-      <input type="file" id="modelFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx,.babylon,.bin,.png,.jpg,.jpeg,.webp" multiple />
-      <input type="file" id="importFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx,.babylon,.bin,.png,.jpg,.jpeg,.webp" multiple />
+      <input type="file" id="modelFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx,.dae,.babylon,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tga" multiple />
+      <input type="file" id="importFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx,.dae,.babylon,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tga" multiple />
       <input type="file" id="textureFileInput" class="hidden-input" accept="image/*" />
       <input type="file" id="bumpFileInput" class="hidden-input" accept="image/*" />
       <input type="file" id="aiImageFileInput" class="hidden-input" accept="image/*" multiple />
@@ -34,14 +34,14 @@
             <span class="dropdown-arrow"><i class="app-icon arrow-icon" data-lucide="chevron-down"></i></span>
           </button>
           <div class="dropdown-menu" id="menuFile">
-            <button class="dropdown-item" id="btnOpenModel" title="Open 3D Model or scene from disk, replacing the current scene  (.glb, .gltf, .obj, .stl, .babylon)">
+            <button class="dropdown-item" id="btnOpenModel" title="Open 3D Model or scene from disk, replacing the current scene (.glb, .gltf, .obj, .stl, .dae, .babylon)">
               <span class="btn-icon"><i class="app-icon" data-lucide="folder-open"></i></span>
               <span class="btn-label">Open...</span>
             </button>
             <button
               class="dropdown-item"
               id="btnImportModel"
-              title="Import / Append 3D Model from disk into current scene (.glb, .gltf, .obj, .stl)"
+              title="Import / Append 3D Model from disk into current scene (.glb, .gltf, .obj, .stl, .dae)"
             >
               <span class="btn-icon"><i class="app-icon" data-lucide="folder-input"></i></span>
               <span class="btn-label">Import...</span>
@@ -347,7 +347,7 @@
       <div id="dropOverlay">
         <div class="drop-icon"><i class="app-icon" data-lucide="upload-cloud" style="width: 48px; height: 48px"></i></div>
         <div class="drop-text">Drop 3D Model Here!</div>
-        <div class="drop-subtext">3D models (.glb, .gltf, .obj, .stl) or texture images (.png, .jpg, .webp)</div>
+        <div class="drop-subtext">3D models (.glb, .gltf, .obj, .stl, .dae) or texture images (.png, .jpg, .webp)</div>
       </div>
 
       <!-- Outliner Floating Dialog (Hierarchy Tree of Meshes & Submeshes) -->

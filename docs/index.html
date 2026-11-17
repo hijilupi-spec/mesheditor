@@ -27,6 +27,7 @@
       <nav>
         <ul class="nav-links">
           <li><a href="#overview" class="nav-link">Overview</a></li>
+          <li><a href="#formats" class="nav-link">Formats</a></li>
           <li><a href="#ai-copilot" class="nav-link">Human + AI</a></li>
           <li><a href="#neural-3d" class="nav-link">Neural 3D</a></li>
           <li><a href="#ai-textures" class="nav-link">AI Textures</a></li>
@@ -250,7 +251,7 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Import &amp; export universal 3D formats:</strong> Import OBJ, STL, PLY, and glTF/GLB geometry. Export textured binary GLB bundles, STL surface meshes for 3D printing, Wavefront OBJ, or PLY point clouds.</span>
+              <span><strong>Import &amp; export universal 3D formats:</strong> Import GLB, GLTF, DAE (with multi-file textures), OBJ, STL, PLY, and Babylon scenes. Export textured binary GLB bundles, glTF, Wavefront OBJ, STL meshes for 3D printing, or full <code>.babylon</code> scenes.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -293,7 +294,214 @@
         </div>
         <div class="stat-item">
           <div class="stat-val text-gradient-cyan">Multi-Format</div>
-          <div class="stat-label">GLB, GLTF, OBJ, STL, PLY, Babylon</div>
+          <div class="stat-label">GLB, GLTF, DAE, OBJ, STL, PLY, Babylon</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         SUPPORTED FILE FORMATS & MULTI-FILE IMPORT PIPELINE
+         ========================================================================= -->
+    <section id="formats" class="section formats-section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">Universal Asset Interoperability</span>
+          <h2 class="section-title">Supported 3D Formats &amp; Multi-File Pipelines.</h2>
+          <p class="section-desc">
+            Open, append, or drag &amp; drop folders and multi-file asset bundles directly into the browser or desktop studio.
+            Companion textures and Collada scenes are resolved client-side with zero server uploads.
+          </p>
+        </div>
+
+        <div class="formats-grid">
+          <!-- GLB -->
+          <article class="format-card format-accent-cyan">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.glb</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Import</span>
+                <span class="format-pill pill-export">Export</span>
+                <span class="format-pill pill-recommended">Primary</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">Binary glTF 2.0</h3>
+            <p class="format-card-desc">
+              Self-contained 3D asset bundles with embedded PBR textures, Draco compression, skeletons, and multi-clip animations.
+            </p>
+            <div class="format-card-tags">
+              <span>Embedded PBR</span>
+              <span>Draco Ready</span>
+              <span>Animations</span>
+            </div>
+          </article>
+
+          <!-- GLTF -->
+          <article class="format-card format-accent-blue">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.gltf</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Import</span>
+                <span class="format-pill pill-export">Export</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">glTF JSON + Buffers</h3>
+            <p class="format-card-desc">
+              Standard glTF 2.0 scene descriptions with automatic companion <code>.bin</code> and external texture resolution in multi-file drops.
+            </p>
+            <div class="format-card-tags">
+              <span>Multi-File Drop</span>
+              <span>Auto Companion</span>
+            </div>
+          </article>
+
+          <!-- DAE / COLLADA -->
+          <article class="format-card format-accent-violet">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.dae</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Import</span>
+                <span class="format-pill pill-prestage">Three.js Pre-Stage</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">COLLADA Digital Asset</h3>
+            <p class="format-card-desc">
+              Automatic Three.js <code>ColladaLoader</code> &rarr; <code>GLTFExporter</code> conversion to <code>.glb</code> with multi-file texture bundling, Z-UP &amp; unit scaling, and skeletal rigging.
+            </p>
+            <div class="format-card-tags">
+              <span>.dae + Textures</span>
+              <span>Rigging &amp; Z-UP</span>
+            </div>
+          </article>
+
+          <!-- OBJ -->
+          <article class="format-card format-accent-sky">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.obj</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Import</span>
+                <span class="format-pill pill-export">Export</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">Wavefront OBJ</h3>
+            <p class="format-card-desc">
+              Classic polygon geometry exchange for Blender, Maya, ZBrush, and DCC suites, with drop-in texture matching.
+            </p>
+            <div class="format-card-tags">
+              <span>DCC Exchange</span>
+              <span>UV Geometry</span>
+            </div>
+          </article>
+
+          <!-- STL -->
+          <article class="format-card format-accent-emerald">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.stl</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Import</span>
+                <span class="format-pill pill-export">Export</span>
+                <span class="format-pill pill-print">3D Print</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">Stereolithography STL</h3>
+            <p class="format-card-desc">
+              Watertight triangulated surface meshes with metric unit scaling for Cura, PrusaSlicer, and Bambu Studio.
+            </p>
+            <div class="format-card-tags">
+              <span>Manifold Ready</span>
+              <span>Slicer Units</span>
+            </div>
+          </article>
+
+          <!-- PLY -->
+          <article class="format-card format-accent-amber">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.ply</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Import</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">Polygon File Format</h3>
+            <p class="format-card-desc">
+              High-density 3D scanner captures, photogrammetry assets, and raw vertex-colored polygon meshes.
+            </p>
+            <div class="format-card-tags">
+              <span>3D Scans</span>
+              <span>Vertex Colors</span>
+            </div>
+          </article>
+
+          <!-- BABYLON -->
+          <article class="format-card format-accent-indigo">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.babylon</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Open</span>
+                <span class="format-pill pill-export">Save Scene</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">Babylon.js Project Scene</h3>
+            <p class="format-card-desc">
+              Full scene state archives preserving Voxel Painter grids, Path Extrusion curves, and Heightmap Terrain splats.
+            </p>
+            <div class="format-card-tags">
+              <span>Full Editor State</span>
+              <span>Non-Destructive</span>
+            </div>
+          </article>
+
+          <!-- TEXTURES -->
+          <article class="format-card format-accent-pink">
+            <div class="format-card-top">
+              <span class="format-ext-badge">Textures</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Multi-File</span>
+                <span class="format-pill pill-prestage">Auto-Bind</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">PBR &amp; Legacy Maps</h3>
+            <p class="format-card-desc">
+              Drop <code>.png</code>, <code>.jpg</code>, <code>.webp</code>, <code>.tga</code>, <code>.bmp</code>, <code>.gif</code>, <code>.dds</code>, or <code>.ktx2</code> alongside <code>.dae</code>/<code>.gltf</code>/<code>.obj</code> or directly onto meshes.
+            </p>
+            <div class="format-card-tags">
+              <span>TGA &rarr; GLB</span>
+              <span>Albedo &amp; Normal</span>
+            </div>
+          </article>
+        </div>
+
+        <!-- Visual Multi-File Pipeline Flow -->
+        <div class="formats-pipeline-bar" aria-label="Multi-file import and export pipeline">
+          <div class="pipeline-step">
+            <span class="pipeline-step-num">01</span>
+            <div class="pipeline-step-body">
+              <strong>Multi-File &amp; Folder Drop</strong>
+              <span>Select <code>.dae</code> + textures or <code>.gltf</code> + <code>.bin</code> in one batch</span>
+            </div>
+          </div>
+          <div class="pipeline-arrow" aria-hidden="true">&rarr;</div>
+          <div class="pipeline-step">
+            <span class="pipeline-step-num">02</span>
+            <div class="pipeline-step-body">
+              <strong>Smart Pre-Stage</strong>
+              <span>Collada &rarr; GLB conversion &amp; in-memory texture binding</span>
+            </div>
+          </div>
+          <div class="pipeline-arrow" aria-hidden="true">&rarr;</div>
+          <div class="pipeline-step">
+            <span class="pipeline-step-num">03</span>
+            <div class="pipeline-step-body">
+              <strong>Babylon.js Studio</strong>
+              <span>Edit geometry, UVs, PBR maps, rigs, or Draco-compress</span>
+            </div>
+          </div>
+          <div class="pipeline-arrow" aria-hidden="true">&rarr;</div>
+          <div class="pipeline-step">
+            <span class="pipeline-step-num">04</span>
+            <div class="pipeline-step-body">
+              <strong>Clean Export</strong>
+              <span>Download <code>.glb</code>, <code>.gltf</code>, <code>.obj</code>, <code>.stl</code>, or <code>.babylon</code></span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -1197,7 +1405,7 @@
             </div>
             <h4 class="feature-box-title">Universal 3D Export</h4>
             <p class="feature-box-desc">
-              Import and export GLB, GLTF, OBJ, STL, PLY, and Babylon scenes with automatic companion buffer resolution and embedded texture packaging.
+              Import and export GLB, GLTF, OBJ, STL, DAE, PLY, and Babylon scenes with automatic companion buffer resolution and embedded texture packaging.
             </p>
           </div>
 
@@ -1617,6 +1825,20 @@
 
     // Showcase Models & Screenshots (matching docs/models and docs/screenshots)
     const SHOWCASE_ITEMS = [
+      {
+        id: 'mushroom',
+        title: 'Mushroom',
+        sub: 'In Mario style...',
+        screenshot: 'screenshots/mushroom.jpg',
+        model: 'models/mushroom.glb'
+      },
+      {
+        id: 'star',
+        title: 'Star',
+        sub: 'In Mario style...',
+        screenshot: 'screenshots/star.jpg',
+        model: 'models/star.glb'
+      },
       {
         id: 'stone_pillar',
         title: 'Ancient Fluted Pillar',
