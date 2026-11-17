@@ -221,6 +221,26 @@ export interface MeshEditorVoxelProjectState {
   voxelData: any;
 }
 
+export interface ActiveTextureSlotInfo {
+  slot: 'albedo' | 'diffuse' | 'normal' | 'emissive' | 'metallic' | 'terrain1' | 'terrain2' | 'terrain3';
+  label: string;
+  name: string;
+  url: string;
+  width: number;
+  height: number;
+}
+
+export interface ActiveMaterialTexturesInfo {
+  hasMaterial: boolean;
+  materialName: string;
+  materialType: string;
+  albedo: ActiveTextureSlotInfo | null;
+  bump: ActiveTextureSlotInfo | null;
+  emissive: ActiveTextureSlotInfo | null;
+  metallic: ActiveTextureSlotInfo | null;
+  extra: ActiveTextureSlotInfo[];
+}
+
 export interface MeshEditorProjectData {
   version: number;
   generator?: string;

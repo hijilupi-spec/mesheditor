@@ -10,6 +10,7 @@ import { MenuItemDefinition, MeshEditorPlugin, PluginManager, ToolbarButtonDefin
 import { ensureMeshEditorStyles } from './styles';
 import { AI_CHAT_EMPTY_HTML, getMeshEditorTemplate } from './template';
 import {
+  ActiveTextureSlotInfo,
   AIAgentToolExecutionStep,
   ExportOptions,
   MeshEditorServiceEvents,
@@ -415,6 +416,7 @@ export class MeshEditorApp {
   // Compress Model Tool State
   public compressLoadedFile: File | null = null;
   public compressLoadedFiles: File[] = [];
+  private activeAtlasPickerId: string | null = null;
 
   // Loading Animation Elements & Timers
   private startupLoaderElement: HTMLElement | null = null;
@@ -514,6 +516,7 @@ export class MeshEditorApp {
     deleteSubmesh: () => this.service.deleteSelectedSubMesh(),
     splitAllSubmeshes: () => this.service.splitAllSubMeshesOnSelected(),
     materialName: '',
+    textureInfo: 'None',
     albedoColor: '#ffffff',
     emissiveColor: '#000000',
     roughness: 0.5,
@@ -542,6 +545,10 @@ export class MeshEditorApp {
       this.updateMaterialGUI();
     },
     replaceTexture: () => this.triggerReplaceTexture(),
+    removeAlbedoTexture: () => {
+      this.service.removeTextureFromSelectedMaterial();
+      this.updateMaterialGUI();
+    },
     newMaterial: () => this.service.createNewMaterialForSelected(),
   };
 
@@ -788,7 +795,7 @@ export class MeshEditorApp {
         options.events?.onModelLoaded?.(filename);
       },
       onTexturesChanged: () => {
-        this.renderEmbeddedTextures();
+        this.updateMaterialGUI();
         this.updateDecalUI();
         this.updateHeightmapUI();
       },
@@ -5657,6 +5664,7 @@ export class MeshEditorApp {
     containerMat?.appendChild(this.guiMaterial.domElement);
 
     this.materialControllers['materialName'] = this.guiMaterial.add(this.materialParams, 'materialName').name('Material').listen();
+    this.materialControllers['textureInfo'] = this.guiMaterial.add(this.materialParams, 'textureInfo').name('Texture').listen();
     this.materialControllers['albedoColor'] = this.guiMaterial
       .addColor(this.materialParams, 'albedoColor')
       .name('Color')
@@ -5729,6 +5737,7 @@ export class MeshEditorApp {
         this.service.setMaterialAlphaCutOff(v);
       });
     this.guiMaterial.add(this.materialParams, 'replaceTexture').name('Replace Texture...');
+    this.guiMaterial.add(this.materialParams, 'removeAlbedoTexture').name('Remove Texture');
     this.guiMaterial.add(this.materialParams, 'newMaterial').name('New PBR Material');
 
     const fBump = this.guiMaterial.addFolder('Bump & Normal Map');
@@ -6261,8 +6270,18 @@ export class MeshEditorApp {
       this.materialParams.useParallax = bump.useParallax;
       this.materialParams.useParallaxOcclusion = bump.useParallaxOcclusion;
       this.materialParams.parallaxScaleBias = bump.parallaxScaleBias;
+
+      const activeTexInfo = this.service.getActiveMaterialTexturesInfo();
+      if (activeTexInfo.albedo) {
+        this.materialParams.textureInfo = activeTexInfo.albedo.name;
+      } else if (activeTexInfo.extra.length > 0) {
+        this.materialParams.textureInfo = activeTexInfo.extra.map((t) => t.name).join(', ');
+      } else {
+        this.materialParams.textureInfo = 'None';
+      }
     } else {
       this.materialParams.materialName = 'No material';
+      this.materialParams.textureInfo = 'None';
       this.materialParams.bumpInfo = 'None';
       this.materialParams.bumpLevel = 1.0;
       this.materialParams.invertNormalMapX = false;
@@ -6276,6 +6295,7 @@ export class MeshEditorApp {
       this.materialControllers[key]?.updateDisplay();
     }
     this.updateUVGUI();
+    this.renderActiveMaterialTextures();
     this.renderEmbeddedTextures();
     this.updateCompressModelUI();
   }
@@ -6613,9 +6633,12 @@ export class MeshEditorApp {
       }
     });
 
-    this.textureFileInput?.addEventListener('change', (e) => {
+    this.textureFileInput?.addEventListener('change', async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) this.service.replaceSelectedTexture(file);
+      if (file) {
+        await this.service.replaceSelectedTexture(file);
+        this.updateMaterialGUI();
+      }
     });
 
     this.bumpFileInput?.addEventListener('change', (e) => {
@@ -8975,6 +8998,246 @@ export class MeshEditorApp {
     });
   }
 
+  public renderActiveMaterialTextures(): void {
+    const list = this.getElement<HTMLElement>('activeMaterialTexturesList');
+    const matBadge = this.getElement<HTMLElement>('activeMaterialNameBadge');
+    if (!list) return;
+
+    const info = this.service.getActiveMaterialTexturesInfo();
+    if (matBadge) {
+      matBadge.textContent = info.hasMaterial ? info.materialName : 'No material';
+      matBadge.title = info.hasMaterial ? `${info.materialName} (${info.materialType})` : 'No material selected';
+    }
+
+    list.innerHTML = '';
+
+    if (!info.hasMaterial) {
+      const empty = document.createElement('div');
+      empty.className = 'active-texture-empty';
+      empty.textContent = 'Select a mesh to inspect active textures.';
+      list.appendChild(empty);
+      return;
+    }
+
+    const createSlotRow = (
+      slotData: ActiveTextureSlotInfo | null,
+      fallbackLabel: string,
+      onRemove?: () => void
+    ): HTMLElement => {
+      const row = document.createElement('div');
+      row.className = slotData ? 'active-texture-slot is-assigned' : 'active-texture-slot';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'active-texture-thumb';
+      if (slotData?.url) {
+        const img = document.createElement('img');
+        img.src = slotData.url;
+        img.alt = slotData.name;
+        img.onerror = () => {
+          thumb.innerHTML = '<i class="app-icon" data-lucide="image"></i>';
+        };
+        thumb.appendChild(img);
+      } else {
+        thumb.innerHTML = `<i class="app-icon" data-lucide="${slotData ? 'image' : 'image-off'}"></i>`;
+      }
+
+      const details = document.createElement('div');
+      details.className = 'active-texture-info';
+
+      const topRow = document.createElement('div');
+      topRow.className = 'active-texture-top';
+
+      const rolePill = document.createElement('span');
+      const roleClass =
+        slotData?.slot === 'normal'
+          ? ' role-normal'
+          : slotData?.slot === 'emissive'
+            ? ' role-emissive'
+            : '';
+      rolePill.className = `active-texture-role${roleClass}`;
+      rolePill.textContent = slotData ? slotData.label : fallbackLabel;
+
+      const nameEl = document.createElement('span');
+      nameEl.className = slotData ? 'active-texture-name' : 'active-texture-name is-none';
+      nameEl.textContent = slotData ? slotData.name : 'None';
+      if (slotData) {
+        nameEl.title = slotData.name;
+      }
+
+      topRow.appendChild(rolePill);
+      topRow.appendChild(nameEl);
+
+      const dimEl = document.createElement('div');
+      dimEl.className = 'active-texture-dim';
+      if (slotData) {
+        dimEl.textContent =
+          slotData.width > 0 && slotData.height > 0 ? `${slotData.width}x${slotData.height}px` : 'Active texture';
+      } else {
+        dimEl.textContent = 'No texture assigned';
+      }
+
+      details.appendChild(topRow);
+      details.appendChild(dimEl);
+
+      row.appendChild(thumb);
+      row.appendChild(details);
+
+      if (slotData) {
+        const actions = document.createElement('div');
+        actions.className = 'active-texture-actions';
+
+        if (slotData.url) {
+          const btnDownload = document.createElement('button');
+          btnDownload.type = 'button';
+          btnDownload.className = 'active-texture-btn';
+          btnDownload.title = `Download "${slotData.name}"`;
+          btnDownload.setAttribute('aria-label', `Download ${slotData.name}`);
+          btnDownload.innerHTML = '<i class="app-icon" data-lucide="download"></i>';
+          btnDownload.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.service.downloadEmbeddedTexture({
+              name: slotData.name,
+              url: slotData.url,
+              isAtlas: false,
+            });
+          });
+          actions.appendChild(btnDownload);
+        }
+
+        if (onRemove) {
+          const btnRemove = document.createElement('button');
+          btnRemove.type = 'button';
+          btnRemove.className = 'active-texture-btn danger';
+          btnRemove.title = `Remove ${slotData.label.toLowerCase()} texture from material`;
+          btnRemove.setAttribute('aria-label', `Remove ${slotData.name}`);
+          btnRemove.innerHTML = '<i class="app-icon" data-lucide="x"></i>';
+          btnRemove.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onRemove();
+          });
+          actions.appendChild(btnRemove);
+        }
+
+        row.appendChild(actions);
+      }
+
+      return row;
+    };
+
+    if (info.extra.length > 0 && !info.albedo) {
+      for (const extraSlot of info.extra) {
+        list.appendChild(createSlotRow(extraSlot, extraSlot.label));
+      }
+    } else {
+      const primaryLabel = info.materialType === 'Standard' ? 'Diffuse' : 'Albedo';
+      list.appendChild(
+        createSlotRow(info.albedo, primaryLabel, () => {
+          this.service.removeTextureFromSelectedMaterial();
+          this.updateMaterialGUI();
+        })
+      );
+    }
+
+    if (info.bump) {
+      list.appendChild(
+        createSlotRow(info.bump, 'Normal', () => {
+          this.service.removeBumpTextureFromSelectedMaterial();
+          this.updateMaterialGUI();
+        })
+      );
+    }
+
+    if (info.emissive) {
+      list.appendChild(createSlotRow(info.emissive, 'Emissive'));
+    }
+
+    if (info.metallic) {
+      list.appendChild(createSlotRow(info.metallic, 'Metallic'));
+    }
+
+    this.refreshIcons();
+  }
+
+  private syncEmbeddedTextureCardState(
+    card: HTMLElement,
+    tex: ReturnType<MeshEditorService['getEmbeddedTexturesInfo']>[number],
+    selMat: ReturnType<MeshEditorService['getSelectedMaterial']>
+  ): void {
+    const { isAlbedo, isBump, isOther } = this.service.isTextureAssignedToMaterial(selMat, tex);
+    card.classList.toggle('active', !!(isAlbedo || isBump || isOther));
+
+    const badge = card.querySelector<HTMLElement>('.embedded-texture-badge');
+    if (badge) {
+      if (tex.isAtlas) {
+        badge.style.display = '';
+        badge.style.background = '';
+        badge.style.color = '';
+        badge.textContent = `Atlas (${tex.framesCount || 16})`;
+        badge.title = `${tex.name} (${tex.framesCount || 16} tiles)`;
+      } else if (isAlbedo && isBump) {
+        badge.style.display = '';
+        badge.style.background = 'rgba(35, 134, 54, 0.25)';
+        badge.style.color = '#3fb950';
+        badge.textContent = 'Albedo + Normal';
+        badge.title = `Active on selected material${tex.materialNames.length ? ` (${tex.materialNames.join(', ')})` : ''}`;
+      } else if (isAlbedo) {
+        badge.style.display = '';
+        badge.style.background = 'rgba(35, 134, 54, 0.25)';
+        badge.style.color = '#3fb950';
+        badge.textContent = 'Active Albedo';
+        badge.title = `Active Albedo on selected material${tex.materialNames.length ? ` (${tex.materialNames.join(', ')})` : ''}`;
+      } else if (isBump) {
+        badge.style.display = '';
+        badge.style.background = 'rgba(163, 113, 247, 0.25)';
+        badge.style.color = '#d2a8ff';
+        badge.textContent = 'Active Normal';
+        badge.title = `Active Normal/Bump on selected material${tex.materialNames.length ? ` (${tex.materialNames.join(', ')})` : ''}`;
+      } else if (isOther) {
+        badge.style.display = '';
+        badge.style.background = 'rgba(56, 139, 253, 0.2)';
+        badge.style.color = '#58a6ff';
+        badge.textContent = 'Active Map';
+        badge.title = `Active on selected material`;
+      } else if (tex.materialsCount > 0) {
+        badge.style.display = '';
+        badge.style.background = 'rgba(56, 139, 253, 0.15)';
+        badge.style.color = '#58a6ff';
+        badge.textContent = `${tex.materialsCount} ${tex.materialsCount === 1 ? 'material' : 'materials'}`;
+        badge.title = `In use by: ${tex.materialNames.join(', ')}`;
+      } else {
+        badge.style.display = 'none';
+        badge.textContent = '';
+        badge.title = '';
+      }
+    }
+
+    const btnApply = card.querySelector<HTMLButtonElement>('.embedded-texture-btn-apply');
+    if (btnApply) {
+      btnApply.className = isAlbedo
+        ? 'tool-btn-xs tool-btn-primary embedded-texture-btn-apply active'
+        : 'tool-btn-xs tool-btn-primary embedded-texture-btn-apply';
+      btnApply.title = isAlbedo
+        ? 'Currently applied to selected material (click to re-apply)'
+        : 'Apply texture to selected mesh material';
+      btnApply.innerHTML = isAlbedo
+        ? '<i class="app-icon" data-lucide="check"></i> Applied'
+        : '<i class="app-icon" data-lucide="check"></i> Apply';
+    }
+
+    const btnBump = card.querySelector<HTMLButtonElement>('.embedded-texture-btn-bump');
+    if (btnBump) {
+      btnBump.className = isBump
+        ? 'tool-btn-xs embedded-texture-btn-bump active'
+        : 'tool-btn-xs embedded-texture-btn-bump';
+      btnBump.title = isBump
+        ? 'Active as Normal / Bump Map'
+        : 'Apply as Normal / Bump Map to selected mesh material';
+      btnBump.innerHTML = isBump
+        ? '<i class="app-icon" data-lucide="layers"></i> Active'
+        : '<i class="app-icon" data-lucide="layers"></i> Normal';
+    }
+  }
+
   public renderEmbeddedTextures(): void {
     const gallery = this.getElement<HTMLElement>('embeddedTexturesGallery');
     const countBadge = this.getElement<HTMLElement>('embeddedTexturesCount');
@@ -8985,33 +9248,25 @@ export class MeshEditorApp {
       countBadge.textContent = textures.length.toString();
     }
 
+    const selMat = this.service.getSelectedMaterial();
     const currentCards = gallery.querySelectorAll<HTMLElement>('.embedded-texture-card');
     if (currentCards.length === textures.length && currentCards.length > 0) {
       let matches = true;
       for (let i = 0; i < textures.length; i++) {
-        if (currentCards[i].getAttribute('data-url') !== textures[i].url) {
+        if (
+          currentCards[i].getAttribute('data-url') !== textures[i].url ||
+          currentCards[i].getAttribute('data-name') !== textures[i].name ||
+          currentCards[i].getAttribute('data-atlas') !== String(!!textures[i].isAtlas)
+        ) {
           matches = false;
           break;
         }
       }
       if (matches) {
-        const selMat = this.service.getSelectedMaterial();
         for (let i = 0; i < textures.length; i++) {
-          const tex = textures[i];
-          const card = currentCards[i];
-          const isAlbedoActive =
-            selMat &&
-            (selMat instanceof PBRMaterial
-              ? (selMat.albedoTexture as Texture)?.url === tex.url
-              : (selMat as StandardMaterial).diffuseTexture &&
-                ((selMat as StandardMaterial).diffuseTexture as Texture).url === tex.url);
-          const isBumpActive =
-            selMat &&
-            (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) &&
-            (selMat.bumpTexture as Texture)?.url === tex.url;
-
-          card.classList.toggle('active', !!(isAlbedoActive || isBumpActive));
+          this.syncEmbeddedTextureCardState(currentCards[i], textures[i], selMat);
         }
+        this.refreshIcons();
         return;
       }
     }
@@ -9022,6 +9277,7 @@ export class MeshEditorApp {
       empty.className = 'textures-empty-state';
       empty.textContent = 'No custom textures embedded yet.';
       gallery.appendChild(empty);
+      this.renderVoxelTextureGallery();
       return;
     }
 
@@ -9030,25 +9286,11 @@ export class MeshEditorApp {
       const card = document.createElement('div');
       card.className = 'embedded-texture-card';
       card.setAttribute('data-url', tex.url);
+      card.setAttribute('data-id', tex.id);
+      card.setAttribute('data-name', tex.name);
+      card.setAttribute('data-atlas', String(!!tex.isAtlas));
       if (tex.isAtlas) {
         card.classList.add('is-atlas');
-      }
-
-      const selMat = this.service.getSelectedMaterial();
-      const isAlbedoActive =
-        selMat &&
-        (selMat instanceof PBRMaterial
-          ? (selMat.albedoTexture as Texture)?.url === tex.url
-          : (selMat as StandardMaterial).diffuseTexture &&
-            ((selMat as StandardMaterial).diffuseTexture as Texture).url === tex.url);
-
-      const isBumpActive =
-        selMat &&
-        (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) &&
-        (selMat.bumpTexture as Texture)?.url === tex.url;
-
-      if (isAlbedoActive || isBumpActive) {
-        card.classList.add('active');
       }
 
       const thumbWrapper = document.createElement('div');
@@ -9073,32 +9315,14 @@ export class MeshEditorApp {
 
       const metaRow = document.createElement('div');
       metaRow.className = 'embedded-texture-meta';
-      metaRow.textContent = `${tex.width}x${tex.height}px`;
+      const dimSpan = document.createElement('span');
+      dimSpan.textContent = `${tex.width}x${tex.height}px`;
+      metaRow.appendChild(dimSpan);
 
-      if (tex.isAtlas) {
-        const badge = document.createElement('span');
-        badge.className = 'embedded-texture-badge';
-        badge.textContent = `Atlas (${tex.framesCount || 16})`;
-        metaRow.appendChild(badge);
-      } else if (tex.materialsCount > 0) {
-        const badge = document.createElement('span');
-        badge.className = 'embedded-texture-badge';
-        if (isAlbedoActive) {
-          badge.style.background = 'rgba(35, 134, 54, 0.25)';
-          badge.style.color = '#3fb950';
-          badge.textContent = 'Active Albedo';
-        } else if (isBumpActive) {
-          badge.style.background = 'rgba(163, 113, 247, 0.25)';
-          badge.style.color = '#d2a8ff';
-          badge.textContent = 'Active Normal';
-        } else {
-          badge.style.background = 'rgba(56, 139, 253, 0.15)';
-          badge.style.color = '#58a6ff';
-          badge.textContent = `${tex.materialsCount} ${tex.materialsCount === 1 ? 'material' : 'materials'}`;
-        }
-        badge.title = `In use by: ${tex.materialNames.join(', ')}`;
-        metaRow.appendChild(badge);
-      }
+      const badge = document.createElement('span');
+      badge.className = 'embedded-texture-badge';
+      badge.style.display = 'none';
+      metaRow.appendChild(badge);
 
       info.appendChild(nameRow);
       info.appendChild(metaRow);
@@ -9111,6 +9335,7 @@ export class MeshEditorApp {
         const tileCount = atlas ? atlas.frames.length : tex.framesCount || 16;
 
         const btnTiles = document.createElement('button');
+        btnTiles.type = 'button';
         btnTiles.className = 'tool-btn-xs tool-btn-primary';
         btnTiles.title = `Browse and pick individual tiles from this atlas (${tileCount} tiles)`;
         btnTiles.innerHTML = `<i class="app-icon" data-lucide="grid-3x3"></i> Tiles (${tileCount})`;
@@ -9121,6 +9346,7 @@ export class MeshEditorApp {
         actions.appendChild(btnTiles);
 
         const btnApplyAll = document.createElement('button');
+        btnApplyAll.type = 'button';
         btnApplyAll.className = 'tool-btn-xs';
         btnApplyAll.title = 'Apply entire atlas texture to material';
         btnApplyAll.innerHTML = '<i class="app-icon" data-lucide="check"></i> Apply';
@@ -9136,13 +9362,8 @@ export class MeshEditorApp {
         });
       } else {
         const btnApply = document.createElement('button');
-        btnApply.className = isAlbedoActive ? 'tool-btn-xs tool-btn-primary active' : 'tool-btn-xs tool-btn-primary';
-        btnApply.title = isAlbedoActive
-          ? 'Currently applied to selected material (click to re-apply)'
-          : 'Apply texture to selected mesh material';
-        btnApply.innerHTML = isAlbedoActive
-          ? '<i class="app-icon" data-lucide="check"></i> Applied'
-          : '<i class="app-icon" data-lucide="check"></i> Apply';
+        btnApply.type = 'button';
+        btnApply.className = 'tool-btn-xs tool-btn-primary embedded-texture-btn-apply';
         btnApply.addEventListener('click', (e) => {
           e.stopPropagation();
           this.service.applyTextureToSelectedMaterial(tex.url, tex.name);
@@ -9151,13 +9372,8 @@ export class MeshEditorApp {
         actions.appendChild(btnApply);
 
         const btnBump = document.createElement('button');
-        btnBump.className = 'tool-btn-xs';
-        btnBump.title = isBumpActive
-          ? 'Active as Normal / Bump Map'
-          : 'Apply as Normal / Bump Map to selected mesh material';
-        btnBump.innerHTML = isBumpActive
-          ? '<i class="app-icon" data-lucide="layers"></i> Active'
-          : '<i class="app-icon" data-lucide="layers"></i> Normal';
+        btnBump.type = 'button';
+        btnBump.className = 'tool-btn-xs embedded-texture-btn-bump';
         btnBump.addEventListener('click', (e) => {
           e.stopPropagation();
           this.service.applyBumpTextureToSelectedMaterial(tex.url, tex.name);
@@ -9171,10 +9387,54 @@ export class MeshEditorApp {
         });
       }
 
+      const utilRow = document.createElement('div');
+      utilRow.className = 'embedded-texture-util-actions';
+
+      const btnDownload = document.createElement('button');
+      btnDownload.type = 'button';
+      btnDownload.className = 'tool-btn-xs embedded-texture-btn-download';
+      btnDownload.title = tex.isAtlas ? `Download atlas "${tex.name}"` : `Download texture "${tex.name}"`;
+      btnDownload.setAttribute('aria-label', `Download ${tex.name}`);
+      btnDownload.innerHTML = '<i class="app-icon" data-lucide="download"></i> Save';
+      btnDownload.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.service.downloadEmbeddedTexture(tex);
+      });
+      utilRow.appendChild(btnDownload);
+
+      const btnDelete = document.createElement('button');
+      btnDelete.type = 'button';
+      btnDelete.className = 'tool-btn-xs embedded-texture-btn-delete';
+      btnDelete.title = tex.isAtlas
+        ? `Delete atlas "${tex.name}" from scene`
+        : `Delete texture "${tex.name}" from scene`;
+      btnDelete.setAttribute('aria-label', `Delete ${tex.name}`);
+      btnDelete.innerHTML = '<i class="app-icon" data-lucide="trash-2"></i> Delete';
+      btnDelete.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasPickerOpenForAtlas = Boolean(
+          tex.isAtlas && tex.atlasId && this.activeAtlasPickerId === tex.atlasId
+        );
+        const deleted = this.service.deleteEmbeddedTexture(tex);
+        if (deleted) {
+          if (wasPickerOpenForAtlas) {
+            const pickerSection = this.getElement<HTMLElement>('atlasTilePickerSection');
+            if (pickerSection) pickerSection.style.display = 'none';
+            this.activeAtlasPickerId = null;
+          }
+          this.updateMaterialGUI();
+          this.renderVoxelAtlasOptions();
+          this.renderVoxelPalette();
+        }
+      });
+      utilRow.appendChild(btnDelete);
+      actions.appendChild(utilRow);
+
       card.appendChild(thumbWrapper);
       card.appendChild(info);
       card.appendChild(actions);
 
+      this.syncEmbeddedTextureCardState(card, tex, selMat);
       gallery.appendChild(card);
     }
 
@@ -9198,6 +9458,7 @@ export class MeshEditorApp {
     const atlas = this.service.textureAtlasManager.getAtlas(atlasId);
     if (!atlas) return;
 
+    this.activeAtlasPickerId = atlasId;
     section.style.display = 'flex';
     if (title) {
       title.innerHTML = `<i class="app-icon" data-lucide="grid-3x3"></i> ${atlas.name} (${atlas.frames.length} tiles)`;
@@ -9207,6 +9468,7 @@ export class MeshEditorApp {
     if (closeBtn) {
       closeBtn.onclick = () => {
         section.style.display = 'none';
+        this.activeAtlasPickerId = null;
       };
     }
 

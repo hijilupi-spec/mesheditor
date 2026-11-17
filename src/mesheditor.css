@@ -4944,6 +4944,185 @@ progress.loading-spinner:indeterminate {
 
 
 /* =========================================================================
+   ACTIVE MATERIAL TEXTURES SUMMARY BAR
+   ========================================================================= */
+.active-textures-section {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(13, 17, 23, 0.45);
+}
+
+.active-textures-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.active-textures-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.active-textures-mat-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: #8b949e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.active-textures-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.active-texture-empty {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.active-texture-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  background: #161b22;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.active-texture-slot.is-assigned {
+  border-color: rgba(56, 139, 253, 0.4);
+}
+
+.active-texture-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.active-texture-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.active-texture-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.active-texture-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.active-texture-role {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(56, 139, 253, 0.16);
+  color: #58a6ff;
+  border: 1px solid rgba(56, 139, 253, 0.32);
+  flex-shrink: 0;
+}
+
+.active-texture-role.role-normal {
+  background: rgba(163, 113, 247, 0.18);
+  color: #d2a8ff;
+  border-color: rgba(163, 113, 247, 0.35);
+}
+
+.active-texture-role.role-emissive {
+  background: rgba(210, 153, 34, 0.18);
+  color: #e3b341;
+  border-color: rgba(210, 153, 34, 0.35);
+}
+
+.active-texture-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.active-texture-name.is-none {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.active-texture-dim {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.active-texture-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.active-texture-btn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #21262d;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.active-texture-btn:hover {
+  background: rgba(56, 139, 253, 0.2);
+  border-color: var(--accent-color);
+  color: #ffffff;
+}
+
+.active-texture-btn.danger:hover {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: #f85149;
+  color: #f85149;
+}
+
+/* =========================================================================
    EMBEDDED TEXTURES & TEXTURE ATLAS GALLERY
    ========================================================================= */
 .embedded-textures-section {
@@ -5076,7 +5255,7 @@ progress.loading-spinner:indeterminate {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  max-height: 190px;
+  max-height: 220px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 2px;
@@ -5213,6 +5392,26 @@ progress.loading-spinner:indeterminate {
 .embedded-texture-actions .tool-btn-primary:hover {
   background: #1d4ed8;
   border-color: #60a5fa;
+}
+
+.embedded-texture-util-actions {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.embedded-texture-util-actions .tool-btn-xs {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  font-size: 9.5px !important;
+  gap: 3px;
+}
+
+.embedded-texture-actions .embedded-texture-btn-delete:hover {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: #f85149;
+  color: #f85149;
 }
 
 .textures-empty-state {

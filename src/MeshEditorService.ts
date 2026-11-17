@@ -141,6 +141,8 @@ import {
 } from './compression/ModelCompressor';
 import {
   ActionRecord,
+  ActiveMaterialTexturesInfo,
+  ActiveTextureSlotInfo,
   CSGOperationType,
   ExportOptions,
   MeshEditorProjectData,
@@ -5710,6 +5712,193 @@ export class MeshEditorService {
     return null;
   }
 
+  private buildActiveTextureSlot(
+    tex: unknown,
+    slot: ActiveTextureSlotInfo['slot'],
+    label: string
+  ): ActiveTextureSlotInfo | null {
+    if (!(tex instanceof Texture)) return null;
+    const size = tex.getSize();
+    return {
+      slot,
+      label,
+      name: tex.name || 'embedded_texture',
+      url: this.resolveTextureImageUrl(tex) || tex.url || '',
+      width: size.width || 0,
+      height: size.height || 0,
+    };
+  }
+
+  /**
+   * Returns structured metadata about all textures currently assigned to the selected material.
+   */
+  public getActiveMaterialTexturesInfo(): ActiveMaterialTexturesInfo {
+    const mat = this.getSelectedMaterial();
+    if (!mat) {
+      return {
+        hasMaterial: false,
+        materialName: 'No material',
+        materialType: 'None',
+        albedo: null,
+        bump: null,
+        emissive: null,
+        metallic: null,
+        extra: [],
+      };
+    }
+
+    if (mat instanceof PBRMaterial) {
+      return {
+        hasMaterial: true,
+        materialName: mat.name || 'PBR Material',
+        materialType: 'PBR',
+        albedo: this.buildActiveTextureSlot(mat.albedoTexture, 'albedo', 'Albedo'),
+        bump: this.buildActiveTextureSlot(mat.bumpTexture, 'normal', 'Normal / Bump'),
+        emissive: this.buildActiveTextureSlot(mat.emissiveTexture, 'emissive', 'Emissive'),
+        metallic: this.buildActiveTextureSlot(mat.metallicTexture, 'metallic', 'Metallic / Roughness'),
+        extra: [],
+      };
+    }
+
+    if (mat instanceof StandardMaterial) {
+      return {
+        hasMaterial: true,
+        materialName: mat.name || 'Standard Material',
+        materialType: 'Standard',
+        albedo: this.buildActiveTextureSlot(mat.diffuseTexture, 'diffuse', 'Diffuse'),
+        bump: this.buildActiveTextureSlot(mat.bumpTexture, 'normal', 'Normal / Bump'),
+        emissive: this.buildActiveTextureSlot(mat.emissiveTexture, 'emissive', 'Emissive'),
+        metallic: null,
+        extra: [],
+      };
+    }
+
+    if (mat instanceof TerrainMaterial) {
+      const extra: ActiveTextureSlotInfo[] = [];
+      const t1 = this.buildActiveTextureSlot(mat.diffuseTexture1, 'terrain1', 'Layer 1 (High)');
+      const t2 = this.buildActiveTextureSlot(mat.diffuseTexture2, 'terrain2', 'Layer 2 (Mid)');
+      const t3 = this.buildActiveTextureSlot(mat.diffuseTexture3, 'terrain3', 'Layer 3 (Low)');
+      if (t1) extra.push(t1);
+      if (t2) extra.push(t2);
+      if (t3) extra.push(t3);
+      return {
+        hasMaterial: true,
+        materialName: mat.name || 'Terrain Material',
+        materialType: 'Terrain',
+        albedo: null,
+        bump: null,
+        emissive: null,
+        metallic: null,
+        extra,
+      };
+    }
+
+    if (mat instanceof MultiMaterial) {
+      const extra: ActiveTextureSlotInfo[] = [];
+      for (const sub of mat.subMaterials || []) {
+        if (!sub) continue;
+        if (sub instanceof PBRMaterial && sub.albedoTexture) {
+          const slot = this.buildActiveTextureSlot(sub.albedoTexture, 'albedo', sub.name || 'Sub-material');
+          if (slot) extra.push(slot);
+        } else if (sub instanceof StandardMaterial && sub.diffuseTexture) {
+          const slot = this.buildActiveTextureSlot(sub.diffuseTexture, 'diffuse', sub.name || 'Sub-material');
+          if (slot) extra.push(slot);
+        }
+      }
+      return {
+        hasMaterial: true,
+        materialName: mat.name || 'MultiMaterial',
+        materialType: 'MultiMaterial',
+        albedo: null,
+        bump: null,
+        emissive: null,
+        metallic: null,
+        extra,
+      };
+    }
+
+    return {
+      hasMaterial: true,
+      materialName: mat.name || 'Material',
+      materialType: mat.getClassName?.() || 'Material',
+      albedo: null,
+      bump: null,
+      emissive: null,
+      metallic: null,
+      extra: [],
+    };
+  }
+
+  /**
+   * Checks whether an embedded texture entry is currently assigned to the given material.
+   */
+  public isTextureAssignedToMaterial(
+    mat: Material | null,
+    texInfo: Pick<EmbeddedTextureInfo, 'id' | 'name' | 'url' | 'width' | 'height' | 'isAtlas' | 'atlasId'>
+  ): { isAlbedo: boolean; isBump: boolean; isOther: boolean } {
+    if (!mat) return { isAlbedo: false, isBump: false, isOther: false };
+
+    const atlasTex =
+      texInfo.isAtlas && texInfo.atlasId ? this.textureAtlasManager.getAtlas(texInfo.atlasId)?.texture : undefined;
+
+    const matches = (matTex: unknown): boolean => {
+      if (!(matTex instanceof Texture)) return false;
+      if (texInfo.isAtlas && texInfo.atlasId) {
+        if (mat.metadata?.atlasId === texInfo.atlasId || atlasTex === matTex) {
+          return true;
+        }
+      }
+      if (texInfo.id && matTex.uniqueId && String(matTex.uniqueId) === texInfo.id) {
+        return true;
+      }
+      if (texInfo.url && matTex.url === texInfo.url) {
+        return true;
+      }
+      if (texInfo.url && this.resolveTextureImageUrl(matTex) === texInfo.url) {
+        return true;
+      }
+      if (
+        texInfo.name &&
+        matTex.name === texInfo.name &&
+        texInfo.name !== 'embedded_texture' &&
+        !texInfo.name.startsWith('data:')
+      ) {
+        const size = matTex.getSize();
+        if (texInfo.width > 0 && size.width > 0) {
+          return size.width === texInfo.width && size.height === texInfo.height;
+        }
+        return true;
+      }
+      return false;
+    };
+
+    if (mat instanceof PBRMaterial) {
+      return {
+        isAlbedo: matches(mat.albedoTexture),
+        isBump: matches(mat.bumpTexture),
+        isOther: matches(mat.emissiveTexture) || matches(mat.metallicTexture) || matches(mat.opacityTexture),
+      };
+    }
+
+    if (mat instanceof StandardMaterial) {
+      return {
+        isAlbedo: matches(mat.diffuseTexture),
+        isBump: matches(mat.bumpTexture),
+        isOther: matches(mat.emissiveTexture) || matches(mat.specularTexture) || matches(mat.opacityTexture),
+      };
+    }
+
+    if (mat instanceof TerrainMaterial) {
+      return {
+        isAlbedo: matches(mat.diffuseTexture1) || matches(mat.diffuseTexture2) || matches(mat.diffuseTexture3),
+        isBump: false,
+        isOther: matches(mat.mixTexture),
+      };
+    }
+
+    return { isAlbedo: false, isBump: false, isOther: false };
+  }
+
   public applyTextureToSelectedMaterial(url: string, name?: string): boolean {
     let selMat = this.getSelectedMaterial();
     if (!selMat && this.selectedMesh) {
@@ -5722,7 +5911,8 @@ export class MeshEditorService {
 
     // Reuse existing Texture instance in the scene with the same URL if available
     let tex = this.scene.textures.find(
-      (t): t is Texture => t instanceof Texture && !(t as any).isRenderTarget && t.url === url
+      (t): t is Texture =>
+        t instanceof Texture && !(t as any).isRenderTarget && (t.url === url || this.resolveTextureImageUrl(t) === url)
     );
     if (!tex) {
       tex = new Texture(url, this.scene, false, false, Texture.NEAREST_SAMPLINGMODE);
@@ -5742,9 +5932,38 @@ export class MeshEditorService {
       selMat.diffuseTexture = tex;
       selMat.useAlphaFromDiffuseTexture = false;
     }
+    this.events.onTexturesChanged?.();
     this.events.onSceneModified?.();
     this.events.onToast?.(`Applied texture to material "${selMat.name}"`, 'success');
     return true;
+  }
+
+  /**
+   * Removes the active diffuse/albedo texture from the selected material without deleting the embedded texture.
+   */
+  public removeTextureFromSelectedMaterial(): boolean {
+    const selMat = this.getSelectedMaterial();
+    if (!selMat) return false;
+    if (selMat instanceof PBRMaterial) {
+      if (!selMat.albedoTexture) return false;
+      selMat.albedoTexture = null;
+      selMat.useAlphaFromAlbedoTexture = false;
+      selMat.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+      this.events.onTexturesChanged?.();
+      this.events.onSceneModified?.();
+      this.events.onToast?.(`Removed texture from material "${selMat.name}"`, 'info');
+      return true;
+    }
+    if (selMat instanceof StandardMaterial) {
+      if (!selMat.diffuseTexture) return false;
+      selMat.diffuseTexture = null;
+      selMat.useAlphaFromDiffuseTexture = false;
+      this.events.onTexturesChanged?.();
+      this.events.onSceneModified?.();
+      this.events.onToast?.(`Removed texture from material "${selMat.name}"`, 'info');
+      return true;
+    }
+    return false;
   }
 
   public applyBumpTextureToSelectedMaterial(fileOrUrl: File | string, name?: string): boolean {
@@ -5770,7 +5989,8 @@ export class MeshEditorService {
 
     // Reuse existing Texture instance in the scene with the same URL if available
     let tex = this.scene.textures.find(
-      (t): t is Texture => t instanceof Texture && !(t as any).isRenderTarget && t.url === url
+      (t): t is Texture =>
+        t instanceof Texture && !(t as any).isRenderTarget && (t.url === url || this.resolveTextureImageUrl(t) === url)
     );
     if (!tex) {
       tex = new Texture(url, this.scene, false, false, Texture.NEAREST_SAMPLINGMODE);
@@ -5796,6 +6016,7 @@ export class MeshEditorService {
       tex.level = 1.0;
     }
 
+    this.events.onTexturesChanged?.();
     this.events.onSceneModified?.();
     this.events.onToast?.(`Applied bump/normal map to material "${selMat.name}"`, 'success');
     return true;
@@ -5815,6 +6036,7 @@ export class MeshEditorService {
     if (!selMat) return false;
     if (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) {
       selMat.bumpTexture = null;
+      this.events.onTexturesChanged?.();
       this.events.onSceneModified?.();
       this.events.onToast?.(`Removed normal / bump map from material "${selMat.name}"`, 'info');
       return true;
@@ -6743,6 +6965,294 @@ export class MeshEditorService {
     return result;
   }
 
+  private detachTextureFromSceneMaterials(tex: Texture, atlasId?: string): number {
+    let detachedCount = 0;
+    const clearSlots = (mat: Material | null | undefined) => {
+      if (!mat) return;
+      if (mat instanceof PBRMaterial) {
+        if (mat.albedoTexture === tex) {
+          mat.albedoTexture = null;
+          mat.useAlphaFromAlbedoTexture = false;
+          mat.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+          detachedCount++;
+        }
+        if (mat.bumpTexture === tex) {
+          mat.bumpTexture = null;
+          detachedCount++;
+        }
+        if (mat.metallicTexture === tex) {
+          mat.metallicTexture = null;
+          detachedCount++;
+        }
+        if (mat.emissiveTexture === tex) {
+          mat.emissiveTexture = null;
+          detachedCount++;
+        }
+        if (mat.ambientTexture === tex) {
+          mat.ambientTexture = null;
+          detachedCount++;
+        }
+        if (mat.opacityTexture === tex) {
+          mat.opacityTexture = null;
+          detachedCount++;
+        }
+        if (mat.reflectionTexture === tex) {
+          mat.reflectionTexture = null;
+          detachedCount++;
+        }
+      } else if (mat instanceof StandardMaterial) {
+        if (mat.diffuseTexture === tex) {
+          mat.diffuseTexture = null;
+          mat.useAlphaFromDiffuseTexture = false;
+          detachedCount++;
+        }
+        if (mat.bumpTexture === tex) {
+          mat.bumpTexture = null;
+          detachedCount++;
+        }
+        if (mat.specularTexture === tex) {
+          mat.specularTexture = null;
+          detachedCount++;
+        }
+        if (mat.emissiveTexture === tex) {
+          mat.emissiveTexture = null;
+          detachedCount++;
+        }
+        if (mat.ambientTexture === tex) {
+          mat.ambientTexture = null;
+          detachedCount++;
+        }
+        if (mat.opacityTexture === tex) {
+          mat.opacityTexture = null;
+          detachedCount++;
+        }
+        if (mat.reflectionTexture === tex) {
+          mat.reflectionTexture = null;
+          detachedCount++;
+        }
+      } else if (mat instanceof TerrainMaterial) {
+        if (mat.diffuseTexture1 === tex) {
+          mat.diffuseTexture1 = null;
+          detachedCount++;
+        }
+        if (mat.diffuseTexture2 === tex) {
+          mat.diffuseTexture2 = null;
+          detachedCount++;
+        }
+        if (mat.diffuseTexture3 === tex) {
+          mat.diffuseTexture3 = null;
+          detachedCount++;
+        }
+        if (mat.mixTexture === tex) {
+          mat.mixTexture = null;
+          detachedCount++;
+        }
+      }
+      if (atlasId && mat.metadata?.atlasId === atlasId) {
+        delete mat.metadata.atlasId;
+      }
+    };
+
+    for (const mat of this.scene.materials) {
+      if (mat instanceof MultiMaterial) {
+        for (const sub of mat.subMaterials || []) {
+          clearSlots(sub);
+        }
+      } else {
+        clearSlots(mat);
+      }
+    }
+    return detachedCount;
+  }
+
+  private buildTextureDownloadFilename(rawName: string, url: string): string {
+    const cleanBase = (rawName || 'texture').trim().replace(/[\\/:*?"<>|]+/g, '_') || 'texture';
+    let mimeExt = '';
+    const mimeMatch = url.match(/^data:image\/([a-zA-Z0-9+.-]+);/i);
+    if (mimeMatch) {
+      const subtype = mimeMatch[1].toLowerCase();
+      if (subtype === 'jpeg') mimeExt = 'jpg';
+      else if (subtype === 'svg+xml') mimeExt = 'svg';
+      else mimeExt = subtype;
+    }
+
+    const extMatch = cleanBase.match(/\.([a-zA-Z0-9]+)$/);
+    if (extMatch) {
+      const existingExt = extMatch[1].toLowerCase();
+      if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(existingExt)) {
+        if (mimeExt && mimeExt !== existingExt && !(mimeExt === 'jpg' && existingExt === 'jpeg')) {
+          return cleanBase.replace(/\.[^.]+$/, `.${mimeExt}`);
+        }
+        return cleanBase;
+      }
+    }
+    return `${cleanBase}.${mimeExt || 'png'}`;
+  }
+
+  /**
+   * Triggers a browser download of an embedded texture or texture atlas image.
+   */
+  public async downloadEmbeddedTexture(
+    texOrIdentifier: Pick<EmbeddedTextureInfo, 'name' | 'url' | 'isAtlas' | 'atlasId'> | string
+  ): Promise<boolean> {
+    if (typeof document === 'undefined') return false;
+
+    let name = 'texture';
+    let url = '';
+
+    if (typeof texOrIdentifier === 'string') {
+      const match = this.getEmbeddedTexturesInfo().find(
+        (t) => t.id === texOrIdentifier || t.url === texOrIdentifier || t.name === texOrIdentifier
+      );
+      if (match) {
+        name = match.name;
+        url = match.url;
+      } else {
+        url = texOrIdentifier;
+      }
+    } else {
+      name = texOrIdentifier.name || 'texture';
+      url = texOrIdentifier.url || '';
+      if (!url && texOrIdentifier.isAtlas && texOrIdentifier.atlasId) {
+        const atlas = this.textureAtlasManager.getAtlas(texOrIdentifier.atlasId);
+        if (atlas) {
+          url = atlas.dataUrl || this.resolveTextureImageUrl(atlas.texture);
+          name = atlas.name || name;
+        }
+      }
+    }
+
+    if (!url) {
+      this.events.onToast?.('Texture image data is unavailable for download.', 'warning');
+      return false;
+    }
+
+    const filename = this.buildTextureDownloadFilename(name, url);
+    let downloadHref = url;
+    let tempObjectUrl: string | null = null;
+
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      try {
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          tempObjectUrl = URL.createObjectURL(blob);
+          downloadHref = tempObjectUrl;
+        }
+      } catch {
+        // Fall back to direct URL download if fetch is blocked by CORS
+      }
+    }
+
+    const a = document.createElement('a');
+    a.href = downloadHref;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    if (tempObjectUrl) {
+      setTimeout(() => URL.revokeObjectURL(tempObjectUrl!), 1000);
+    }
+
+    this.events.onToast?.(`Downloaded texture "${filename}".`, 'success');
+    return true;
+  }
+
+  /**
+   * Deletes an embedded texture or texture atlas from the scene, detaching it from any materials that reference it.
+   */
+  public deleteEmbeddedTexture(
+    identifier:
+      | Pick<EmbeddedTextureInfo, 'id' | 'name' | 'url' | 'width' | 'height' | 'isAtlas' | 'atlasId'>
+      | string
+  ): boolean {
+    const info =
+      typeof identifier === 'string'
+        ? this.getEmbeddedTexturesInfo().find(
+            (t) => t.id === identifier || t.url === identifier || t.name === identifier || t.atlasId === identifier
+          ) || { id: identifier, url: identifier, name: identifier, width: 0, height: 0, isAtlas: false }
+        : identifier;
+
+    // 1. Handle Texture Atlas deletion
+    const atlasId = info.atlasId || (info.isAtlas ? info.id : undefined);
+    if (atlasId) {
+      const atlas = this.textureAtlasManager.getAtlas(atlasId);
+      if (atlas) {
+        this.detachTextureFromSceneMaterials(atlas.texture, atlas.id);
+        this.textureAtlasManager.removeAtlas(atlas.id);
+
+        if (this.voxelPainter.currentAtlasId === atlas.id) {
+          const remaining = this.textureAtlasManager.getAtlases()[0];
+          this.voxelPainter.useTextureAtlas(remaining ? remaining.id : null);
+        }
+
+        if (atlas.dataUrl && this.objectUrls.has(atlas.dataUrl)) {
+          URL.revokeObjectURL(atlas.dataUrl);
+          this.objectUrls.delete(atlas.dataUrl);
+        }
+
+        this.events.onTexturesChanged?.();
+        this.events.onSceneModified?.();
+        this.events.onToast?.(`Deleted texture atlas "${atlas.name}".`, 'info');
+        return true;
+      }
+    }
+
+    // 2. Handle standalone / material scene Texture deletion
+    const matchedTextures = this.scanSceneTextures().filter((t) => {
+      if (info.id && t.uniqueId && String(t.uniqueId) === info.id) return true;
+      const resolvedUrl = this.resolveTextureImageUrl(t);
+      if (info.url && (t.url === info.url || resolvedUrl === info.url)) return true;
+      if (
+        info.name &&
+        t.name === info.name &&
+        info.name !== 'embedded_texture' &&
+        !info.name.startsWith('data:')
+      ) {
+        if (typeof info.width === 'number' && info.width > 0 && typeof info.height === 'number' && info.height > 0) {
+          const s = t.getSize();
+          return s.width === info.width && s.height === info.height;
+        }
+        return !info.id && !info.url;
+      }
+      return false;
+    });
+
+    if (matchedTextures.length === 0) {
+      return false;
+    }
+
+    const displayName = info.name || matchedTextures[0].name || 'embedded_texture';
+
+    for (const tex of matchedTextures) {
+      this.detachTextureFromSceneMaterials(tex);
+      tex.dispose();
+    }
+
+    // Clean up matching custom palette items in Voxel Painter
+    const matchedSet = new Set<Texture>(matchedTextures);
+    for (const [key, item] of Array.from(this.voxelPainter.palette.entries())) {
+      if ((info.url && item.textureUrl === info.url) || (item.texture && matchedSet.has(item.texture))) {
+        this.voxelPainter.palette.delete(key);
+        if (this.voxelPainter.currentPaletteId === key) {
+          const firstKey = this.voxelPainter.palette.keys().next().value;
+          if (firstKey) this.voxelPainter.currentPaletteId = firstKey;
+        }
+      }
+    }
+
+    if (info.url && this.objectUrls.has(info.url)) {
+      URL.revokeObjectURL(info.url);
+      this.objectUrls.delete(info.url);
+    }
+
+    this.events.onTexturesChanged?.();
+    this.events.onSceneModified?.();
+    this.events.onToast?.(`Deleted embedded texture "${displayName}".`, 'info');
+    return true;
+  }
+
   /**
    * Adds an embedded texture to the scene from a data URL string.
    */
@@ -6937,6 +7447,9 @@ export class MeshEditorService {
       }
     }
 
+    if (optimizedCount > 0) {
+      this.events.onTexturesChanged?.();
+    }
     this.events.onStatusChanged?.('Ready');
     this.events.onToast?.(`${optimizedCount} textures successfully optimized to WebP!`, 'success');
     return optimizedCount;
