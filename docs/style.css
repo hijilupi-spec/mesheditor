@@ -2058,19 +2058,559 @@ a:hover {
   color: var(--text-muted);
 }
 
-/* AI Mesh Agent Real Screenshot Showcase */
+/* AI Mesh Agent Collaborative Pipeline Diagram Showcase */
 .ai-showcase-box {
-  background: var(--bg-dark);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(88, 166, 255, 0.12), transparent 42%),
+    radial-gradient(circle at 88% 100%, rgba(63, 185, 80, 0.1), transparent 45%),
+    #0c1017;
   border: 1px solid rgba(88, 166, 255, 0.35);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-elevated);
-  overflow: hidden;
+  overflow: clip;
+  container: ai-diagram / inline-size;
 }
 
-.ai-showcase-screenshot {
+.ai-pipeline-diagram {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-diag-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 20px;
+  background: rgba(22, 27, 34, 0.96);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ai-diag-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-inline-size: 0;
+}
+
+.ai-diag-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.1px;
+}
+
+.ai-diag-filters {
+  display: flex;
+  flex-wrap: wrap;
+  flex-wrap: balance;
+  gap: 6px;
+  align-items: center;
+}
+
+.ai-diag-filter {
+  appearance: none;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-block-size: 28px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ai-diag-filter:hover {
+  color: var(--text-primary);
+  border-color: rgba(88, 166, 255, 0.45);
+  background: rgba(88, 166, 255, 0.1);
+}
+
+.ai-diag-filter:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+}
+
+.ai-diag-filter.active {
+  color: #f0f6fc;
+  background: rgba(31, 111, 235, 0.26);
+  border-color: rgba(88, 166, 255, 0.75);
+  box-shadow: 0 0 14px rgba(88, 166, 255, 0.25);
+}
+
+.ai-diag-canvas {
+  position: relative;
+  padding: 22px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.ai-diag-lane {
+  border-radius: var(--radius-md);
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(16, 21, 30, 0.78);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ai-diag-lane.lane-human {
+  border-color: rgba(63, 185, 80, 0.32);
+  background:
+    linear-gradient(135deg, rgba(63, 185, 80, 0.07) 0%, rgba(16, 21, 30, 0.86) 60%);
+}
+
+.ai-diag-lane.lane-agent {
+  border-color: rgba(88, 166, 255, 0.32);
+  background:
+    linear-gradient(135deg, rgba(31, 111, 235, 0.08) 0%, rgba(16, 21, 30, 0.88) 55%, rgba(163, 113, 247, 0.06) 100%);
+}
+
+.ai-diag-lane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.ai-diag-lane-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.ai-diag-lane-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.2px;
+}
+
+.badge-human {
+  color: #56d364;
+  background: rgba(63, 185, 80, 0.14);
+  border: 1px solid rgba(63, 185, 80, 0.35);
+}
+
+.badge-agent {
+  color: #79c0ff;
+  background: rgba(88, 166, 255, 0.14);
+  border: 1px solid rgba(88, 166, 255, 0.35);
+}
+
+.ai-diag-human-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.ai-diag-pipeline-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.ai-diag-node {
+  position: relative;
+  min-inline-size: 0;
+  background: rgba(22, 27, 34, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-md);
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ai-diag-node:hover {
+  border-color: rgba(121, 192, 255, 0.45);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.ai-diag-node.node-human {
+  border-top: 2px solid #3fb950;
+}
+
+.ai-diag-node.node-context {
+  border-top: 2px solid #58a6ff;
+}
+
+.ai-diag-node.node-tools {
+  border-top: 2px solid #38bdf8;
+}
+
+.ai-diag-node.node-critique {
+  border-top: 2px solid #d29922;
+}
+
+.ai-diag-node.node-commit {
+  border-top: 2px solid #a371f7;
+}
+
+.ai-diag-node-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 8px;
+}
+
+.ai-diag-step-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgba(88, 166, 255, 0.14);
+  color: var(--accent-hover);
+  border: 1px solid rgba(88, 166, 255, 0.28);
+}
+
+.node-human .ai-diag-step-pill {
+  background: rgba(63, 185, 80, 0.14);
+  color: #56d364;
+  border-color: rgba(63, 185, 80, 0.3);
+}
+
+.node-critique .ai-diag-step-pill {
+  background: rgba(210, 153, 34, 0.16);
+  color: #e3b341;
+  border-color: rgba(210, 153, 34, 0.35);
+}
+
+.node-commit .ai-diag-step-pill {
+  background: rgba(163, 113, 247, 0.16);
+  color: #c9a6ff;
+  border-color: rgba(163, 113, 247, 0.35);
+}
+
+.ai-diag-node-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 6px;
+  border-radius: 4px;
+  max-inline-size: 100%;
+  white-space: nowrap;
+}
+
+.ai-diag-self-loop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px dashed rgba(210, 153, 34, 0.48);
+  background: rgba(210, 153, 34, 0.08);
+  color: #e3b341;
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: opacity 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ai-diag-self-loop svg {
+  flex-shrink: 0;
+}
+
+.ai-diag-node-title {
+  font-size: clamp(0.92rem, 0.86rem + 0.25vw, 1rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ai-diag-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.48;
+  color: var(--text-secondary);
+}
+
+.ai-diag-list li {
+  position: relative;
+  padding-inline-start: 14px;
+}
+
+.ai-diag-list li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 7px;
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  opacity: 0.8;
+}
+
+.node-human .ai-diag-list li::before {
+  background: #3fb950;
+}
+
+.node-critique .ai-diag-list li::before {
+  background: #d29922;
+}
+
+.node-commit .ai-diag-list li::before {
+  background: #a371f7;
+}
+
+.ai-diag-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: #a5d6ff;
+  background: rgba(88, 166, 255, 0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.ai-diag-subgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.ai-diag-subchip {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.ai-diag-subchip strong {
   display: block;
-  width: 100%;
-  height: auto;
+  color: var(--text-primary);
+  font-size: 11px;
+  margin-bottom: 1px;
+}
+
+.ai-diag-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.ai-diag-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #c9d1d9;
+}
+
+/* Flow Connectors */
+.ai-diag-connector {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: rgba(121, 192, 255, 0.75);
+}
+
+.ai-diag-bridges {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.ai-diag-bridge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px dashed rgba(88, 166, 255, 0.42);
+  background: rgba(16, 22, 34, 0.92);
+  color: var(--text-primary);
+  text-align: center;
+  transition: opacity 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.ai-diag-bridge.bridge-down {
+  border-color: rgba(63, 185, 80, 0.45);
+  color: #aff5b4;
+}
+
+.ai-diag-bridge.bridge-up {
+  border-color: rgba(163, 113, 247, 0.5);
+  color: #e2ccff;
+}
+
+.ai-diag-bridge svg {
+  flex-shrink: 0;
+}
+
+@keyframes aiDiagPulse {
+  0%, 100% {
+    opacity: 0.65;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(2px);
+  }
+}
+
+.ai-diag-bridge.bridge-down svg {
+  animation: aiDiagPulse 2.2s ease-in-out infinite;
+}
+
+.ai-diag-bridge.bridge-up svg {
+  animation: aiDiagPulse 2.2s ease-in-out infinite reverse;
+}
+
+/* Collaborative Loop Footer Bar inside Diagram */
+.ai-diag-loop-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 12px 15px;
+  border-radius: var(--radius-md);
+  background: rgba(22, 27, 34, 0.88);
+  border: 1px solid rgba(88, 166, 255, 0.24);
+}
+
+.ai-diag-loop-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-hover);
+  white-space: nowrap;
+}
+
+.ai-diag-loop-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-diag-loop-step {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+
+.ai-diag-loop-sep {
+  color: var(--accent-color);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.ai-diag-caption {
+  padding: 12px 20px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: rgba(13, 17, 23, 0.85);
+  border-top: 1px solid var(--border-color);
+}
+
+/* Interactive Layer Focus States */
+.ai-pipeline-diagram:not([data-focus="all"]) [data-layer] {
+  opacity: 0.34;
+  filter: saturate(0.65);
+}
+
+.ai-pipeline-diagram[data-focus="human"] [data-layer~="human"],
+.ai-pipeline-diagram[data-focus="agent"] [data-layer~="agent"],
+.ai-pipeline-diagram[data-focus="critique"] [data-layer~="critique"],
+.ai-pipeline-diagram[data-focus="collab"] [data-layer~="collab"] {
+  opacity: 1;
+  filter: none;
+  border-color: rgba(121, 192, 255, 0.65);
+  box-shadow: 0 0 20px rgba(31, 111, 235, 0.22);
+}
+
+/* Container Queries for Responsive Diagram Adaptation */
+@container ai-diagram (inline-size >= 620px) {
+  .ai-diag-human-grid,
+  .ai-diag-bridges {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ai-diag-pipeline-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container ai-diagram (inline-size >= 960px) {
+  .ai-diag-pipeline-grid {
+    grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr) 22px minmax(0, 1fr) 22px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .ai-diag-connector {
+    display: flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-diag-bridge.bridge-down svg,
+  .ai-diag-bridge.bridge-up svg {
+    animation: none;
+  }
+  .ai-diag-node,
+  .ai-diag-filter,
+  .ai-diag-bridge {
+    transition: none;
+  }
 }
 
 .ai-dialog-preview {
@@ -2630,9 +3170,6 @@ a:hover {
   }
   .hero-title {
     font-size: 38px;
-  }
-  .ai-showcase-box {
-    grid-template-columns: 1fr;
   }
   .ai-dialog-preview {
     border-right: none;

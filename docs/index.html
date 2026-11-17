@@ -626,14 +626,224 @@
           </div>
         </div>
 
-        <!-- Real AI Mesh Agent Screenshot -->
+        <!-- Collaborative AI Pipeline & Human-in-the-Loop Workflow Diagram -->
         <div class="ai-showcase-box">
-          <img
-            src="ai-agent-screen.jpg"
-            alt="Mesh Editor AI Mesh Agent generating a medieval Gothic courtyard corner with pointed arches, stone wall, and spiral staircase in the 3D viewport"
-            class="ai-showcase-screenshot"
-            loading="lazy"
-          >
+          <figure class="ai-pipeline-diagram" id="aiPipelineDiagram" data-focus="all" aria-labelledby="aiDiagramTitle">
+            <!-- Window Header & Interactive Layer Highlights -->
+            <div class="ai-diag-header">
+              <div class="ai-diag-header-left">
+                <div class="hero-window-dots" aria-hidden="true">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="ai-diag-title" id="aiDiagramTitle">Collaborative AI Pipeline &amp; Human-in-the-Loop Architecture</span>
+              </div>
+
+              <div class="ai-diag-filters" role="group" aria-label="Highlight pipeline layer">
+                <button type="button" class="ai-diag-filter active" data-diagram-focus="all" aria-pressed="true">Full Loop</button>
+                <button type="button" class="ai-diag-filter" data-diagram-focus="human" aria-pressed="false">Human-in-the-Loop</button>
+                <button type="button" class="ai-diag-filter" data-diagram-focus="agent" aria-pressed="false">AI Tool Loop</button>
+                <button type="button" class="ai-diag-filter" data-diagram-focus="critique" aria-pressed="false">4-View Critique</button>
+                <button type="button" class="ai-diag-filter" data-diagram-focus="collab" aria-pressed="false">Undo &amp; Co-Edit</button>
+              </div>
+            </div>
+
+            <div class="ai-diag-canvas">
+              <!-- SWIMLANE 1: HUMAN-IN-THE-LOOP -->
+              <div class="ai-diag-lane lane-human">
+                <div class="ai-diag-lane-head">
+                  <h3 class="ai-diag-lane-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#56d364" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    <span>Human-in-the-Loop Layer</span>
+                  </h3>
+                  <span class="ai-diag-lane-badge badge-human">Creative Director &amp; Manual 3D Precision</span>
+                </div>
+
+                <div class="ai-diag-human-grid">
+                  <!-- Human Node 1 -->
+                  <article class="ai-diag-node node-human" data-layer="human collab">
+                    <div class="ai-diag-node-top">
+                      <span class="ai-diag-step-pill">Human Input</span>
+                      <span class="ai-diag-node-code">Create / Update | Replace</span>
+                    </div>
+                    <h4 class="ai-diag-node-title">Intent, Selection &amp; Multimodal Controls</h4>
+                    <ul class="ai-diag-list">
+                      <li><strong>Target Selection:</strong> Pick meshes in the 3D viewport (<code>selectedMeshNames</code>) so AI edits only what you select.</li>
+                      <li><strong>Multimodal Prompt:</strong> Type text, dictate via <strong>Speech-to-Text</strong>, attach reference art, or toggle <strong>+ 3D View</strong>.</li>
+                      <li><strong>Guardrails:</strong> Set Poly Budget (<code>200&ndash;1M tris</code>), <code>Textures</code>, <code>Normal Maps</code>, and <code>Visual Check</code>.</li>
+                    </ul>
+                    <div class="ai-diag-tags">
+                      <span class="ai-diag-tag">Voice Dictation</span>
+                      <span class="ai-diag-tag">+ 3D View Snapshot</span>
+                      <span class="ai-diag-tag">Poly Budget</span>
+                    </div>
+                  </article>
+
+                  <!-- Human Node 2 -->
+                  <article class="ai-diag-node node-human" data-layer="human collab">
+                    <div class="ai-diag-node-top">
+                      <span class="ai-diag-step-pill">Co-Editing</span>
+                      <span class="ai-diag-node-code">registerUndoRedoRecord</span>
+                    </div>
+                    <h4 class="ai-diag-node-title">Direct 3D Editing &amp; Atomic Undo / Redo</h4>
+                    <ul class="ai-diag-list">
+                      <li><strong>Live Viewport Manipulation:</strong> Refine AI geometry immediately with <strong>Move / Rotate / Scale Gizmos</strong>, Vertex/Facet tools, CSG2, Sculpt, or UVs.</li>
+                      <li><strong>1-Click Safe Revert:</strong> Every AI run records <code>preRunTransforms</code> &amp; <code>newlyCreatedMeshes</code> as one undoable step.</li>
+                      <li><strong>Zero Lock-In:</strong> Alternate freely between manual sculpting and follow-up AI prompts in the same scene.</li>
+                    </ul>
+                    <div class="ai-diag-tags">
+                      <span class="ai-diag-tag">3D Gizmos &amp; Facets</span>
+                      <span class="ai-diag-tag">Atomic Undo Stack</span>
+                      <span class="ai-diag-tag">Iterative Handoff</span>
+                    </div>
+                  </article>
+                </div>
+              </div>
+
+              <!-- BI-DIRECTIONAL HANDOFF BRIDGES -->
+              <div class="ai-diag-bridges">
+                <div class="ai-diag-bridge bridge-down" data-layer="human agent">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="12" y1="4" x2="12" y2="19"></line><polyline points="6 13 12 19 18 13"></polyline></svg>
+                  <span>Human &rarr; AI: Prompt + Selected Nodes + Scene Summary JSON + Optional Snapshot</span>
+                </div>
+                <div class="ai-diag-bridge bridge-up" data-layer="agent critique collab">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="12" y1="20" x2="12" y2="5"></line><polyline points="6 11 12 5 18 11"></polyline></svg>
+                  <span>AI &rarr; Human: Live Babylon.js Update + Auto-Focus + Atomic Undo Record</span>
+                </div>
+              </div>
+
+              <!-- SWIMLANE 2: AI PIPELINE -->
+              <div class="ai-diag-lane lane-agent">
+                <div class="ai-diag-lane-head">
+                  <h3 class="ai-diag-lane-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#79c0ff" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8" y2="16"></line><line x1="16" y1="16" x2="16" y2="16"></line></svg>
+                    <span>Autonomous AI Mesh Pipeline</span>
+                  </h3>
+                  <span class="ai-diag-lane-badge badge-agent">AIAgentService.runPrompt() &bull; Iterative Tool Loop</span>
+                </div>
+
+                <div class="ai-diag-pipeline-grid">
+                  <!-- Stage 01 -->
+                  <article class="ai-diag-node node-context" data-layer="agent">
+                    <div class="ai-diag-node-top">
+                      <span class="ai-diag-step-pill">01 &bull; Context</span>
+                      <span class="ai-diag-node-code">buildSystemPrompt()</span>
+                    </div>
+                    <h4 class="ai-diag-node-title">Scene State &amp; Skill Assembly</h4>
+                    <ul class="ai-diag-list">
+                      <li>Injects live <strong>Scene Summary JSON</strong>: mesh bounds, triangles, <code>triangleSharePercent</code>, and <code>budgetStatus</code>.</li>
+                      <li>Loads active modular <strong>Skills</strong> (<code>procedural-modeler</code>, <code>image-to-mesh</code>, <code>figure-sculptor</code>, <code>mesh-updater</code>).</li>
+                      <li>Attaches up to <strong>6 recent turns</strong> + configured <strong>BYO-AI</strong> endpoint.</li>
+                    </ul>
+                    <div class="ai-diag-tags">
+                      <span class="ai-diag-tag">oMLX / Ollama</span>
+                      <span class="ai-diag-tag">Gemini / Claude / GPT</span>
+                    </div>
+                  </article>
+
+                  <!-- Connector 1 -> 2 -->
+                  <div class="ai-diag-connector" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                  </div>
+
+                  <!-- Stage 02 -->
+                  <article class="ai-diag-node node-tools" data-layer="agent">
+                    <div class="ai-diag-node-top">
+                      <span class="ai-diag-step-pill">02 &bull; Execute</span>
+                      <span class="ai-diag-node-code">modeler_* tools</span>
+                    </div>
+                    <h4 class="ai-diag-node-title">Plan &amp; Multi-Backend Tool Loop</h4>
+                    <ul class="ai-diag-list">
+                      <li>Plans proportional density with <code>modeler_plan_model</code> (<strong>50&ndash;65%</strong> primary / <strong>25&ndash;35%</strong> secondary).</li>
+                      <li>Runs native <code>tool_calls</code> &amp; updates the viewport after every batch:</li>
+                    </ul>
+                    <div class="ai-diag-subgrid">
+                      <div class="ai-diag-subchip"><strong>Procedural &amp; CSG2</strong>5 Topology Archetypes</div>
+                      <div class="ai-diag-subchip"><strong>Neural 3D</strong>TRELLIS 2, Hunyuan, Hi3D</div>
+                      <div class="ai-diag-subchip"><strong>4-Map PBR</strong>De-Lit [30..240] + Normal</div>
+                      <div class="ai-diag-subchip"><strong>Game Pipeline</strong>Retopo, UV, Bake, Rig</div>
+                    </div>
+                  </article>
+
+                  <!-- Connector 2 -> 3 -->
+                  <div class="ai-diag-connector" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                  </div>
+
+                  <!-- Stage 03 -->
+                  <article class="ai-diag-node node-critique" data-layer="critique agent">
+                    <div class="ai-diag-node-top">
+                      <span class="ai-diag-step-pill">03 &bull; Verify</span>
+                      <span class="ai-diag-node-code">Visual Check</span>
+                    </div>
+                    <h4 class="ai-diag-node-title">4-View Critique &amp; Self-Correction</h4>
+                    <ul class="ai-diag-list">
+                      <li>Renders a <strong>4-View + Wireframe Sheet</strong>: Front, Right Side, 3/4 PBR, and 3/4 Topology.</li>
+                      <li>Audits 4 criteria: silhouette quality, <code>Y = 0</code> grounding, proportional density, completeness.</li>
+                      <li>If issues appear, automatically loops back to <strong>Step 02</strong> with corrective tool calls.</li>
+                    </ul>
+                    <div class="ai-diag-tags">
+                      <span class="ai-diag-tag">4-Angle Render Sheet</span>
+                      <span class="ai-diag-tag">Auto-Fix Loop</span>
+                    </div>
+                  </article>
+
+                  <!-- Connector 3 -> 4 -->
+                  <div class="ai-diag-connector" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 6 15 12 9 18"></polyline></svg>
+                  </div>
+
+                  <!-- Stage 04 -->
+                  <article class="ai-diag-node node-commit" data-layer="collab agent">
+                    <div class="ai-diag-node-top">
+                      <span class="ai-diag-step-pill">04 &bull; Commit</span>
+                      <span class="ai-diag-node-code">selectNodes()</span>
+                    </div>
+                    <h4 class="ai-diag-node-title">Double-Sided PBR &amp; Artist Handoff</h4>
+                    <ul class="ai-diag-list">
+                      <li>Enforces double-sided geometry (<code>backFaceCulling = false</code>, <code>twoSidedLighting = true</code>).</li>
+                      <li>Selects newly built meshes &amp; focuses the Babylon.js camera (<code>focusOnAll()</code>).</li>
+                      <li>Commits one atomic <strong>Undo / Redo</strong> entry and hands control back to the human.</li>
+                    </ul>
+                    <div class="ai-diag-tags">
+                      <span class="ai-diag-tag">Auto-Select &amp; Focus</span>
+                      <span class="ai-diag-tag">Undo-Ready</span>
+                    </div>
+                  </article>
+                </div>
+
+                <!-- Inner Self-Correction Loop Indicator -->
+                <div class="ai-diag-self-loop" data-layer="critique agent">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                  <span>Inner Feedback Loop (Step 03 &rarr; Step 02): Visual Critique automatically dispatches corrective <code>modeler_*</code> calls until silhouette, grounding &amp; poly budget pass.</span>
+                </div>
+              </div>
+
+              <!-- COLLABORATIVE CO-CREATION LOOP FOOTER -->
+              <div class="ai-diag-loop-bar" data-layer="human collab critique">
+                <div class="ai-diag-loop-label">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"></path><polyline points="21 3 21 8 16 8"></polyline></svg>
+                  <span>Continuous Co-Creation Cycle:</span>
+                </div>
+                <ol class="ai-diag-loop-steps">
+                  <li class="ai-diag-loop-step">1. Prompt or Attach Reference</li>
+                  <li class="ai-diag-loop-sep" aria-hidden="true">&rarr;</li>
+                  <li class="ai-diag-loop-step">2. AI Builds &amp; Textures</li>
+                  <li class="ai-diag-loop-sep" aria-hidden="true">&rarr;</li>
+                  <li class="ai-diag-loop-step">3. Optional 4-View Self-Fix</li>
+                  <li class="ai-diag-loop-sep" aria-hidden="true">&rarr;</li>
+                  <li class="ai-diag-loop-step">4. Human Gizmo / Sculpt / Undo</li>
+                  <li class="ai-diag-loop-sep" aria-hidden="true">&rarr;</li>
+                  <li class="ai-diag-loop-step">5. Select Part + &ldquo;+ 3D View&rdquo; &amp; Iterate</li>
+                </ol>
+              </div>
+            </div>
+
+            <figcaption class="ai-diag-caption">
+              <strong>How Collaborative Editing Works:</strong> Every prompt merges your live 3D scene selection, polygon budget, and optional viewport snapshot with modular skills. After the AI executes procedural, neural, PBR, or game-pipeline tools (and optionally self-critiques via a 4-view wireframe sheet), all edits commit as a single atomic Undo/Redo record so you can sculpt directly with 3D gizmos and pass the updated scene straight into the next turn.
+            </figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -2510,6 +2720,24 @@
       });
       babylonEngine.resize();
     }
+
+    // Interactive layer highlighting for the Collaborative AI Pipeline Diagram
+    (function initAiPipelineDiagram() {
+      const diagram = document.getElementById('aiPipelineDiagram');
+      if (!diagram) return;
+      const filterButtons = diagram.querySelectorAll('.ai-diag-filter');
+      filterButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const focus = btn.getAttribute('data-diagram-focus') || 'all';
+          diagram.setAttribute('data-focus', focus);
+          filterButtons.forEach((other) => {
+            const isActive = other === btn;
+            other.classList.toggle('active', isActive);
+            other.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          });
+        });
+      });
+    })();
   </script>
 </body>
 </html>
