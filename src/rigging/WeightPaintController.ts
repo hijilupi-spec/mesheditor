@@ -60,6 +60,9 @@ export class WeightPaintController {
   public activeBoneIndex: number = 0;
 
   private isPainting: boolean = false;
+  public get isStrokeActive(): boolean {
+    return this.isPainting;
+  }
   private activeMesh: Nullable<Mesh> = null;
   private strokePreStates: Map<Mesh, { indices: number[]; weights: number[] }> = new Map();
 

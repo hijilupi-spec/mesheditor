@@ -80,6 +80,9 @@ export class SculptController {
 
   // Internal stroke tracking
   private isSculpting: boolean = false;
+  public get isStrokeActive(): boolean {
+    return this.isSculpting;
+  }
   private activeMesh: Nullable<Mesh> = null;
   private strokeStartVertexData: Nullable<VertexData> = null;
   private lastLocalPick: Nullable<Vector3> = null;

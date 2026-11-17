@@ -418,6 +418,26 @@ body.is-electron-mac #top-toolbar .toolbar-brand {
   }
 }
 
+@media (max-width: 768px) {
+  #top-toolbar {
+    left: 6px;
+    right: 6px;
+    gap: 3px;
+    padding: 0 6px;
+  }
+  #top-toolbar .dropdown-toggle .btn-label,
+  #top-toolbar .history-group .btn-label,
+  #top-toolbar .gizmo-btn .btn-badge {
+    display: none;
+  }
+  #top-toolbar .tool-btn {
+    padding: 0 5px;
+  }
+  #top-toolbar .toolbar-divider {
+    margin: 0 1px;
+  }
+}
+
 /* 3D Canvas */
 #renderCanvas {
   width: 100%;
@@ -1532,6 +1552,56 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
 
 .stats-item strong {
   color: var(--text-primary);
+}
+
+@media (max-width: 1024px) {
+  body.layout-stackpanel #dialog-outliner,
+  #app-container.layout-stackpanel #dialog-outliner {
+    width: min(280px, calc(100vw - 24px)) !important;
+  }
+
+  body.layout-stackpanel .stackpanel-sidebar,
+  #app-container.layout-stackpanel .stackpanel-sidebar,
+  body.layout-stackpanel #stackpanelRightSidebar,
+  #app-container.layout-stackpanel #stackpanelRightSidebar {
+    width: min(290px, calc(100vw - 24px)) !important;
+  }
+}
+
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  #bottom-bar {
+    padding: 0 10px;
+    gap: 10px;
+  }
+
+  .status-left {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    gap: 6px;
+  }
+
+  .status-badge {
+    flex-shrink: 0;
+  }
+
+  .status-message {
+    min-width: 0;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .status-center {
+    display: none;
+  }
+
+  .status-right {
+    flex-shrink: 0;
+    gap: 10px;
+    white-space: nowrap;
+  }
 }
 
 /* Help & Export Modals */

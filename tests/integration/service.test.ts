@@ -260,6 +260,94 @@ describe('MeshEditorService Integration Tests (Babylon NullEngine)', () => {
       service.hideMarqueeVisual();
       expect(marqueeEl?.style.display).toBe('none');
     });
+
+    it('separates touch tap selection from touch orbit and never triggers marquee on touch drag', () => {
+      const box = service.createPrimitive(defaultPrimitiveConfig({ name: 'TouchTarget' }));
+      service.selectNodes([box]);
+      expect(service.selectedMesh).toBe(box);
+
+      const initialCamPos = service.camera.position.clone();
+
+      // 1-finger touch drag (> 10px) orbits camera and never activates marquee or clears selection
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 1, button: 0, clientX: 200, clientY: 200 },
+        pickInfo: { hit: false },
+      } as any);
+      expect(service.isMarqueeCandidate).toBe(false);
+
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERMOVE,
+        event: { pointerType: 'touch', pointerId: 1, button: 0, clientX: 280, clientY: 220 },
+      } as any);
+      expect(service.isMarqueeActive).toBe(false);
+      expect(service.getMarqueeElement()?.style.display).not.toBe('block');
+      expect(Vector3.Distance(initialCamPos, service.camera.position)).toBeGreaterThan(0.01);
+
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 1, button: 0, clientX: 280, clientY: 220 },
+        pickInfo: { hit: false },
+      } as any);
+      // Selection preserved after camera orbit drag
+      expect(service.selectedNodes).toEqual([box]);
+
+      // Short 1-finger touch tap (<= 10px) on empty space clears selection; tap on mesh selects it
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 2, button: 0, clientX: 50, clientY: 50 },
+        pickInfo: { hit: false },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 2, button: 0, clientX: 54, clientY: 52 },
+        pickInfo: { hit: false },
+      } as any);
+      expect(service.selectedNodes.length).toBe(0);
+
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 3, button: 0, clientX: 150, clientY: 150 },
+        pickInfo: { hit: true, pickedMesh: box, subMeshId: 0 },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 3, button: 0, clientX: 152, clientY: 153 },
+        pickInfo: { hit: true, pickedMesh: box, subMeshId: 0 },
+      } as any);
+      expect(service.selectedNodes).toEqual([box]);
+
+      // 2-finger pinch zooms camera without changing selection
+      const prePinchDist = Vector3.Distance(service.camera.position, service.touchOrbitTarget);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 10, button: 0, clientX: 100, clientY: 200 },
+        pickInfo: { hit: false },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERDOWN,
+        event: { pointerType: 'touch', pointerId: 11, button: 0, clientX: 200, clientY: 200 },
+        pickInfo: { hit: false },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERMOVE,
+        event: { pointerType: 'touch', pointerId: 11, button: 0, clientX: 280, clientY: 200 },
+      } as any);
+      const postPinchDist = Vector3.Distance(service.camera.position, service.touchOrbitTarget);
+      expect(postPinchDist).toBeLessThan(prePinchDist);
+
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 10, button: 0, clientX: 100, clientY: 200 },
+        pickInfo: { hit: false },
+      } as any);
+      service.scene.onPointerObservable.notifyObservers({
+        type: PointerEventTypes.POINTERUP,
+        event: { pointerType: 'touch', pointerId: 11, button: 0, clientX: 280, clientY: 200 },
+        pickInfo: { hit: false },
+      } as any);
+      expect(service.selectedNodes).toEqual([box]);
+    });
   });
 
   describe('4. Grouping & Ungrouping with Undo/Redo', () => {

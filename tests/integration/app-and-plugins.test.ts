@@ -1186,4 +1186,31 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     expect(app.service.isSceneInteractionLocked).toBe(false);
     expect(app.service.gizmoManager.attachedNode).toBe(box);
   });
+
+  it('minimizes Scene Objects on startup when viewport width is <= 1024px and keeps it expanded above 1024px', () => {
+    const origInnerWidth = window.innerWidth;
+    try {
+      // Simulate desktop width (> 1024px)
+      Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true });
+      localStorage.removeItem('mesheditor_window_layout');
+      app = new MeshEditorApp({ container, engine });
+      const desktopOutliner = container.querySelector('#dialog-outliner') as HTMLElement;
+      expect(desktopOutliner).not.toBeNull();
+      expect(desktopOutliner.classList.contains('minimized')).toBe(false);
+      app.dispose();
+
+      // Simulate iPad width (<= 1024px) even with desktop-saved expanded state in localStorage
+      container.innerHTML = '';
+      engine = new NullEngine();
+      Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+      app = new MeshEditorApp({ container, engine });
+      const compactOutliner = container.querySelector('#dialog-outliner') as HTMLElement;
+      expect(compactOutliner).not.toBeNull();
+      expect(compactOutliner.classList.contains('minimized')).toBe(true);
+      expect(compactOutliner.style.bottom).toBe('auto');
+      expect(compactOutliner.style.height).toBe('auto');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: origInnerWidth, configurable: true });
+    }
+  });
 });

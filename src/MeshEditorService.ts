@@ -251,7 +251,16 @@ export class MeshEditorService {
   public marqueeStartClient: { x: number; y: number } = { x: 0, y: 0 };
   private marqueeElement: HTMLElement | null = null;
   private onWindowPointerUpHandler: ((e: PointerEvent) => void) | null = null;
+  private onWindowPointerCancelHandler: ((e: PointerEvent) => void) | null = null;
   private onWindowKeyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  // Touch camera & gesture state (separates single-tap selection from 1-finger orbit & 2-finger pinch/pan)
+  public touchOrbitTarget: Vector3 = new Vector3(0, 1, 0);
+  private activeTouchPointers: Map<number, { clientX: number; clientY: number }> = new Map();
+  private touchOrbitActive: boolean = false;
+  private touchTapEligible: boolean = false;
+  private touchLastSingleClient: { x: number; y: number } | null = null;
+  private touchLastPinchState: { midX: number; midY: number; dist: number } | null = null;
 
   // Events listener
   public events: MeshEditorServiceEvents = {};
@@ -342,10 +351,11 @@ export class MeshEditorService {
     this.camera.setTarget(new Vector3(0, 1, 0));
     this.camera.attachControl(this.canvas, true);
 
-    // Only right click (button 2) rotates camera!
+    // Only right click (button 2) rotates camera on desktop; touch uses custom orbit/pinch/pan
     if (this.camera.inputs?.attached?.mouse) {
       (this.camera.inputs.attached.mouse as any).buttons = [2];
     }
+    this.camera.inputs?.removeByType('FreeCameraTouchInput');
 
     // Configure navigation keys: Arrow keys + WASD
     this.camera.keysUp = [38, 87]; // Up Arrow & W
@@ -435,7 +445,29 @@ export class MeshEditorService {
     }
 
     if (typeof window !== 'undefined') {
-      this.onWindowPointerUpHandler = () => {
+      const cleanupTouchPointer = (e?: PointerEvent) => {
+        if (e && e.pointerType === 'touch' && typeof e.pointerId === 'number') {
+          this.activeTouchPointers.delete(e.pointerId);
+          if (this.activeTouchPointers.size < 2) {
+            this.touchLastPinchState = null;
+          }
+          if (this.activeTouchPointers.size === 0) {
+            this.touchOrbitActive = false;
+            this.touchLastSingleClient = null;
+            this.touchTapEligible = false;
+          }
+        }
+      };
+      this.onWindowPointerUpHandler = (e: PointerEvent) => {
+        cleanupTouchPointer(e);
+        if (this.isMarqueeActive || this.isMarqueeCandidate) {
+          this.isMarqueeActive = false;
+          this.isMarqueeCandidate = false;
+          this.hideMarqueeVisual();
+        }
+      };
+      this.onWindowPointerCancelHandler = (e: PointerEvent) => {
+        cleanupTouchPointer(e);
         if (this.isMarqueeActive || this.isMarqueeCandidate) {
           this.isMarqueeActive = false;
           this.isMarqueeCandidate = false;
@@ -450,6 +482,7 @@ export class MeshEditorService {
         }
       };
       window.addEventListener('pointerup', this.onWindowPointerUpHandler);
+      window.addEventListener('pointercancel', this.onWindowPointerCancelHandler);
       window.addEventListener('keydown', this.onWindowKeyDownHandler);
     }
 
@@ -472,6 +505,10 @@ export class MeshEditorService {
     if (this.onWindowPointerUpHandler && typeof window !== 'undefined') {
       window.removeEventListener('pointerup', this.onWindowPointerUpHandler);
       this.onWindowPointerUpHandler = null;
+    }
+    if (this.onWindowPointerCancelHandler && typeof window !== 'undefined') {
+      window.removeEventListener('pointercancel', this.onWindowPointerCancelHandler);
+      this.onWindowPointerCancelHandler = null;
     }
     if (this.onWindowKeyDownHandler && typeof window !== 'undefined') {
       window.removeEventListener('keydown', this.onWindowKeyDownHandler);
@@ -678,16 +715,20 @@ export class MeshEditorService {
 
     // Pointer Picking for Mesh Selection & Facet Editing
     let pointerDownPos = { x: 0, y: 0 };
+    let touchDownClient = { x: 0, y: 0 };
     this.scene.onPointerObservable.add((pointerInfo) => {
       if (this.isSceneInteractionLocked) {
         return;
       }
+      const rawEvt = pointerInfo.event as PointerEvent | MouseEvent | undefined;
+      const isTouch = (rawEvt as PointerEvent | undefined)?.pointerType === 'touch';
+
       if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
         pointerDownPos = { x: this.scene.pointerX, y: this.scene.pointerY };
         this.lastPointerX = this.scene.pointerX;
         this.lastPointerY = this.scene.pointerY;
 
-        const evt = pointerInfo.event as MouseEvent;
+        const evt = rawEvt as PointerEvent | undefined;
         if (evt) {
           const isSnapKey = !!(evt.metaKey || evt.ctrlKey);
           if (this.isSnapModifierActive !== isSnapKey) {
@@ -697,6 +738,32 @@ export class MeshEditorService {
         const isLeftButton = evt ? evt.button === 0 : true;
         const pick = pointerInfo.pickInfo;
         const isGizmoHit = this.isGizmoMesh(pick?.pickedMesh);
+
+        if (isTouch && evt) {
+          // Touch pointers must never trigger desktop left-drag marquee selection
+          this.isMarqueeCandidate = false;
+          this.isMarqueeActive = false;
+          this.hideMarqueeVisual();
+
+          const pid = typeof evt.pointerId === 'number' ? evt.pointerId : 0;
+          const cx = evt.clientX ?? this.scene.pointerX;
+          const cy = evt.clientY ?? this.scene.pointerY;
+          this.activeTouchPointers.set(pid, { clientX: cx, clientY: cy });
+
+          if (this.activeTouchPointers.size > 1) {
+            this.touchTapEligible = false;
+            this.touchOrbitActive = false;
+            this.touchLastSingleClient = null;
+            this.touchLastPinchState = this.getTouchPinchState();
+          } else {
+            touchDownClient = { x: cx, y: cy };
+            this.touchTapEligible = !isGizmoHit;
+            this.touchOrbitActive = !isGizmoHit && !this.voxelPainter?.isActive;
+            this.touchLastSingleClient = { x: cx, y: cy };
+            this.touchLastPinchState = null;
+          }
+          return;
+        }
 
         if (
           isLeftButton &&
@@ -725,12 +792,56 @@ export class MeshEditorService {
         this.lastPointerX = this.scene.pointerX;
         this.lastPointerY = this.scene.pointerY;
 
-        const evt = pointerInfo.event as MouseEvent;
+        const evt = rawEvt as PointerEvent | undefined;
         if (evt) {
           const isSnapKey = !!(evt.metaKey || evt.ctrlKey);
           if (this.isSnapModifierActive !== isSnapKey) {
             this.setSnapModifierActive(isSnapKey);
           }
+        }
+
+        if (isTouch && evt) {
+          const pid = typeof evt.pointerId === 'number' ? evt.pointerId : 0;
+          const cx = evt.clientX ?? this.scene.pointerX;
+          const cy = evt.clientY ?? this.scene.pointerY;
+          if (this.activeTouchPointers.has(pid)) {
+            this.activeTouchPointers.set(pid, { clientX: cx, clientY: cy });
+          }
+
+          if (this.activeTouchPointers.size >= 2) {
+            this.touchTapEligible = false;
+            if (!this.isAnyGizmoDragging()) {
+              const nextPinch = this.getTouchPinchState();
+              if (nextPinch && this.touchLastPinchState) {
+                this.zoomAndPanTouchCamera(
+                  nextPinch.dist - this.touchLastPinchState.dist,
+                  nextPinch.midX - this.touchLastPinchState.midX,
+                  nextPinch.midY - this.touchLastPinchState.midY
+                );
+              }
+              this.touchLastPinchState = nextPinch;
+            }
+          } else if (this.activeTouchPointers.size === 1) {
+            const touchDist = Math.hypot(cx - touchDownClient.x, cy - touchDownClient.y);
+            if (touchDist > 10) {
+              this.touchTapEligible = false;
+            }
+            if (
+              this.touchOrbitActive &&
+              this.touchLastSingleClient &&
+              !this.isAnyGizmoDragging() &&
+              !this.voxelPainter?.isActive &&
+              !this.sculptController?.isStrokeActive &&
+              !this.weightPaintController?.isStrokeActive
+            ) {
+              this.orbitTouchCamera(
+                cx - this.touchLastSingleClient.x,
+                cy - this.touchLastSingleClient.y
+              );
+            }
+            this.touchLastSingleClient = { x: cx, y: cy };
+          }
+          return;
         }
 
         if (
@@ -757,7 +868,7 @@ export class MeshEditorService {
         this.lastPointerX = this.scene.pointerX;
         this.lastPointerY = this.scene.pointerY;
 
-        const evt = pointerInfo.event as MouseEvent;
+        const evt = rawEvt as PointerEvent | undefined;
         if (evt) {
           const isSnapKey = !!(evt.metaKey || evt.ctrlKey);
           if (this.isSnapModifierActive !== isSnapKey) {
@@ -771,10 +882,30 @@ export class MeshEditorService {
         this.isMarqueeActive = false;
         this.hideMarqueeVisual();
 
-        const dist = Math.hypot(
+        let dist = Math.hypot(
           this.scene.pointerX - pointerDownPos.x,
           this.scene.pointerY - pointerDownPos.y
         );
+
+        if (isTouch && evt) {
+          const pid = typeof evt.pointerId === 'number' ? evt.pointerId : 0;
+          const cx = evt.clientX ?? this.scene.pointerX;
+          const cy = evt.clientY ?? this.scene.pointerY;
+          dist = Math.hypot(cx - touchDownClient.x, cy - touchDownClient.y);
+          this.activeTouchPointers.delete(pid);
+          if (this.activeTouchPointers.size < 2) {
+            this.touchLastPinchState = null;
+          }
+          const allowTouchTap = this.touchTapEligible && dist <= 10;
+          if (this.activeTouchPointers.size === 0) {
+            this.touchOrbitActive = false;
+            this.touchLastSingleClient = null;
+            this.touchTapEligible = false;
+          }
+          if (!allowTouchTap) {
+            return;
+          }
+        }
 
         // If placement mode is active
         if (this.isPlaceModeActive) {
@@ -801,7 +932,7 @@ export class MeshEditorService {
         }
 
         // If a marquee selection rectangle was dragged (> 6px)
-        if (wasMarquee && dist > 6) {
+        if (!isTouch && wasMarquee && dist > 6) {
           const minX = Math.min(startPointer.x, this.scene.pointerX);
           const maxX = Math.max(startPointer.x, this.scene.pointerX);
           const minY = Math.min(startPointer.y, this.scene.pointerY);
@@ -812,7 +943,7 @@ export class MeshEditorService {
           return;
         }
 
-        if (dist > 6) return; // Camera orbit or drag, ignore click
+        if (!isTouch && dist > 6) return; // Camera orbit or drag, ignore click
 
         const pick = pointerInfo.pickInfo;
 
@@ -845,6 +976,66 @@ export class MeshEditorService {
         }
       }
     });
+  }
+
+  private getTouchPinchState(): { midX: number; midY: number; dist: number } | null {
+    if (this.activeTouchPointers.size < 2) return null;
+    const pts = Array.from(this.activeTouchPointers.values());
+    const p1 = pts[0];
+    const p2 = pts[1];
+    return {
+      midX: (p1.clientX + p2.clientX) * 0.5,
+      midY: (p1.clientY + p2.clientY) * 0.5,
+      dist: Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY),
+    };
+  }
+
+  private orbitTouchCamera(dx: number, dy: number): void {
+    if (!this.camera || (dx === 0 && dy === 0)) return;
+    const offset = this.camera.position.subtract(this.touchOrbitTarget);
+    const radius = Math.max(0.1, offset.length());
+
+    const rotSpeed = 0.0055;
+    let theta = Math.atan2(offset.x, offset.z) + dx * rotSpeed;
+    let phi = Math.acos(Math.max(-1, Math.min(1, offset.y / radius))) - dy * rotSpeed;
+    phi = Math.max(0.05, Math.min(Math.PI - 0.05, phi));
+
+    const sinPhi = Math.sin(phi);
+    this.camera.position.set(
+      this.touchOrbitTarget.x + radius * sinPhi * Math.sin(theta),
+      this.touchOrbitTarget.y + radius * Math.cos(phi),
+      this.touchOrbitTarget.z + radius * sinPhi * Math.cos(theta)
+    );
+    this.camera.rotationQuaternion = null;
+    this.camera.setTarget(this.touchOrbitTarget);
+  }
+
+  private zoomAndPanTouchCamera(dPinch: number, dMidX: number, dMidY: number): void {
+    if (!this.camera) return;
+
+    if (dMidX !== 0 || dMidY !== 0) {
+      this.camera.computeWorldMatrix();
+      const worldMat = this.camera.getWorldMatrix();
+      const right = Vector3.TransformNormal(Vector3.Right(), worldMat).normalize();
+      const up = Vector3.TransformNormal(Vector3.Up(), worldMat).normalize();
+      const dist = Math.max(0.5, Vector3.Distance(this.camera.position, this.touchOrbitTarget));
+      const panScale = dist * 0.0018;
+      const panDelta = right.scale(-dMidX * panScale).addInPlace(up.scale(dMidY * panScale));
+      this.camera.position.addInPlace(panDelta);
+      this.touchOrbitTarget.addInPlace(panDelta);
+    }
+
+    if (dPinch !== 0) {
+      const toCam = this.camera.position.subtract(this.touchOrbitTarget);
+      const currentDist = Math.max(0.1, toCam.length());
+      const zoomFactor = Math.max(0.5, Math.min(2.0, 1 - dPinch * 0.005));
+      const nextDist = Math.max(0.15, Math.min(5000, currentDist * zoomFactor));
+      toCam.normalize().scaleInPlace(nextDist);
+      this.camera.position.copyFrom(this.touchOrbitTarget).addInPlace(toCam);
+    }
+
+    this.camera.rotationQuaternion = null;
+    this.camera.setTarget(this.touchOrbitTarget);
   }
 
   public isGroupNode(node: any): boolean {
@@ -8642,6 +8833,7 @@ export class MeshEditorService {
     this.camera.rotationQuaternion = null;
     this.camera.position.set(camX, camY, camZ);
     this.camera.setTarget(center);
+    this.touchOrbitTarget.copyFrom(center);
   }
 
   public focusOnTarget(target: TransformNode): void {
@@ -8706,6 +8898,7 @@ export class MeshEditorService {
     this.camera.rotationQuaternion = null;
     this.camera.position.set(camX, camY, camZ);
     this.camera.setTarget(center);
+    this.touchOrbitTarget.copyFrom(center);
   }
 
   public resetCamera(): void {
@@ -8714,7 +8907,8 @@ export class MeshEditorService {
     this.camera.speed = 0.4;
     this.camera.rotationQuaternion = null;
     this.camera.position.set(0, 2.5, -6);
-    this.camera.setTarget(new Vector3(0, 1, 0));
+    this.touchOrbitTarget.set(0, 1, 0);
+    this.camera.setTarget(this.touchOrbitTarget);
   }
 
   public setClearColor(hex: string): void {

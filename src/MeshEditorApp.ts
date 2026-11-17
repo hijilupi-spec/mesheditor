@@ -3630,25 +3630,50 @@ export class MeshEditorApp {
     });
   }
 
+  private isCompactViewport(): boolean {
+    const containerWidth = this.rootContainer?.clientWidth;
+    const width =
+      containerWidth && containerWidth > 0
+        ? containerWidth
+        : typeof window !== 'undefined'
+        ? window.innerWidth
+        : 1280;
+    return width <= 1024;
+  }
+
+  private applyDialogMinimizedState(dialog: HTMLElement, minimized: boolean): void {
+    dialog.classList.toggle('minimized', minimized);
+    if (minimized) {
+      dialog.classList.remove('active-focus');
+    }
+    if (dialog.id === 'dialog-outliner') {
+      if (minimized) {
+        dialog.style.bottom = 'auto';
+        dialog.style.height = 'auto';
+      } else {
+        dialog.style.bottom = '';
+        dialog.style.height = '';
+      }
+    }
+    const btnMin = dialog.querySelector('.btn-min') as HTMLElement | null;
+    if (btnMin) {
+      btnMin.innerHTML = `<i class="app-icon" data-lucide="${minimized ? 'plus' : 'minus'}"></i>`;
+      btnMin.title = minimized ? 'Expand' : 'Minimize';
+      if (minimized) {
+        btnMin.blur();
+      }
+    }
+  }
+
   public toggleDialogMinimize(dialog: HTMLElement, forceState?: boolean): void {
     const isCurrentlyMin = dialog.classList.contains('minimized');
     const willBeMin = forceState !== undefined ? forceState : !isCurrentlyMin;
     const tool = this.getToolByDialogId(dialog.id);
 
+    this.applyDialogMinimizedState(dialog, willBeMin);
     if (willBeMin) {
-      dialog.classList.add('minimized');
-      dialog.classList.remove('active-focus');
-      if (dialog.id === 'dialog-outliner') {
-        dialog.style.bottom = 'auto';
-        dialog.style.height = 'auto';
-      }
       tool?.onMinimize?.(this);
     } else {
-      dialog.classList.remove('minimized');
-      if (dialog.id === 'dialog-outliner') {
-        dialog.style.bottom = '';
-        dialog.style.height = '';
-      }
       if (this.layoutMode === 'stackpanel') {
         this.accordionMinimizeOthers(dialog);
       }
@@ -3659,12 +3684,6 @@ export class MeshEditorApp {
       }
     }
 
-    const btnMin = dialog.querySelector('.btn-min') as HTMLElement | null;
-    if (btnMin) {
-      btnMin.innerHTML = `<i class="app-icon" data-lucide="${willBeMin ? 'plus' : 'minus'}"></i>`;
-      btnMin.title = willBeMin ? 'Expand' : 'Minimize';
-      btnMin.blur();
-    }
     this.refreshIcons();
     this.updatePanelButtonStates();
     this.saveDialogLayout();
@@ -3678,14 +3697,7 @@ export class MeshEditorApp {
 
       if (isSidebarPanel && other.closest('.stackpanel-sidebar') !== null) {
         if (!other.classList.contains('minimized')) {
-          other.classList.add('minimized');
-          other.classList.remove('active-focus');
-          const btnMin = other.querySelector('.btn-min') as HTMLElement | null;
-          if (btnMin) {
-            btnMin.innerHTML = '<i class="app-icon" data-lucide="plus"></i>';
-            btnMin.title = 'Expand';
-            btnMin.blur();
-          }
+          this.applyDialogMinimizedState(other, true);
           const otherTool = this.getToolByDialogId(id);
           otherTool?.onMinimize?.(this);
         }
@@ -4582,14 +4594,20 @@ export class MeshEditorApp {
           if (dialog) {
             dialog.style.display = tool.defaultOpen ? 'flex' : 'none';
             if (tool.defaultOpen) {
-              dialog.classList.remove('minimized');
+              this.applyDialogMinimizedState(dialog, false);
             }
           }
           if (!tool.defaultOpen) {
             tool.onClose?.(this);
           }
         }
+        const outliner = this.getElement('dialog-outliner');
+        if (this.isCompactViewport() && outliner && outliner.style.display !== 'none') {
+          this.applyDialogMinimizedState(outliner, true);
+          this.getToolByDialogId('dialog-outliner')?.onMinimize?.(this);
+        }
         this.updatePanelButtonStates();
+        this.refreshIcons();
         this.saveDialogLayout();
         return;
       }
@@ -4628,21 +4646,7 @@ export class MeshEditorApp {
 
         // Restore minimized state
         const isMin = !!state.minimized;
-        dialog.classList.toggle('minimized', isMin);
-        if (id === 'dialog-outliner') {
-          if (isMin) {
-            dialog.style.bottom = 'auto';
-            dialog.style.height = 'auto';
-          } else {
-            dialog.style.bottom = '';
-            dialog.style.height = '';
-          }
-        }
-        const btnMin = dialog.querySelector('.btn-min') as HTMLElement | null;
-        if (btnMin) {
-          btnMin.innerHTML = `<i class="app-icon" data-lucide="${isMin ? 'plus' : 'minus'}"></i>`;
-          btnMin.title = isMin ? 'Expand' : 'Minimize';
-        }
+        this.applyDialogMinimizedState(dialog, isMin);
       }
 
       // Safeguard: If every default panel is closed, activate standard panels
@@ -4658,6 +4662,12 @@ export class MeshEditorApp {
           const d = this.getElement(id);
           if (d) d.style.display = 'flex';
         }
+      }
+
+      // On compact viewports (<= 1024px), always start with Scene Objects minimized
+      const outliner = this.getElement('dialog-outliner');
+      if (this.isCompactViewport() && outliner && outliner.style.display !== 'none') {
+        this.applyDialogMinimizedState(outliner, true);
       }
 
       // Synchronize tool lifecycle state from open dialogs
