@@ -99,6 +99,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Circle,
   CircleDot,
@@ -228,6 +229,7 @@ export const editorIcons = {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Circle,
   CircleDot,
@@ -419,6 +421,7 @@ export class MeshEditorApp {
 
   // Layout Mode
   public layoutMode: 'floating' | 'stackpanel' = 'stackpanel';
+  public isStackpanelDrawerCollapsed: boolean = false;
   private onFullscreenChangeHandler: (() => void) | null = null;
 
   // Compress Model Tool State
@@ -1279,6 +1282,16 @@ export class MeshEditorApp {
       this.setLayoutMode('stackpanel');
     });
 
+    // Stackpanel Drawer Toggle
+    try {
+      this.isStackpanelDrawerCollapsed = localStorage.getItem('mesheditor_stackpanel_drawer_collapsed') === 'true';
+    } catch {
+      this.isStackpanelDrawerCollapsed = false;
+    }
+    this.getElement('btnStackpanelDrawerToggle')?.addEventListener('click', () => {
+      this.toggleStackpanelDrawer();
+    });
+
     // Fullscreen toggle
     this.getElement('btnToggleFullscreen')?.addEventListener('click', () => {
       this.closeAllDropdowns();
@@ -1624,7 +1637,73 @@ export class MeshEditorApp {
         this.showToast('Switched to Floating windows layout', 'info');
       }
     }
+    this.updateStackpanelDrawerUI();
     this.updatePanelButtonStates();
+  }
+
+  /**
+   * Toggles whether the stackpanel sidebar is minimized into its right-edge drawer.
+   */
+  public toggleStackpanelDrawer(forceCollapsed?: boolean): void {
+    const nextState = forceCollapsed !== undefined ? forceCollapsed : !this.isStackpanelDrawerCollapsed;
+    this.setStackpanelDrawerCollapsed(nextState, true);
+  }
+
+  /**
+   * Minimizes or restores the stackpanel sidebar drawer and optionally persists the state.
+   */
+  public setStackpanelDrawerCollapsed(collapsed: boolean, save: boolean = true): void {
+    this.isStackpanelDrawerCollapsed = collapsed;
+    if (save) {
+      try {
+        localStorage.setItem('mesheditor_stackpanel_drawer_collapsed', String(collapsed));
+      } catch (e) {
+        console.warn('Failed to save stackpanel drawer state to localStorage:', e);
+      }
+    }
+    this.updateStackpanelDrawerUI();
+    this.refreshIcons();
+  }
+
+  private updateStackpanelDrawerUI(): void {
+    const isStack = this.layoutMode === 'stackpanel' || document.body.classList.contains('layout-stackpanel');
+    const sidebar = this.getElement('stackpanelRightSidebar') || document.getElementById('stackpanelRightSidebar');
+    const toggleBtn = this.getElement('btnStackpanelDrawerToggle') || document.getElementById('btnStackpanelDrawerToggle');
+
+    const hasVisibleDialogs = sidebar
+      ? Array.from(sidebar.querySelectorAll(':scope > .floating-dialog')).some(
+          (d) => (d as HTMLElement).style.display !== 'none'
+        )
+      : false;
+
+    const effectiveCollapsed = isStack && this.isStackpanelDrawerCollapsed && hasVisibleDialogs;
+
+    document.body.classList.toggle('stackpanel-drawer-collapsed', effectiveCollapsed);
+    this.rootContainer?.classList.toggle('stackpanel-drawer-collapsed', effectiveCollapsed);
+
+    if (sidebar) {
+      if (effectiveCollapsed) {
+        sidebar.setAttribute('aria-hidden', 'true');
+        sidebar.setAttribute('inert', '');
+      } else {
+        sidebar.removeAttribute('aria-hidden');
+        sidebar.removeAttribute('inert');
+      }
+    }
+
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('is-empty', !isStack || !hasVisibleDialogs);
+      toggleBtn.setAttribute('aria-expanded', String(!effectiveCollapsed));
+      const label = effectiveCollapsed ? 'Expand stackpanel drawer' : 'Minimize stackpanel to drawer';
+      toggleBtn.title = label;
+      toggleBtn.setAttribute('aria-label', label);
+      const iconName = effectiveCollapsed ? 'chevron-left' : 'chevron-right';
+      if (toggleBtn.getAttribute('data-drawer-icon') !== iconName) {
+        toggleBtn.setAttribute('data-drawer-icon', iconName);
+        toggleBtn.innerHTML = `<i class="app-icon" data-lucide="${iconName}"></i>`;
+        this.refreshIcons();
+      }
+    }
   }
 
   private setupFloatingDialog(dialog: HTMLElement): void {
@@ -3694,6 +3773,9 @@ export class MeshEditorApp {
     } else {
       if (this.layoutMode === 'stackpanel') {
         this.accordionMinimizeOthers(dialog);
+        if (this.isStackpanelDrawerCollapsed && dialog.closest('.stackpanel-sidebar')) {
+          this.setStackpanelDrawerCollapsed(false);
+        }
       }
       if (this.isAIGenerating && tool?.isExclusive3DTool) {
         tool.onUpdateUI?.(this);
@@ -3769,6 +3851,9 @@ export class MeshEditorApp {
       }
       if (this.layoutMode === 'stackpanel') {
         this.accordionMinimizeOthers(dialog);
+        if (this.isStackpanelDrawerCollapsed && dialog.closest('.stackpanel-sidebar')) {
+          this.setStackpanelDrawerCollapsed(false);
+        }
       }
 
       // When opening an exclusive 3D tool, deactivate other exclusive 3D tools without closing their dialogs
@@ -5628,6 +5713,7 @@ export class MeshEditorApp {
       btnGrid.classList.toggle('active', !!this.service.sceneParams?.grid);
     }
 
+    this.updateStackpanelDrawerUI();
     this.updateFullscreenButtonState();
   }
 

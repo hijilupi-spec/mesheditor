@@ -214,6 +214,11 @@ export class MeshEditorElement extends HTMLElement {
       if (visible) el.style.removeProperty('display');
       else el.style.setProperty('display', 'none', 'important');
     }
+    const drawerToggle = this.querySelector('#btnStackpanelDrawerToggle') as HTMLElement | null;
+    if (drawerToggle) {
+      if (visible) drawerToggle.style.removeProperty('display');
+      else drawerToggle.style.setProperty('display', 'none', 'important');
+    }
   }
 
   /**

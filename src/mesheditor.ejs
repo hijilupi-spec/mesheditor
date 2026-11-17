@@ -378,6 +378,19 @@
       <!-- Outliner Floating Dialog (Hierarchy Tree of Meshes & Submeshes) -->
       <%- include('./tools/editor/OutlinerEditorTool.ejs') %>
 
+      <!-- Unobtrusive Stackpanel Drawer Toggle -->
+      <button
+        type="button"
+        id="btnStackpanelDrawerToggle"
+        class="stackpanel-drawer-toggle"
+        title="Minimize stackpanel to drawer"
+        aria-label="Minimize stackpanel to drawer"
+        aria-controls="stackpanelRightSidebar"
+        aria-expanded="true"
+      >
+        <i class="app-icon" data-lucide="chevron-right"></i>
+      </button>
+
       <!-- Floating HTML Dialog Containers for dat.GUI (wrapped for Stackpanel mode) -->
       <div id="stackpanelRightSidebar" class="stackpanel-sidebar">
         <%- include('./tools/editor/AIAgentEditorTool.ejs') %>

@@ -548,5 +548,70 @@ test.describe('Mesh Editor E2E Tests', () => {
     expect(result.modelAcceptAttr).toContain('.dae');
     expect(result.importAcceptAttr).toContain('.dae');
   });
+
+  test('13. keeps stackpanel panel widths stable when scrollbar activates and toggles drawer collapse', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+
+    // Ensure stackpanel mode is active
+    await page.locator('#btnDropdownView').click();
+    await page.locator('#btnLayoutStack').click();
+
+    // Measure panel width when sidebar does NOT overflow (single minimized panel)
+    const widthInfo = await page.evaluate(() => {
+      const app = (window as any).meshEditorApp;
+      const sidebar = document.getElementById('stackpanelRightSidebar')!;
+      const dialogs = Array.from(sidebar.querySelectorAll(':scope > .floating-dialog')) as HTMLElement[];
+
+      // Minimize all open dialogs first so sidebar does NOT overflow
+      for (const d of dialogs) {
+        if (d.style.display !== 'none') {
+          app.toggleDialogMinimize(d, true);
+        }
+      }
+      const firstVisible = dialogs.find((d) => d.style.display !== 'none')!;
+      const noScrollOverflow = sidebar.scrollHeight > sidebar.clientHeight;
+      const widthWithoutScroll = firstVisible.getBoundingClientRect().width;
+
+      // Expand a tall panel (and open more if needed) so sidebar DOES overflow and scrollbar activates
+      app.toggleDialog('dialog-ai-agent', true);
+      app.toggleDialog('dialog-material', true);
+      app.toggleDialogMinimize(firstVisible, false);
+      // Force enough height if viewport is tall
+      sidebar.style.maxHeight = '220px';
+      const hasScrollOverflow = sidebar.scrollHeight > sidebar.clientHeight;
+      const widthWithScroll = firstVisible.getBoundingClientRect().width;
+      sidebar.style.maxHeight = '';
+
+      return {
+        noScrollOverflow,
+        hasScrollOverflow,
+        widthWithoutScroll,
+        widthWithScroll,
+      };
+    });
+
+    expect(widthInfo.noScrollOverflow).toBe(false);
+    expect(widthInfo.hasScrollOverflow).toBe(true);
+    expect(widthInfo.widthWithScroll).toBe(widthInfo.widthWithoutScroll);
+
+    // Test unobtrusive stackpanel drawer toggle
+    const drawerToggle = page.locator('#btnStackpanelDrawerToggle');
+    const sidebar = page.locator('#stackpanelRightSidebar');
+    await expect(drawerToggle).toBeVisible();
+    await expect(drawerToggle).toHaveAttribute('aria-expanded', 'true');
+
+    await drawerToggle.click();
+    await expect(drawerToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(sidebar).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.locator('body')).toHaveClass(/stackpanel-drawer-collapsed/);
+
+    // Expand drawer again
+    await drawerToggle.click();
+    await expect(drawerToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('body')).not.toHaveClass(/stackpanel-drawer-collapsed/);
+  });
 });
 

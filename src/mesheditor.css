@@ -21,6 +21,10 @@ mesh-editor,
   --radius-md: 10px;
   --radius-lg: 14px;
   --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --stackpanel-width: 340px;
+  --stackpanel-right: 12px;
+  --stackpanel-top: 66px;
+  --stackpanel-bottom: 42px;
 }
 
 * {
@@ -651,15 +655,21 @@ body.layout-stackpanel #stackpanelRightSidebar,
 #app-container.layout-stackpanel #stackpanelRightSidebar,
 body.layout-stackpanel .toolstackpanel,
 #app-container.layout-stackpanel .toolstackpanel {
+  --scrollbar-thumb: rgba(255, 255, 255, 0.42);
+  --scrollbar-track: transparent;
   display: flex !important;
   flex-direction: column !important;
   position: absolute !important;
-  right: 12px !important;
-  top: 66px !important;
-  bottom: 42px !important;
-  width: 340px !important;
+  right: var(--stackpanel-right) !important;
+  top: var(--stackpanel-top) !important;
+  bottom: var(--stackpanel-bottom) !important;
+  width: var(--stackpanel-width) !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  overscroll-behavior: contain;
   gap: 8px !important;
   z-index: 100 !important;
   pointer-events: none !important;
@@ -669,16 +679,159 @@ body.layout-stackpanel .toolstackpanel,
   -webkit-backdrop-filter: none !important;
   box-shadow: none !important;
   border: none !important;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
 }
 
-body.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar,
-#app-container.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar {
-  width: 6px;
+@supports not (scrollbar-color: auto) {
+  body.layout-stackpanel .stackpanel-sidebar,
+  #app-container.layout-stackpanel .stackpanel-sidebar,
+  body.layout-stackpanel #stackpanelRightSidebar,
+  #app-container.layout-stackpanel #stackpanelRightSidebar,
+  body.layout-stackpanel .toolstackpanel,
+  #app-container.layout-stackpanel .toolstackpanel {
+    scrollbar-width: auto;
+  }
+
+  body.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar,
+  #app-container.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar,
+  body.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar,
+  #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar,
+  body.layout-stackpanel .toolstackpanel::-webkit-scrollbar,
+  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  body.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar-track,
+  #app-container.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar-track,
+  body.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-track,
+  #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-track,
+  body.layout-stackpanel .toolstackpanel::-webkit-scrollbar-track,
+  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  body.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar-thumb,
+  #app-container.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar-thumb,
+  body.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-thumb,
+  #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-thumb,
+  body.layout-stackpanel .toolstackpanel::-webkit-scrollbar-thumb,
+  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
+  }
 }
-body.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar-thumb,
-#app-container.layout-stackpanel .stackpanel-sidebar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
+
+/* Stackpanel Drawer Toggle & Collapsed Drawer State */
+.stackpanel-drawer-toggle {
+  display: none;
+  position: absolute;
+  top: calc(var(--stackpanel-top) + 4px);
+  right: calc(var(--stackpanel-right) + var(--stackpanel-width) - 1px);
+  width: 16px;
+  height: 24px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px 0 0 6px;
+  border: 1px solid var(--border-color);
+  border-right: none;
+  background: rgba(22, 27, 34, 0.52);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text-secondary);
+  opacity: 0.55;
+  cursor: pointer;
+  z-index: 99;
+  outline: none;
+  touch-action: manipulation;
+  transition:
+    right 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.16s ease,
+    height 0.16s ease,
+    opacity 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease;
+}
+
+body.layout-stackpanel .stackpanel-drawer-toggle,
+#app-container.layout-stackpanel .stackpanel-drawer-toggle {
+  display: flex;
+}
+
+body.layout-stackpanel .stackpanel-drawer-toggle.is-empty,
+#app-container.layout-stackpanel .stackpanel-drawer-toggle.is-empty {
+  display: none;
+}
+
+.stackpanel-drawer-toggle .app-icon {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+
+.stackpanel-drawer-toggle:hover,
+.stackpanel-drawer-toggle:focus-visible {
+  opacity: 1;
+  width: 18px;
+  background: rgba(30, 37, 48, 0.92);
+  color: var(--text-primary);
+  border-color: rgba(88, 166, 255, 0.45);
+}
+
+.stackpanel-drawer-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.35);
+}
+
+body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar,
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar,
+body.layout-stackpanel.stackpanel-drawer-collapsed #stackpanelRightSidebar,
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed #stackpanelRightSidebar,
+body.layout-stackpanel.stackpanel-drawer-collapsed .toolstackpanel,
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .toolstackpanel {
+  transform: translateX(calc(100% + var(--stackpanel-right) + 12px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar .floating-dialog,
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar .floating-dialog {
+  pointer-events: none !important;
+}
+
+body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle {
+  right: 0;
+  width: 20px;
+  height: 46px;
+  border-radius: 8px 0 0 8px;
+  background: rgba(22, 27, 34, 0.72);
+  opacity: 0.75;
+}
+
+body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:hover,
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:hover,
+body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:focus-visible,
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:focus-visible {
+  width: 24px;
+  opacity: 1;
+  background: rgba(22, 27, 34, 0.94);
+  color: var(--accent-hover);
+  border-color: rgba(88, 166, 255, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-stackpanel .stackpanel-sidebar,
+  #app-container.layout-stackpanel .stackpanel-sidebar,
+  body.layout-stackpanel #stackpanelRightSidebar,
+  #app-container.layout-stackpanel #stackpanelRightSidebar,
+  body.layout-stackpanel .toolstackpanel,
+  #app-container.layout-stackpanel .toolstackpanel,
+  .stackpanel-drawer-toggle,
+  .stackpanel-drawer-toggle .app-icon {
+    transition: none;
+  }
 }
 
 body.layout-stackpanel .stackpanel-sidebar .floating-dialog,
@@ -1557,34 +1710,32 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
 }
 
 @media (max-width: 1024px) {
+  :root,
+  mesh-editor,
+  #app-container {
+    --stackpanel-width: min(290px, calc(100vw - 24px));
+  }
+
   body.layout-stackpanel #dialog-outliner,
   #app-container.layout-stackpanel #dialog-outliner {
     width: min(280px, calc(100vw - 24px)) !important;
   }
-
-  body.layout-stackpanel .stackpanel-sidebar,
-  #app-container.layout-stackpanel .stackpanel-sidebar,
-  body.layout-stackpanel #stackpanelRightSidebar,
-  #app-container.layout-stackpanel #stackpanelRightSidebar {
-    width: min(290px, calc(100vw - 24px)) !important;
-  }
 }
 
 @media (max-width: 768px) {
+  :root,
+  mesh-editor,
+  #app-container {
+    --stackpanel-width: min(255px, calc(100vw - 12px));
+    --stackpanel-right: 6px;
+    --stackpanel-top: 58px;
+  }
+
   body.layout-stackpanel #dialog-outliner,
   #app-container.layout-stackpanel #dialog-outliner {
     left: 6px !important;
     top: 58px !important;
     width: min(250px, calc(100vw - 12px)) !important;
-  }
-
-  body.layout-stackpanel .stackpanel-sidebar,
-  #app-container.layout-stackpanel .stackpanel-sidebar,
-  body.layout-stackpanel #stackpanelRightSidebar,
-  #app-container.layout-stackpanel #stackpanelRightSidebar {
-    right: 6px !important;
-    top: 58px !important;
-    width: min(255px, calc(100vw - 12px)) !important;
   }
 }
 
@@ -1699,6 +1850,17 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
   .touch-ctrl-btn {
     height: 32px;
     padding: 0 10px;
+  }
+
+  .stackpanel-drawer-toggle {
+    width: 22px;
+    height: 40px;
+  }
+
+  body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
+  #app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle {
+    width: 26px;
+    height: 52px;
   }
 }
 

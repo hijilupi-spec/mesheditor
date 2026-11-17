@@ -1291,4 +1291,52 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     await new Promise((r) => setTimeout(r, 30));
     expect(app.service.importedMeshes.length).toBeGreaterThan(beforeTextCount);
   });
+
+  it('toggles stackpanel drawer collapse, persists state, and auto-expands when opening a sidebar tool', () => {
+    localStorage.removeItem('mesheditor_layout_mode');
+    localStorage.removeItem('mesheditor_stackpanel_drawer_collapsed');
+
+    app = new MeshEditorApp({
+      container,
+      engine,
+      layoutMode: 'stackpanel',
+    });
+
+    const toggleBtn = container.querySelector('#btnStackpanelDrawerToggle') as HTMLButtonElement | null;
+    const sidebar = container.querySelector('#stackpanelRightSidebar') as HTMLElement | null;
+    expect(toggleBtn).not.toBeNull();
+    expect(sidebar).not.toBeNull();
+    expect(app.isStackpanelDrawerCollapsed).toBe(false);
+    expect(toggleBtn?.getAttribute('aria-expanded')).toBe('true');
+    expect(toggleBtn?.classList.contains('is-empty')).toBe(false);
+
+    // Click drawer toggle to minimize stackpanel into drawer
+    toggleBtn?.click();
+    expect(app.isStackpanelDrawerCollapsed).toBe(true);
+    expect(document.body.classList.contains('stackpanel-drawer-collapsed')).toBe(true);
+    expect(sidebar?.hasAttribute('inert')).toBe(true);
+    expect(sidebar?.getAttribute('aria-hidden')).toBe('true');
+    expect(toggleBtn?.getAttribute('aria-expanded')).toBe('false');
+    expect(localStorage.getItem('mesheditor_stackpanel_drawer_collapsed')).toBe('true');
+
+    // Switching to floating mode clears drawer collapsed class & inert state
+    app.setLayoutMode('floating', false);
+    expect(document.body.classList.contains('stackpanel-drawer-collapsed')).toBe(false);
+    expect(sidebar?.hasAttribute('inert')).toBe(false);
+
+    // Switching back to stackpanel restores drawer collapsed state
+    app.setLayoutMode('stackpanel', false);
+    expect(document.body.classList.contains('stackpanel-drawer-collapsed')).toBe(true);
+    expect(sidebar?.hasAttribute('inert')).toBe(true);
+
+    // Opening a sidebar tool automatically expands the drawer
+    app.toggleDialog('dialog-material', true);
+    expect(app.isStackpanelDrawerCollapsed).toBe(false);
+    expect(document.body.classList.contains('stackpanel-drawer-collapsed')).toBe(false);
+    expect(sidebar?.hasAttribute('inert')).toBe(false);
+    expect(toggleBtn?.getAttribute('aria-expanded')).toBe('true');
+
+    // Clean up localStorage
+    localStorage.removeItem('mesheditor_stackpanel_drawer_collapsed');
+  });
 });
