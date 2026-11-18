@@ -547,6 +547,7 @@ export class MeshEditorService {
     this.decalController?.setActive(false);
     this.textMeshController?.setSurfacePlacementActive(false);
     if (this.engine) {
+      this.engine.stopRenderLoop();
       this.engine.dispose();
     }
   }

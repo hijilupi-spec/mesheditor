@@ -447,7 +447,10 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     expect(updatedCategoryToolNames[0]).toBe(movedTool?.name);
 
     // Verify restoring from localStorage in a fresh app instance
-    const freshApp = new MeshEditorApp({
+    app.dispose();
+    container.innerHTML = '';
+    engine = new NullEngine();
+    app = new MeshEditorApp({
       container,
       engine,
       layoutMode: 'stackpanel',

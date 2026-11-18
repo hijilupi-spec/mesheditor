@@ -439,6 +439,11 @@ export class MeshEditorApp {
   private sceneLoaderStopBtn: HTMLButtonElement | null = null;
   private startupTimerIds: Array<ReturnType<typeof setTimeout>> = [];
   private sceneLoaderTimerId: ReturnType<typeof setTimeout> | null = null;
+  private refreshIconTimerIds: Array<ReturnType<typeof setTimeout>> = [];
+  private toastTimerId: ReturnType<typeof setTimeout> | null = null;
+  private initialFocusRafId: number | null = null;
+  private isDisposed: boolean = false;
+  private globalListenerCleanups: Array<() => void> = [];
 
   // Built-in Editor Tools & Abstracted Dialog IDs
   public readonly editorTools: ToolInterface[] = getBuiltinEditorTools();
@@ -871,8 +876,35 @@ export class MeshEditorApp {
     }
 
     // Set initial focus on canvas so WASD & camera navigation works immediately
-    requestAnimationFrame(() => {
-      this.focusCanvasIfIdle();
+    this.initialFocusRafId = requestAnimationFrame(() => {
+      this.initialFocusRafId = null;
+      if (!this.isDisposed) {
+        this.focusCanvasIfIdle();
+      }
+    });
+  }
+
+  private addGlobalListener<K extends keyof WindowEventMap>(
+    target: Window,
+    type: K,
+    listener: (this: Window, ev: WindowEventMap[K]) => any,
+    options?: boolean | AddEventListenerOptions
+  ): void;
+  private addGlobalListener<K extends keyof DocumentEventMap>(
+    target: Document,
+    type: K,
+    listener: (this: Document, ev: DocumentEventMap[K]) => any,
+    options?: boolean | AddEventListenerOptions
+  ): void;
+  private addGlobalListener(
+    target: EventTarget,
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions
+  ): void {
+    target.addEventListener(type, listener, options);
+    this.globalListenerCleanups.push(() => {
+      target.removeEventListener(type, listener, options);
     });
   }
 
@@ -927,6 +959,13 @@ export class MeshEditorApp {
   }
 
   public dispose(): void {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
+
+    if (this.initialFocusRafId !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.initialFocusRafId);
+      this.initialFocusRafId = null;
+    }
     for (const timer of this.startupTimerIds) {
       clearTimeout(timer);
     }
@@ -935,10 +974,22 @@ export class MeshEditorApp {
       clearTimeout(this.sceneLoaderTimerId);
       this.sceneLoaderTimerId = null;
     }
+    for (const timer of this.refreshIconTimerIds) {
+      clearTimeout(timer);
+    }
+    this.refreshIconTimerIds = [];
+    if (this.toastTimerId) {
+      clearTimeout(this.toastTimerId);
+      this.toastTimerId = null;
+    }
     this.clearToolsHoverPreviewTimer();
     this.submenuBridgeCleanup?.();
     this.submenuBridgeCleanup = null;
     this.stopSpeechRecognition();
+    for (const cleanup of this.globalListenerCleanups) {
+      cleanup();
+    }
+    this.globalListenerCleanups = [];
     if (this.onFullscreenChangeHandler && typeof document !== 'undefined') {
       document.removeEventListener('fullscreenchange', this.onFullscreenChangeHandler);
       document.removeEventListener('webkitfullscreenchange', this.onFullscreenChangeHandler);
@@ -956,6 +1007,36 @@ export class MeshEditorApp {
       window.removeEventListener('focus', this.onWindowFocusHandler);
       this.onWindowFocusHandler = null;
     }
+
+    // Stop dat.GUI .listen() requestAnimationFrame loops and remove window listeners
+    const destroyDatGui = (gui?: dat.GUI) => {
+      if (!gui) return;
+      const stopListeningRecursively = (g: any) => {
+        if (Array.isArray(g.__listening)) {
+          g.__listening.length = 0;
+        }
+        if (g.__folders && typeof g.__folders === 'object') {
+          for (const sub of Object.values(g.__folders)) {
+            stopListeningRecursively(sub);
+          }
+        }
+      };
+      stopListeningRecursively(gui);
+      try {
+        gui.destroy();
+      } catch {
+        // Ignore if DOM nodes were already removed
+      }
+    };
+    destroyDatGui(this.guiScene);
+    destroyDatGui(this.guiMesh);
+    destroyDatGui(this.guiMaterial);
+    destroyDatGui(this.guiAnim);
+    destroyDatGui(this.guiTextures);
+    destroyDatGui(this.guiCreate);
+    destroyDatGui(this.guiCSG);
+    destroyDatGui(this.guiFacet);
+
     this.adapter.dispose?.();
     for (const plugin of this.pluginManager.getAllPlugins()) {
       this.pluginManager.unregister(plugin.id);
@@ -1338,7 +1419,7 @@ export class MeshEditorApp {
     setupDropdown('dropdownView', 'btnDropdownView', 'menuView');
 
     // Close on outside click
-    document.addEventListener('click', (e) => {
+    this.addGlobalListener(document, 'click', (e) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.dropdown-wrapper') && !target.closest('.dropdown-menu[popover]')) {
         this.closeAllDropdowns();
@@ -1346,7 +1427,7 @@ export class MeshEditorApp {
     });
 
     // Close on Escape key
-    document.addEventListener('keydown', (e) => {
+    this.addGlobalListener(document, 'keydown', (e) => {
       if (e.key === 'Escape') {
         this.closeAllDropdowns();
         this.closeExportDialog();
@@ -2297,7 +2378,7 @@ export class MeshEditorApp {
     el.className = `${baseClass} is-${type}`;
     el.style.display = 'flex';
     el.innerHTML = `<i class="app-icon" data-lucide="${iconMap[type]}"></i><span>${this.escapeHtml(cleanMsg)}</span>`;
-    this.refreshIcons();
+    createIcons({ icons: editorIcons, root: el });
   }
 
   /**
@@ -2397,6 +2478,7 @@ export class MeshEditorApp {
         this.service.aiAgent
           .fetchAvailableModels()
           .then((models) => {
+            if (this.isDisposed) return;
             if (models.length > 0) {
               const current = this.service.aiAgent.getConfig().model;
               const unique = Array.from(new Set([current, ...models].filter(Boolean)));
@@ -3080,7 +3162,9 @@ export class MeshEditorApp {
     // Refresh dynamic skills from local dev server/bridge if available
     if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
       this.service.aiAgent.fetchSkillsFromApi().then(() => {
-        this.renderAISkills();
+        if (!this.isDisposed) {
+          this.renderAISkills();
+        }
       });
     }
   }
@@ -6370,7 +6454,7 @@ export class MeshEditorApp {
       }
     });
 
-    window.addEventListener('keydown', (e: KeyboardEvent) => {
+    this.addGlobalListener(window, 'keydown', (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'Enter') {
         closeAllColorPickers();
       }
@@ -6817,7 +6901,7 @@ export class MeshEditorApp {
     // Drag & Drop
     const dropZone = document.getElementById('dropOverlay') || document.getElementById('drop-zone');
 
-    window.addEventListener('dragover', (e) => {
+    this.addGlobalListener(window, 'dragover', (e) => {
       // Do not activate file drop overlay if an internal tool is being reordered or AI is generating
       if (this.currentDraggedStackpanelDialog || this.isAIGenerating) {
         if (dropZone) dropZone.classList.remove('active');
@@ -6836,7 +6920,7 @@ export class MeshEditorApp {
       if (dropZone) dropZone.classList.add('active');
     });
 
-    window.addEventListener('dragleave', (e) => {
+    this.addGlobalListener(window, 'dragleave', (e) => {
       if (e.clientX <= 0 || e.clientY <= 0) {
         if (dropZone) dropZone.classList.remove('active');
       }
@@ -6880,7 +6964,7 @@ export class MeshEditorApp {
       return collected;
     };
 
-    window.addEventListener('drop', async (e) => {
+    this.addGlobalListener(window, 'drop', async (e) => {
       if (dropZone) dropZone.classList.remove('active');
       if (this.currentDraggedStackpanelDialog || this.isAIGenerating) return;
       const types = e.dataTransfer?.types;
@@ -6966,7 +7050,7 @@ export class MeshEditorApp {
       );
     };
 
-    window.addEventListener('keydown', (e: KeyboardEvent) => {
+    this.addGlobalListener(window, 'keydown', (e: KeyboardEvent) => {
       const settingsModal = this.getElement<HTMLDialogElement>('settingsModal');
       if (settingsModal?.open) {
         if (e.key === 'Escape') {
@@ -7157,7 +7241,7 @@ export class MeshEditorApp {
       }
     });
 
-    window.addEventListener('keyup', (e: KeyboardEvent) => {
+    this.addGlobalListener(window, 'keyup', (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
       if (
         activeEl &&
@@ -7186,7 +7270,7 @@ export class MeshEditorApp {
       }
     });
 
-    window.addEventListener('blur', () => {
+    this.addGlobalListener(window, 'blur', () => {
       this.service.setSnapModifierActive(false);
     });
   }
@@ -7195,12 +7279,18 @@ export class MeshEditorApp {
      NOTIFICATIONS & HELPERS
      ========================================================================= */
   public refreshIcons(): void {
+    if (this.isDisposed) return;
+    for (const timer of this.refreshIconTimerIds) {
+      clearTimeout(timer);
+    }
+    this.refreshIconTimerIds = [];
     const render = () => {
+      if (this.isDisposed) return;
       createIcons({ icons: editorIcons });
     };
     render();
-    setTimeout(render, 60);
-    setTimeout(render, 300);
+    this.refreshIconTimerIds.push(setTimeout(render, 60));
+    this.refreshIconTimerIds.push(setTimeout(render, 300));
   }
 
   /**
@@ -7219,7 +7309,7 @@ export class MeshEditorApp {
   }
 
   public showToast(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info'): void {
-    if (!this.toastText || !this.toastElement) return;
+    if (!this.toastText || !this.toastElement || this.isDisposed) return;
     const cleanMsg = message.replace(/^[\s\p{Emoji}\p{Extended_Pictographic}]+/u, '').trim();
     this.toastText.textContent = cleanMsg;
     this.toastElement.className = `show ${type}`;
@@ -7232,10 +7322,14 @@ export class MeshEditorApp {
     };
     if (this.toastIcon) {
       this.toastIcon.innerHTML = `<i class="app-icon" data-lucide="${iconMap[type] || 'info'}"></i>`;
+      createIcons({ icons: editorIcons, root: this.toastIcon });
     }
-    this.refreshIcons();
 
-    setTimeout(() => {
+    if (this.toastTimerId) {
+      clearTimeout(this.toastTimerId);
+    }
+    this.toastTimerId = setTimeout(() => {
+      this.toastTimerId = null;
       this.toastElement.classList.remove('show');
     }, 3200);
   }
@@ -8301,7 +8395,7 @@ export class MeshEditorApp {
     });
 
     // Close on click outside
-    document.addEventListener('click', (e) => {
+    this.addGlobalListener(document, 'click', (e) => {
       if (wrapper && !wrapper.contains(e.target as unknown as HTMLElement)) {
         wrapper.classList.remove('open');
         menu.style.display = 'none';
