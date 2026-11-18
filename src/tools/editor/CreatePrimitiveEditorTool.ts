@@ -11,7 +11,7 @@ export class CreatePrimitiveEditorTool extends AbstractEditorTool {
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Create Mesh';
   public readonly category = 'Creation';
-  public readonly icon = 'plus-circle';
+  public readonly icon = 'box';
   public readonly order = 3;
   public readonly defaultOpen = true;
   public readonly description =

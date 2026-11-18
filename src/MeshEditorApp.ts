@@ -364,6 +364,11 @@ export interface MeshEditorSettings {
   cameraSpeed: number;
   translateSnap: number;
   rotateSnap: number;
+  meshSelectionColor: string;
+  faceSelectionColor: string;
+  vertexColor: string;
+  vertexSelectionColor: string;
+  voxelToolColor: string;
 }
 
 export const DEFAULT_MESH_EDITOR_SETTINGS: MeshEditorSettings = {
@@ -372,6 +377,11 @@ export const DEFAULT_MESH_EDITOR_SETTINGS: MeshEditorSettings = {
   cameraSpeed: 0.4,
   translateSnap: 0.1,
   rotateSnap: 5,
+  meshSelectionColor: '#3399ff',
+  faceSelectionColor: '#ffcc33',
+  vertexColor: '#00d9ff',
+  vertexSelectionColor: '#ffa61a',
+  voxelToolColor: '#ffd91a',
 };
 
 export class MeshEditorApp {
@@ -444,6 +454,7 @@ export class MeshEditorApp {
   private initialFocusRafId: number | null = null;
   private isDisposed: boolean = false;
   private globalListenerCleanups: Array<() => void> = [];
+  private lastEscapeClosedOverlayEvent: KeyboardEvent | null = null;
 
   // Built-in Editor Tools & Abstracted Dialog IDs
   public readonly editorTools: ToolInterface[] = getBuiltinEditorTools();
@@ -1425,10 +1436,55 @@ export class MeshEditorApp {
     // Close on Escape key
     this.addGlobalListener(document, 'keydown', (e) => {
       if (e.key === 'Escape') {
+        const hadOpenDropdown =
+          this.isMenuPopoverOpen(this.getElement('menuTools')) ||
+          Boolean(this.rootContainer?.querySelector('.dropdown-wrapper.open')) ||
+          Boolean(document.querySelector('.dropdown-wrapper.open'));
+        const exportModal = this.getElement('exportModal');
+        const hadExportModal = Boolean(exportModal?.classList.contains('active'));
+        const screenshotModal = this.getElement<HTMLDialogElement>('screenshotModal');
+        const hadScreenshotModal = Boolean(
+          screenshotModal && (screenshotModal.open || screenshotModal.hasAttribute('open'))
+        );
+        const promptHelpModal = this.getElement('promptHelpModal') || document.getElementById('promptHelpModal');
+        const hadPromptHelp = Boolean(promptHelpModal?.classList.contains('active'));
+        const helpModal = this.getElement('helpModal') || document.getElementById('helpModal');
+        const hadHelpModal = Boolean(helpModal?.classList.contains('active'));
+        const toolHelpModal = this.getElement('toolHelpModal');
+        const hadToolHelpModal = Boolean(toolHelpModal?.classList.contains('active'));
+        const aboutModal = this.getElement('aboutModal') || document.getElementById('aboutModal');
+        const hadAboutModal = Boolean(aboutModal?.classList.contains('active'));
+        const heightmapPaintModal = this.getElement('heightmapPaintModal');
+        const hadHeightmapPaintModal = Boolean(heightmapPaintModal?.classList.contains('active'));
+
         this.closeAllDropdowns();
         this.closeExportDialog();
         this.closeScreenshotDialog();
         this.hidePromptHelp();
+        if (hadHelpModal) {
+          this.closeHelpModal();
+        }
+        if (hadToolHelpModal && toolHelpModal) {
+          toolHelpModal.classList.remove('active');
+          toolHelpModal.style.display = 'none';
+          this.canvas?.focus();
+        }
+        if (hadAboutModal) {
+          this.closeAboutModal();
+        }
+
+        if (
+          hadOpenDropdown ||
+          hadExportModal ||
+          hadScreenshotModal ||
+          hadPromptHelp ||
+          hadHelpModal ||
+          hadToolHelpModal ||
+          hadAboutModal ||
+          hadHeightmapPaintModal
+        ) {
+          this.lastEscapeClosedOverlayEvent = e;
+        }
       }
     });
 
@@ -2184,7 +2240,7 @@ export class MeshEditorApp {
    */
   public closeHelpModal(): void {
     const helpModal = this.getElement('helpModal') || document.getElementById('helpModal');
-    if (helpModal) {
+    if (helpModal && helpModal.classList.contains('active')) {
       helpModal.classList.remove('active');
       this.canvas?.focus();
     }
@@ -2256,6 +2312,41 @@ export class MeshEditorApp {
     ];
   }
 
+  private getColorSettingBindings() {
+    return [
+      {
+        key: 'meshSelectionColor' as const,
+        inputId: 'settingMeshSelectionColor',
+        hexId: 'settingMeshSelectionColorHex',
+        apply: (val: string) => this.service.setMeshSelectionColor(val),
+      },
+      {
+        key: 'faceSelectionColor' as const,
+        inputId: 'settingFaceSelectionColor',
+        hexId: 'settingFaceSelectionColorHex',
+        apply: (val: string) => this.service.setFaceSelectionColor(val),
+      },
+      {
+        key: 'vertexColor' as const,
+        inputId: 'settingVertexColor',
+        hexId: 'settingVertexColorHex',
+        apply: (val: string) => this.service.setVertexColor(val),
+      },
+      {
+        key: 'vertexSelectionColor' as const,
+        inputId: 'settingVertexSelectionColor',
+        hexId: 'settingVertexSelectionColorHex',
+        apply: (val: string) => this.service.setVertexSelectionColor(val),
+      },
+      {
+        key: 'voxelToolColor' as const,
+        inputId: 'settingVoxelToolColor',
+        hexId: 'settingVoxelToolColorHex',
+        apply: (val: string) => this.service.setVoxelToolColor(val),
+      },
+    ];
+  }
+
   private syncSliderVisual(rangeEl: HTMLInputElement, value: number, unit: string): void {
     rangeEl.style.setProperty('--attr-min', rangeEl.min || '0');
     rangeEl.style.setProperty('--attr-max', rangeEl.max || '100');
@@ -2290,6 +2381,12 @@ export class MeshEditorApp {
           binding.apply(clamped);
         }
       }
+      for (const binding of this.getColorSettingBindings()) {
+        const val = parsed[binding.key];
+        if (typeof val === 'string' && val.trim()) {
+          binding.apply(val);
+        }
+      }
     } catch (err) {
       console.warn('Failed to load settings from localStorage:', err);
     }
@@ -2307,6 +2404,11 @@ export class MeshEditorApp {
         cameraSpeed: this.service.sceneParams.cameraSpeed,
         translateSnap: this.service.sceneParams.translateSnap,
         rotateSnap: this.service.sceneParams.rotateSnap,
+        meshSelectionColor: this.service.sceneParams.meshSelectionColor,
+        faceSelectionColor: this.service.sceneParams.faceSelectionColor,
+        vertexColor: this.service.sceneParams.vertexColor,
+        vertexSelectionColor: this.service.sceneParams.vertexSelectionColor,
+        voxelToolColor: this.service.sceneParams.voxelToolColor,
       };
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
     } catch (err) {
@@ -2333,6 +2435,18 @@ export class MeshEditorApp {
       }
       if (numEl) {
         numEl.value = String(currentVal);
+      }
+    }
+
+    for (const binding of this.getColorSettingBindings()) {
+      const currentVal = this.service.sceneParams[binding.key];
+      const inputEl = this.getElement<HTMLInputElement>(binding.inputId);
+      const hexEl = this.getElement<HTMLElement>(binding.hexId);
+      if (inputEl) {
+        inputEl.value = currentVal;
+      }
+      if (hexEl) {
+        hexEl.textContent = currentVal.toUpperCase();
       }
     }
 
@@ -2391,6 +2505,9 @@ export class MeshEditorApp {
     this.service.setCameraSpeed(DEFAULT_MESH_EDITOR_SETTINGS.cameraSpeed);
     this.service.setTranslateSnap(DEFAULT_MESH_EDITOR_SETTINGS.translateSnap);
     this.service.setRotateSnap(DEFAULT_MESH_EDITOR_SETTINGS.rotateSnap);
+    for (const binding of this.getColorSettingBindings()) {
+      binding.apply(DEFAULT_MESH_EDITOR_SETTINGS[binding.key]);
+    }
 
     this.syncSettingsUI();
     this.updatePanelButtonStates();
@@ -2656,6 +2773,27 @@ export class MeshEditorApp {
           this.saveSettingsToStorage();
         });
       }
+    }
+
+    for (const binding of this.getColorSettingBindings()) {
+      const colorEl = this.getElement<HTMLInputElement>(binding.inputId);
+      const hexEl = this.getElement<HTMLElement>(binding.hexId);
+      if (!colorEl) continue;
+
+      const applyAndPersistColor = () => {
+        binding.apply(colorEl.value);
+        const normalized = this.service.sceneParams[binding.key];
+        if (colorEl.value.toLowerCase() !== normalized.toLowerCase()) {
+          colorEl.value = normalized;
+        }
+        if (hexEl) {
+          hexEl.textContent = normalized.toUpperCase();
+        }
+        this.saveSettingsToStorage();
+      };
+
+      colorEl.addEventListener('input', applyAndPersistColor);
+      colorEl.addEventListener('change', applyAndPersistColor);
     }
 
     this.initAISettingsUI();
@@ -7258,13 +7396,40 @@ export class MeshEditorApp {
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         this.service.deleteSelected();
       } else if (e.key === 'Escape') {
+        if (this.lastEscapeClosedOverlayEvent === e) {
+          this.lastEscapeClosedOverlayEvent = null;
+          return;
+        }
+        if (this.service.consumeMarqueeEscape(e)) {
+          return;
+        }
+
+        const hadOpenOverlay =
+          inDropdownMenu ||
+          Boolean(this.getElement('exportModal')?.classList.contains('active')) ||
+          Boolean((this.getElement('aboutModal') || document.getElementById('aboutModal'))?.classList.contains('active')) ||
+          Boolean((this.getElement('helpModal') || document.getElementById('helpModal'))?.classList.contains('active')) ||
+          Boolean(this.getElement('toolHelpModal')?.classList.contains('active')) ||
+          Boolean((this.getElement('promptHelpModal') || document.getElementById('promptHelpModal'))?.classList.contains('active')) ||
+          Boolean(this.getElement('heightmapPaintModal')?.classList.contains('active'));
+
         this.closeAllDropdowns();
         this.closeExportDialog();
         this.closeAboutModal();
+        this.closeHelpModal();
+        this.hidePromptHelp();
+
+        if (hadOpenOverlay) {
+          return;
+        }
+
         if (this.service.isPlaceModeActive) {
           this.service.cancelPlacementMode();
         }
         this.deactivateOtherExclusiveTools(null);
+        if (this.service.selectedNodes.length > 0 || this.service.selectedMesh !== null) {
+          this.service.selectNodes([]);
+        }
         this.updatePanelButtonStates();
       }
     });

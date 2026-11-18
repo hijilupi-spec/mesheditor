@@ -966,6 +966,65 @@
                   <input type="range" id="settingRotateSnapRange" class="setting-range" min="1" max="90" step="1" value="5" />
                 </div>
               </div>
+
+              <div class="settings-section">
+                <h4 class="settings-section-title"><i class="app-icon" data-lucide="palette"></i> Selection &amp; Highlight Colors</h4>
+
+                <div class="setting-item setting-item-color">
+                  <div class="setting-info">
+                    <label class="setting-label" for="settingMeshSelectionColor">Mesh Selection Color</label>
+                    <span class="setting-desc">Outer glow color for selected meshes and groups</span>
+                  </div>
+                  <div class="setting-color-control">
+                    <span class="setting-color-hex" id="settingMeshSelectionColorHex">#3399FF</span>
+                    <input type="color" id="settingMeshSelectionColor" class="setting-color-input" value="#3399ff" />
+                  </div>
+                </div>
+
+                <div class="setting-item setting-item-color">
+                  <div class="setting-info">
+                    <label class="setting-label" for="settingFaceSelectionColor">Face Selection Color</label>
+                    <span class="setting-desc">Outline color for the active face or quad selection</span>
+                  </div>
+                  <div class="setting-color-control">
+                    <span class="setting-color-hex" id="settingFaceSelectionColorHex">#FFCC33</span>
+                    <input type="color" id="settingFaceSelectionColor" class="setting-color-input" value="#ffcc33" />
+                  </div>
+                </div>
+
+                <div class="setting-item setting-item-color">
+                  <div class="setting-info">
+                    <label class="setting-label" for="settingVertexColor">Vertex Color</label>
+                    <span class="setting-desc">Sphere handle color for unselected vertices</span>
+                  </div>
+                  <div class="setting-color-control">
+                    <span class="setting-color-hex" id="settingVertexColorHex">#00D9FF</span>
+                    <input type="color" id="settingVertexColor" class="setting-color-input" value="#00d9ff" />
+                  </div>
+                </div>
+
+                <div class="setting-item setting-item-color">
+                  <div class="setting-info">
+                    <label class="setting-label" for="settingVertexSelectionColor">Vertex Selection Color</label>
+                    <span class="setting-desc">Sphere handle color for the currently selected vertex</span>
+                  </div>
+                  <div class="setting-color-control">
+                    <span class="setting-color-hex" id="settingVertexSelectionColorHex">#FFA61A</span>
+                    <input type="color" id="settingVertexSelectionColor" class="setting-color-input" value="#ffa61a" />
+                  </div>
+                </div>
+
+                <div class="setting-item setting-item-color">
+                  <div class="setting-info">
+                    <label class="setting-label" for="settingVoxelToolColor">Voxel Tool Color</label>
+                    <span class="setting-desc">Cursor highlight box color for the Voxel Painter tool</span>
+                  </div>
+                  <div class="setting-color-control">
+                    <span class="setting-color-hex" id="settingVoxelToolColorHex">#FFD91A</span>
+                    <input type="color" id="settingVoxelToolColor" class="setting-color-input" value="#ffd91a" />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

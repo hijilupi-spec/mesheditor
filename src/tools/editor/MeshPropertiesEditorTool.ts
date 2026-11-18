@@ -11,7 +11,7 @@ export class MeshPropertiesEditorTool extends AbstractEditorTool {
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Mesh Properties';
   public readonly category = 'Generic';
-  public readonly icon = 'box';
+  public readonly icon = 'table-properties';
   public readonly order = 9;
   public readonly defaultOpen = true;
   public readonly description =

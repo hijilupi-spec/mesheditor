@@ -98,7 +98,7 @@ export class VoxelPainterController {
     this.highlightBox = MeshBuilder.CreateBox('editor_voxel_highlight', { size: 1.0 }, this.scene);
     const mat = new StandardMaterial('editor_mat_voxel_highlight', this.scene);
     mat.wireframe = true;
-    mat.emissiveColor = new Color3(1, 0.85, 0.1);
+    mat.emissiveColor = this.service.getVoxelToolColor3();
     mat.disableLighting = true;
     this.highlightBox.material = mat;
     this.highlightBox.isPickable = false;
@@ -190,17 +190,21 @@ export class VoxelPainterController {
     }
   }
 
-  public setMode(mode: 'paint' | 'erase' | 'pick'): void {
-    this.mode = mode;
+  public refreshHighlightColor(): void {
     if (this.highlightBox && this.highlightBox.material instanceof StandardMaterial) {
-      if (mode === 'erase') {
+      if (this.mode === 'erase') {
         this.highlightBox.material.emissiveColor = new Color3(1, 0.2, 0.2);
-      } else if (mode === 'pick') {
+      } else if (this.mode === 'pick') {
         this.highlightBox.material.emissiveColor = new Color3(0.2, 0.7, 1);
       } else {
-        this.highlightBox.material.emissiveColor = new Color3(1, 0.85, 0.1);
+        this.highlightBox.material.emissiveColor = this.service.getVoxelToolColor3();
       }
     }
+  }
+
+  public setMode(mode: 'paint' | 'erase' | 'pick'): void {
+    this.mode = mode;
+    this.refreshHighlightColor();
     this.onModeChanged?.(mode);
   }
 

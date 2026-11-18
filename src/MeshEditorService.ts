@@ -253,6 +253,7 @@ export class MeshEditorService {
   private onWindowPointerUpHandler: ((e: PointerEvent) => void) | null = null;
   private onWindowPointerCancelHandler: ((e: PointerEvent) => void) | null = null;
   private onWindowKeyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private lastMarqueeEscapeEvent: KeyboardEvent | null = null;
 
   // Touch camera & gesture state (separates single-tap selection from 1-finger orbit & 2-finger pinch/pan)
   public touchOrbitTarget: Vector3 = new Vector3(0, 1, 0);
@@ -296,6 +297,11 @@ export class MeshEditorService {
     cameraSpeed: 0.4,
     translateSnap: 0.1,
     rotateSnap: 5,
+    meshSelectionColor: '#3399ff',
+    faceSelectionColor: '#ffcc33',
+    vertexColor: '#00d9ff',
+    vertexSelectionColor: '#ffa61a',
+    voxelToolColor: '#ffd91a',
   };
   public isSnapModifierActive: boolean = false;
   public isSceneInteractionLocked: boolean = false;
@@ -500,6 +506,7 @@ export class MeshEditorService {
           this.isMarqueeActive = false;
           this.isMarqueeCandidate = false;
           this.hideMarqueeVisual();
+          this.lastMarqueeEscapeEvent = e;
         }
       };
       window.addEventListener('pointerup', this.onWindowPointerUpHandler);
@@ -1407,6 +1414,84 @@ export class MeshEditorService {
     this.gizmoManager.attachToNode(this.isSceneInteractionLocked ? null : this.selectionProxyNode);
   }
 
+  public consumeMarqueeEscape(e: KeyboardEvent): boolean {
+    if (this.lastMarqueeEscapeEvent === e) {
+      this.lastMarqueeEscapeEvent = null;
+      return true;
+    }
+    return false;
+  }
+
+  private normalizeHexColor(hex: string, fallback: string): string {
+    if (typeof hex !== 'string') return fallback;
+    const trimmed = hex.trim();
+    const match6 = /^#?([0-9a-fA-F]{6})$/.exec(trimmed);
+    if (match6) return `#${match6[1].toLowerCase()}`;
+    const match3 = /^#?([0-9a-fA-F]{3})$/.exec(trimmed);
+    if (match3) {
+      const [r, g, b] = match3[1].split('');
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    return fallback;
+  }
+
+  public getMeshSelectionColor3(): Color3 {
+    return Color3.FromHexString(this.normalizeHexColor(this.sceneParams.meshSelectionColor, '#3399ff'));
+  }
+
+  public getFaceSelectionColor3(): Color3 {
+    return Color3.FromHexString(this.normalizeHexColor(this.sceneParams.faceSelectionColor, '#ffcc33'));
+  }
+
+  public getVertexColor3(): Color3 {
+    return Color3.FromHexString(this.normalizeHexColor(this.sceneParams.vertexColor, '#00d9ff'));
+  }
+
+  public getVertexSelectionColor3(): Color3 {
+    return Color3.FromHexString(this.normalizeHexColor(this.sceneParams.vertexSelectionColor, '#ffa61a'));
+  }
+
+  public getVoxelToolColor3(): Color3 {
+    return Color3.FromHexString(this.normalizeHexColor(this.sceneParams.voxelToolColor, '#ffd91a'));
+  }
+
+  private applySelectionHighlights(): void {
+    this.highlightLayer.removeAllMeshes();
+    if (this.isWeightPaintModeActive()) return;
+    const meshColor = this.getMeshSelectionColor3();
+    const childColor = new Color3(
+      Math.min(1, meshColor.r + 0.2),
+      Math.min(1, meshColor.g + 0.2),
+      Math.min(1, meshColor.b + 0.2)
+    );
+    for (const node of this.selectedNodes) {
+      if (node.isDisposed()) continue;
+      if (node instanceof Mesh) {
+        if (!this.isEditorHelper(node)) {
+          this.highlightLayer.addMesh(node, meshColor);
+        }
+      } else if (node instanceof TransformNode) {
+        for (const child of node.getChildMeshes()) {
+          if (!this.isEditorHelper(child) && child instanceof Mesh) {
+            this.highlightLayer.addMesh(child, childColor);
+          }
+        }
+      }
+    }
+  }
+
+  public refreshVertexHandleColors(): void {
+    const unselectedColor = this.getVertexColor3();
+    const selectedColor = this.getVertexSelectionColor3();
+    for (const handle of this.vertexHandles) {
+      if (handle.isDisposed() || !(handle.material instanceof StandardMaterial)) continue;
+      const indices: number[] = (handle as any).metadata?.vertexIndices || [];
+      const isSelected =
+        this.selectedVertexIndex !== null && indices.includes(this.selectedVertexIndex);
+      handle.material.emissiveColor = (isSelected ? selectedColor : unselectedColor).clone();
+    }
+  }
+
   public selectNodes(nodes: TransformNode[], preserveSelection: boolean = false, subMeshId?: number | null): void {
     if (!preserveSelection) {
       this.clearSelectionProxy();
@@ -1424,23 +1509,7 @@ export class MeshEditorService {
       this.lastClickedNode = nodes[nodes.length - 1];
     }
 
-    const isWeightPainting = this.isWeightPaintModeActive();
-    for (const node of this.selectedNodes) {
-      if (isWeightPainting) {
-        continue;
-      }
-      if (node instanceof Mesh) {
-        if (!this.isEditorHelper(node)) {
-          this.highlightLayer.addMesh(node, new Color3(0.2, 0.6, 1.0));
-        }
-      } else if (node instanceof TransformNode) {
-        for (const child of node.getChildMeshes()) {
-          if (!this.isEditorHelper(child) && child instanceof Mesh) {
-            this.highlightLayer.addMesh(child, new Color3(0.4, 0.8, 1.0));
-          }
-        }
-      }
-    }
+    this.applySelectionHighlights();
 
     if (this.selectedNodes.length === 0) {
       this.selectedMesh = null;
@@ -3540,7 +3609,7 @@ export class MeshEditorService {
 
       const mat = new StandardMaterial(`editor_vh_mat_${group.primaryIndex}`, this.scene);
       mat.disableLighting = true;
-      mat.emissiveColor = isSelected ? new Color3(1.0, 0.65, 0.1) : new Color3(0.0, 0.85, 1.0);
+      mat.emissiveColor = (isSelected ? this.getVertexSelectionColor3() : this.getVertexColor3()).clone();
       handle.material = mat;
 
       (handle as any).metadata = {
@@ -3994,7 +4063,7 @@ export class MeshEditorService {
       );
     }
 
-    this.facetHighlightMesh.color = new Color3(1, 0.8, 0.2);
+    this.facetHighlightMesh.color = this.getFaceSelectionColor3();
     (this.facetHighlightMesh as any).metadata = { isEditorHelper: true };
 
     if (this.facetEditMode === 'vertex') {
@@ -9031,6 +9100,33 @@ export class MeshEditorService {
     if (this.isSnapModifierActive) {
       this.updateGizmoSnapping(true);
     }
+  }
+
+  public setMeshSelectionColor(hex: string): void {
+    this.sceneParams.meshSelectionColor = this.normalizeHexColor(hex, '#3399ff');
+    this.applySelectionHighlights();
+  }
+
+  public setFaceSelectionColor(hex: string): void {
+    this.sceneParams.faceSelectionColor = this.normalizeHexColor(hex, '#ffcc33');
+    if (this.facetHighlightMesh && !this.facetHighlightMesh.isDisposed()) {
+      this.facetHighlightMesh.color = this.getFaceSelectionColor3();
+    }
+  }
+
+  public setVertexColor(hex: string): void {
+    this.sceneParams.vertexColor = this.normalizeHexColor(hex, '#00d9ff');
+    this.refreshVertexHandleColors();
+  }
+
+  public setVertexSelectionColor(hex: string): void {
+    this.sceneParams.vertexSelectionColor = this.normalizeHexColor(hex, '#ffa61a');
+    this.refreshVertexHandleColors();
+  }
+
+  public setVoxelToolColor(hex: string): void {
+    this.sceneParams.voxelToolColor = this.normalizeHexColor(hex, '#ffd91a');
+    this.voxelPainter?.refreshHighlightColor();
   }
 
   public setSnapModifierActive(active: boolean): void {

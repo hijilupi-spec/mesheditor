@@ -839,6 +839,7 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
 
     const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
     expect(stored).toEqual({
+      ...DEFAULT_MESH_EDITOR_SETTINGS,
       grid: false,
       gridSize: 80,
       cameraSpeed: 1.25,
@@ -1461,5 +1462,147 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(app.service.decalController.isActive).toBe(false);
     expect(decalPaintLabel.textContent).toBe('Activate Decal Paint Mode');
+  });
+
+  it('clears active mesh selection on Escape without clearing when closing overlay modals', () => {
+    app = new MeshEditorApp({
+      container,
+      engine,
+    });
+
+    const box = app.service.createPrimitive({
+      shape: 'Box',
+      name: 'EscTestBox',
+      size: 2,
+    });
+    expect(box).not.toBeNull();
+    expect(app.service.selectedMesh).toBe(box);
+    expect(app.service.selectedNodes).toEqual([box]);
+    expect(app.service.highlightLayer.hasMesh(box!)).toBe(true);
+
+    // Opening Export modal and pressing Escape on document closes the modal WITHOUT clearing active mesh selection
+    app.openExportDialog();
+    const exportModal = container.querySelector('#exportModal') as HTMLElement;
+    expect(exportModal.classList.contains('active')).toBe(true);
+
+    const modalEsc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    document.dispatchEvent(modalEsc);
+    expect(exportModal.classList.contains('active')).toBe(false);
+    expect(app.service.selectedMesh).toBe(box);
+    expect(app.service.selectedNodes).toEqual([box]);
+
+    // Pressing Escape with no overlay open clears active mesh selection
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(app.service.selectedMesh).toBeNull();
+    expect(app.service.selectedNodes).toEqual([]);
+    expect(app.service.highlightLayer.hasMesh(box!)).toBe(false);
+  });
+
+  it('configures selection and voxel tool colors in Settings -> Editing tab, applies live, and persists in localStorage', () => {
+    app = new MeshEditorApp({
+      container,
+      engine,
+    });
+
+    const btnSettings = container.querySelector('#btnSettings') as HTMLButtonElement;
+    btnSettings.click();
+
+    const meshColorInput = container.querySelector('#settingMeshSelectionColor') as HTMLInputElement;
+    const faceColorInput = container.querySelector('#settingFaceSelectionColor') as HTMLInputElement;
+    const vertexColorInput = container.querySelector('#settingVertexColor') as HTMLInputElement;
+    const vertexSelColorInput = container.querySelector('#settingVertexSelectionColor') as HTMLInputElement;
+    const voxelColorInput = container.querySelector('#settingVoxelToolColor') as HTMLInputElement;
+
+    // Pre-populated with current default colors
+    expect(meshColorInput.value.toLowerCase()).toBe('#3399ff');
+    expect(faceColorInput.value.toLowerCase()).toBe('#ffcc33');
+    expect(vertexColorInput.value.toLowerCase()).toBe('#00d9ff');
+    expect(vertexSelColorInput.value.toLowerCase()).toBe('#ffa61a');
+    expect(voxelColorInput.value.toLowerCase()).toBe('#ffd91a');
+
+    // Create a mesh, select a face, and inspect live color updates
+    const box = app.service.createPrimitive({
+      shape: 'Box',
+      name: 'ColorTestBox',
+      size: 2,
+    })!;
+    app.service.toggleFacetEditor(true);
+    app.service.selectFace(box, 0);
+    app.service.setFacetEditMode('vertex');
+    app.service.selectVertex(0);
+
+    // Update all 5 colors via Settings UI
+    meshColorInput.value = '#ff3366';
+    meshColorInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    faceColorInput.value = '#22dd88';
+    faceColorInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    vertexColorInput.value = '#aa55ff';
+    vertexColorInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    vertexSelColorInput.value = '#ff5500';
+    vertexSelColorInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    voxelColorInput.value = '#33ffaa';
+    voxelColorInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(app.service.sceneParams.meshSelectionColor).toBe('#ff3366');
+    expect(app.service.sceneParams.faceSelectionColor).toBe('#22dd88');
+    expect(app.service.sceneParams.vertexColor).toBe('#aa55ff');
+    expect(app.service.sceneParams.vertexSelectionColor).toBe('#ff5500');
+    expect(app.service.sceneParams.voxelToolColor).toBe('#33ffaa');
+
+    // Verify live updates in Babylon scene objects
+    expect(app.service.facetHighlightMesh?.color.toHexString().toLowerCase()).toBe('#22dd88');
+    const selectedHandle = app.service.vertexHandles.find((h) =>
+      ((h as any).metadata?.vertexIndices || []).includes(app.service.selectedVertexIndex)
+    );
+    const unselectedHandle = app.service.vertexHandles.find(
+      (h) => !((h as any).metadata?.vertexIndices || []).includes(app.service.selectedVertexIndex)
+    );
+    expect((selectedHandle?.material as any)?.emissiveColor?.toHexString().toLowerCase()).toBe('#ff5500');
+    expect((unselectedHandle?.material as any)?.emissiveColor?.toHexString().toLowerCase()).toBe('#aa55ff');
+
+    const voxelHighlight = app.service.scene.getMeshByName('editor_voxel_highlight');
+    expect((voxelHighlight?.material as any)?.emissiveColor?.toHexString().toLowerCase()).toBe('#33ffaa');
+
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
+    expect(stored.meshSelectionColor).toBe('#ff3366');
+    expect(stored.faceSelectionColor).toBe('#22dd88');
+    expect(stored.vertexColor).toBe('#aa55ff');
+    expect(stored.vertexSelectionColor).toBe('#ff5500');
+    expect(stored.voxelToolColor).toBe('#33ffaa');
+
+    // Re-instantiate MeshEditorApp and verify persisted colors are restored from localStorage
+    app.dispose();
+    container.innerHTML = '';
+    const secondEngine = new NullEngine();
+    app = new MeshEditorApp({
+      container,
+      engine: secondEngine,
+    });
+
+    expect(app.service.sceneParams.meshSelectionColor).toBe('#ff3366');
+    expect(app.service.sceneParams.faceSelectionColor).toBe('#22dd88');
+    expect(app.service.sceneParams.vertexColor).toBe('#aa55ff');
+    expect(app.service.sceneParams.vertexSelectionColor).toBe('#ff5500');
+    expect(app.service.sceneParams.voxelToolColor).toBe('#33ffaa');
+
+    expect((container.querySelector('#settingMeshSelectionColor') as HTMLInputElement).value.toLowerCase()).toBe('#ff3366');
+    expect((container.querySelector('#settingFaceSelectionColor') as HTMLInputElement).value.toLowerCase()).toBe('#22dd88');
+    expect((container.querySelector('#settingVertexColor') as HTMLInputElement).value.toLowerCase()).toBe('#aa55ff');
+    expect((container.querySelector('#settingVertexSelectionColor') as HTMLInputElement).value.toLowerCase()).toBe('#ff5500');
+    expect((container.querySelector('#settingVoxelToolColor') as HTMLInputElement).value.toLowerCase()).toBe('#33ffaa');
+
+    // Reset Defaults restores all 5 colors and updates localStorage
+    const btnReset = container.querySelector('#btnResetSettings') as HTMLButtonElement;
+    btnReset.click();
+    expect(app.service.sceneParams.meshSelectionColor).toBe(DEFAULT_MESH_EDITOR_SETTINGS.meshSelectionColor);
+    expect(app.service.sceneParams.faceSelectionColor).toBe(DEFAULT_MESH_EDITOR_SETTINGS.faceSelectionColor);
+    expect(app.service.sceneParams.vertexColor).toBe(DEFAULT_MESH_EDITOR_SETTINGS.vertexColor);
+    expect(app.service.sceneParams.vertexSelectionColor).toBe(DEFAULT_MESH_EDITOR_SETTINGS.vertexSelectionColor);
+    expect(app.service.sceneParams.voxelToolColor).toBe(DEFAULT_MESH_EDITOR_SETTINGS.voxelToolColor);
+    expect(JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}')).toEqual(DEFAULT_MESH_EDITOR_SETTINGS);
   });
 });

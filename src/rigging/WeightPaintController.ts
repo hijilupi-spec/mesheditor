@@ -945,7 +945,7 @@ export class WeightPaintController {
     }
 
     if (this.service.selectedMesh === mesh && this.service.highlightLayer && !this.isActive) {
-      this.service.highlightLayer.addMesh(mesh, new Color3(0.2, 0.6, 1.0));
+      this.service.highlightLayer.addMesh(mesh, this.service.getMeshSelectionColor3());
     }
   }
 

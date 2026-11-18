@@ -7782,6 +7782,52 @@ dialog#settingsModal::backdrop {
   min-width: 28px;
 }
 
+.setting-item-color {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setting-color-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.setting-color-hex {
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-secondary);
+  min-width: 62px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#settingsModal input[type="color"].setting-color-input {
+  color-scheme: dark;
+  forced-color-adjust: none;
+  width: 44px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px;
+  background: #21262d;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+#settingsModal input[type="color"].setting-color-input:hover {
+  border-color: var(--accent-color, #58a6ff);
+}
+
+#settingsModal input[type="color"].setting-color-input:focus-visible {
+  outline: 2px solid var(--accent-color, #58a6ff);
+  outline-offset: 2px;
+}
+
 /* Switch Control inside Settings Dialog */
 #settingsModal input[type="checkbox"][switch] {
   appearance: none;
