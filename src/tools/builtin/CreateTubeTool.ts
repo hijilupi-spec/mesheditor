@@ -161,7 +161,7 @@ export class CreateTubeTool extends AbstractTool {
           radius: args.radius !== undefined ? Number(args.radius) : 0.2,
           tessellation,
           cap,
-          sideOrientation: Mesh.DOUBLESIDE,
+          sideOrientation: Mesh.DEFAULTSIDE,
         },
         context.scene
       );

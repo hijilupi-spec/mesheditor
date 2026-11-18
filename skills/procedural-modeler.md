@@ -190,21 +190,22 @@ When working offline or when mathematical procedural textures are preferred:
    - **Gold / Brass**: `albedoColor: "#ffd700"`, `roughness: 0.2`, `metallic: 0.95`.
    - Always run `modeler_auto_uv_mapping` with `scale: 1.0` to `2.0` on boolean or modified meshes to eliminate texture stretching across corners.
 
-### D. Mandatory Double-Sided Materials & Geometries Rule
+### D. Double-Sided Materials & Zero Z-Fighting Rule
 
-Single-sided materials (`backFaceCulling = true`) are a frequent cause of broken 3D visual rendering in web engines. Whenever geometry is viewed from behind, from inside an open cavity (such as hollow bowls, room interiors, vehicle cabs, cups, vases), on thin sheets (blades, leaves, hair, clothing, wings), or where polygon normal winding is flipped, single-sided faces are culled and become completely invisible, creating gaping holes or missing meshes.
+Single-sided materials (`backFaceCulling = true`) can hide interior faces or thin sheets. However, combining `sideOrientation: Mesh.DOUBLESIDE` with `material.backFaceCulling = false` duplicates every triangle at identical coordinates and causes severe self-Z-fighting and texture bleeding.
 
 **Strict Rules**:
-1. **All Materials MUST Be Double-Sided**:
+1. **Double-Sided Materials (No Duplicate Geometry)**:
    - Always ensure materials have backface culling disabled and two-sided lighting enabled:
      ```javascript
      material.backFaceCulling = false;
      material.twoSidedLighting = true;
      ```
-   - All built-in tools (`modeler_create_material`, `modeler_generate_texture`, `modeler_apply_material`) configure this automatically. When writing custom Babylon.js code via `modeler_execute_babylon_code`, you must explicitly set both flags.
-2. **All Custom Meshes MUST Be Double-Sided**:
-   - When using `MeshBuilder` to generate meshes in `modeler_execute_babylon_code`, always pass `{ sideOrientation: Mesh.DOUBLESIDE }` (or `BABYLON.Mesh.DOUBLESIDE`).
-   - This is critical for planes, discs, grounds, ribbons, tubes, lathes, sliced spheres/cylinders, roofs, and custom extruded profiles.
+   - All built-in tools (`modeler_create_material`, `modeler_generate_texture`, `modeler_apply_material`) configure this automatically. With `backFaceCulling = false`, use standard `Mesh.DEFAULTSIDE` (not `Mesh.DOUBLESIDE`) in `MeshBuilder` so triangles are not duplicated on the same plane.
+2. **Eliminate Coplanar Overlap / Z-Fighting (`modeler_check_z_fighting`)**:
+   - Never place panels, windows, doors, trims, signs, or slabs flush on the exact same geometric plane (`0.000m` offset) as another face.
+   - Instead, use **`modeler_facet_inset`** (with non-zero `depth`, e.g. `-0.02` or `0.02`) or **`modeler_facet_extrude`** (`distance: 0.02`), offset overlapping meshes by `0.01–0.03m` along the face normal, or carve cleanly with `modeler_boolean_operation`.
+   - Call `modeler_check_z_fighting` after multi-part assembly to verify zero coplanar overlaps remain.
 
 ### C. Normal Maps & Micro-Surface Relief
 

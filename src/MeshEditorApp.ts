@@ -2822,6 +2822,8 @@ export class MeshEditorApp {
     const createNormalMapsCheckQuick = this.getElement<HTMLInputElement>('aiCreateNormalMapsCheckQuick');
     const visualCritiqueCheck = this.getElement<HTMLInputElement>('aiVisualCritiqueCheck');
     const visualCritiqueCheckQuick = this.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
+    const checkZFightingCheck = this.getElement<HTMLInputElement>('aiCheckZFightingCheck');
+    const checkZFightingCheckQuick = this.getElement<HTMLInputElement>('aiCheckZFightingCheckQuick');
     const promptSuffixInput = this.getElement<HTMLTextAreaElement>('aiPromptSuffixInput');
 
     const populateModelSelect = (models: string[], selectedModel?: string) => {
@@ -2969,6 +2971,10 @@ export class MeshEditorApp {
       if (visualCritiqueCheck) visualCritiqueCheck.checked = critiqueOn;
       if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = critiqueOn;
 
+      const zFightOn = cfg.checkZFighting !== false;
+      if (checkZFightingCheck) checkZFightingCheck.checked = zFightOn;
+      if (checkZFightingCheckQuick) checkZFightingCheckQuick.checked = zFightOn;
+
       if (promptSuffixInput) promptSuffixInput.value = cfg.promptSuffix || '';
 
       syncNeuralProvidersUI();
@@ -3108,6 +3114,13 @@ export class MeshEditorApp {
       const enabled = !!visualCritiqueCheck.checked;
       if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = enabled;
       this.service.aiAgent.saveConfig({ visualCritique: enabled });
+      this.refreshAIEndpointBadge();
+    });
+
+    checkZFightingCheck?.addEventListener('change', () => {
+      const enabled = !!checkZFightingCheck.checked;
+      if (checkZFightingCheckQuick) checkZFightingCheckQuick.checked = enabled;
+      this.service.aiAgent.saveConfig({ checkZFighting: enabled });
       this.refreshAIEndpointBadge();
     });
 
@@ -8243,6 +8256,7 @@ export class MeshEditorApp {
     const createTexturesCheckQuick = this.getElement<HTMLInputElement>('aiCreateTexturesCheckQuick');
     const createNormalMapsCheckQuick = this.getElement<HTMLInputElement>('aiCreateNormalMapsCheckQuick');
     const visualCritiqueCheckQuick = this.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
+    const checkZFightingCheckQuick = this.getElement<HTMLInputElement>('aiCheckZFightingCheckQuick');
 
     if (chatLog) {
       if (!chatLog.innerHTML.trim()) {
@@ -8255,6 +8269,7 @@ export class MeshEditorApp {
     if (createTexturesCheckQuick) createTexturesCheckQuick.checked = initialConfig.createTextures !== false;
     if (createNormalMapsCheckQuick) createNormalMapsCheckQuick.checked = initialConfig.createNormalMaps !== false;
     if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = !!initialConfig.visualCritique;
+    if (checkZFightingCheckQuick) checkZFightingCheckQuick.checked = initialConfig.checkZFighting !== false;
 
     createTexturesCheckQuick?.addEventListener('change', () => {
       this.service.aiAgent.saveConfig({ createTextures: !!createTexturesCheckQuick.checked });
@@ -8270,6 +8285,12 @@ export class MeshEditorApp {
 
     visualCritiqueCheckQuick?.addEventListener('change', () => {
       this.service.aiAgent.saveConfig({ visualCritique: !!visualCritiqueCheckQuick.checked });
+      this.syncAISettingsControlsUI?.();
+      this.refreshAIEndpointBadge();
+    });
+
+    checkZFightingCheckQuick?.addEventListener('change', () => {
+      this.service.aiAgent.saveConfig({ checkZFighting: !!checkZFightingCheckQuick.checked });
       this.syncAISettingsControlsUI?.();
       this.refreshAIEndpointBadge();
     });
@@ -8741,6 +8762,7 @@ export class MeshEditorApp {
     const actionModeSelect = this.getElement<HTMLSelectElement>('aiActionModeSelect');
     const includeViewportCheck = this.getElement<HTMLInputElement>('aiIncludeViewportCheck');
     const visualCritiqueCheckQuick = this.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
+    const checkZFightingCheckQuick = this.getElement<HTMLInputElement>('aiCheckZFightingCheckQuick');
 
     const promptText = (promptOverride !== undefined ? promptOverride : promptInput?.value || '').trim();
     const images = [...this.aiPendingImages];
@@ -8904,6 +8926,9 @@ export class MeshEditorApp {
         visualCritique: visualCritiqueCheckQuick
           ? !!visualCritiqueCheckQuick.checked
           : this.service.aiAgent.getConfig().visualCritique,
+        checkZFighting: checkZFightingCheckQuick
+          ? !!checkZFightingCheckQuick.checked
+          : this.service.aiAgent.getConfig().checkZFighting,
         signal: this.aiAbortController.signal,
         onStep: (step: AIAgentToolExecutionStep) => {
           const stepLabel = `Executing tool: ${step.toolName.replace(/^modeler_/, '')}...`;

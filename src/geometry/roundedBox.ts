@@ -130,11 +130,11 @@ export function createRoundedBoxVertexData(options: RoundedBoxOptions = {}): Ver
         const i10 = baseVert + iv * nu + (iu + 1);
         const i01 = baseVert + (iv + 1) * nu + iu;
         const i11 = baseVert + (iv + 1) * nu + (iu + 1);
-        // Note: in Babylon ComputeNormals, triangle (A, B, C) has normal (B-A) x_RH (C-A)
+        // Note: in Babylon ComputeNormals (left-handed), triangle (A, B, C) has normal (C-A) x (B-A)
         if (flipWinding) {
-          indices.push(i00, i10, i11, i00, i11, i01);
-        } else {
           indices.push(i00, i11, i10, i00, i01, i11);
+        } else {
+          indices.push(i00, i10, i11, i00, i11, i01);
         }
       }
     }

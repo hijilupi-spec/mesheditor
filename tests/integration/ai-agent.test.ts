@@ -1101,7 +1101,7 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(visualCheckQuick).not.toBeNull();
       expect(visualCheckSettings).not.toBeNull();
       // Checkboxes are inside #aiCheckboxRow, separate from .ai-mode-bar
-      expect(checkboxRow?.querySelectorAll('input[type="checkbox"]').length).toBe(4);
+      expect(checkboxRow?.querySelectorAll('input[type="checkbox"]').length).toBe(5);
       expect(modeBar?.querySelectorAll('input[type="checkbox"]').length).toBe(0);
 
       // Toggle quick Visual Check checkbox and verify sync with config & settings checkbox
@@ -1688,6 +1688,113 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(bridge.normalizeAgyModel('hydrogen-xhigh')).toBe('gemini-4-hydrogen-xhigh');
     });
 
+    it('retries transient agy empty conversation id / database opener races and does not retry quota errors', async () => {
+      const require = createRequire(import.meta.url);
+      const bridge = require('../../scripts/antigravity-bridge.js');
+
+      let attempts = 0;
+      const res = await bridge.runAgyChatCompletion(
+        {
+          model: 'gemini-4-hydrogen-medium',
+          messages: [{ role: 'user', content: 'Build a box' }],
+        },
+        {
+          retryDelaysMs: [1, 1],
+          execFn: async () => {
+            attempts++;
+            if (attempts === 1) {
+              return {
+                code: 1,
+                stdout: JSON.stringify({
+                  conversation_id: '',
+                  status: 'ERROR',
+                  response: '',
+                  error: 'failed to start conversation: backend returned an empty conversation id',
+                  finished_reason: 'error',
+                }),
+                stderr: '',
+              };
+            }
+            return {
+              code: 0,
+              stdout: JSON.stringify({
+                conversation_id: 'conv-recovered-1',
+                status: 'SUCCESS',
+                response: JSON.stringify({ content: 'Created box.', tool_calls: [] }),
+              }),
+              stderr: '',
+            };
+          },
+        }
+      );
+
+      expect(attempts).toBe(2);
+      expect(res.id).toBe('chatcmpl_agy_conv-recovered-1');
+      expect(res.choices[0].message.content).toBe('Created box.');
+
+      // Verify 429 quota errors are NOT retried
+      let quotaAttempts = 0;
+      await expect(
+        bridge.runAgyChatCompletion(
+          {
+            model: 'gemini-4-hydrogen-medium',
+            messages: [{ role: 'user', content: 'Build a box' }],
+          },
+          {
+            retryDelaysMs: [1, 1],
+            execFn: async () => {
+              quotaAttempts++;
+              return {
+                code: 1,
+                stdout: JSON.stringify({
+                  conversation_id: '',
+                  status: 'ERROR',
+                  response: '',
+                  error: 'RESOURCE_EXHAUSTED: {"error_code": 429, "message": "Individual quota reached"}',
+                  finished_reason: 'error',
+                }),
+                stderr: '',
+              };
+            },
+          }
+        )
+      ).rejects.toThrow(/Individual quota reached/);
+      expect(quotaAttempts).toBe(1);
+    });
+
+    it('retries in AIAgentService when the Antigravity Bridge returns 500 with empty conversation id', async () => {
+      let fetchAttempts = 0;
+      service.aiAgent.saveConfig({ baseUrl: '/api/antigravity/v1', model: 'gemini-4-hydrogen-high' });
+      service.aiAgent.customFetch = vi.fn(async () => {
+        fetchAttempts++;
+        if (fetchAttempts === 1) {
+          return {
+            ok: false,
+            status: 500,
+            statusText: 'Internal Server Error',
+            text: async () =>
+              JSON.stringify({
+                error: {
+                  message:
+                    'Antigravity Bridge Error: failed to start conversation: backend returned an empty conversation id',
+                },
+              }),
+          } as any;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { role: 'assistant', content: 'Recovered ok.' } }],
+          }),
+        } as any;
+      }) as any;
+
+      const result = await service.aiAgent.runPrompt({ prompt: 'Say ok' });
+      expect(fetchAttempts).toBe(2);
+      expect(result.content).toBe('Recovered ok.');
+    });
+
     it('persists optional promptSuffix in config and appends it to user prompts when set', async () => {
       const capturedBodies: any[] = [];
       service.aiAgent.customFetch = vi.fn(async (_url: string, init: any) => {
@@ -1973,6 +2080,294 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(res.toolSteps?.[1].toolName).toBe('modeler_create_primitive');
       expect(service.importedMeshes.some((m) => m.name === 'fallback_gold_orb')).toBe(true);
       expect(res.content).toContain('2 3D modeling operation(s) successfully executed');
+    });
+  });
+
+  describe('9. Z-Fighting & Texture Bleeding Detection and AI Self-Correction', () => {
+    it('detects inter-mesh coplanar overlapping faces via modeler_check_z_fighting and verifies fix with facet extrude/inset', async () => {
+      // Create a wall and a flush coplanar window panel sharing z = +0.15 (+Z front face)
+      await service.aiAgent.executeToolCall('modeler_create_primitive', {
+        name: 'Base_Wall',
+        type: 'box',
+        options: { width: 4.0, height: 3.0, depth: 0.3 },
+        position: { x: 0, y: 1.5, z: 0 },
+      });
+      await service.aiAgent.executeToolCall('modeler_create_primitive', {
+        name: 'Flush_Panel',
+        type: 'box',
+        options: { width: 1.2, height: 1.2, depth: 0.1 },
+        position: { x: 0, y: 1.5, z: 0.1 }, // max.z = 0.1 + 0.05 = 0.15 == Base_Wall max.z!
+      });
+
+      const checkBefore = JSON.parse(
+        await service.aiAgent.executeToolCall('modeler_check_z_fighting', {})
+      );
+      expect(checkBefore.status).toBe('ok');
+      expect(checkBefore.hasIssues).toBe(true);
+      expect(checkBefore.issueCount).toBeGreaterThanOrEqual(1);
+      const issue = checkBefore.issues[0];
+      expect(issue.kind).toBe('inter_mesh_coplanar');
+      expect(issue.normalOrientation).toBe('same');
+      expect(issue.faceDirectionA).toBe('front');
+      expect(issue.faceDirectionB).toBe('front');
+      expect(issue.overlapArea).toBeGreaterThan(1.0);
+      expect(issue.recommendedFixes.join(' ')).toContain('modeler_facet_extrude');
+
+      // Scene info diagnostics also include the Z-fighting issue
+      const sceneInfo = JSON.parse(await service.aiAgent.executeToolCall('modeler_get_scene_info', {}));
+      expect(sceneInfo.diagnostics.zFightingIssueCount).toBeGreaterThanOrEqual(1);
+
+      // Fix by extruding the front face of Flush_Panel slightly outward (just like manual repair!)
+      const extrudeRes = JSON.parse(
+        await service.aiAgent.executeToolCall('modeler_facet_extrude', {
+          meshName: 'Flush_Panel',
+          direction: 'front',
+          distance: 0.03,
+        })
+      );
+      expect(extrudeRes.status).toBe('ok');
+
+      const checkAfter = JSON.parse(
+        await service.aiAgent.executeToolCall('modeler_check_z_fighting', {})
+      );
+      expect(checkAfter.hasIssues).toBe(false);
+      expect(checkAfter.issueCount).toBe(0);
+    });
+
+    it('detects intra-mesh duplicate double-sided faces when backFaceCulling is false and avoids false positives on resting solids or parametric walls/arches', async () => {
+      const { MeshBuilder, Mesh } = await import('@babylonjs/core');
+
+      // 1. Solid column resting flush on floor at y = 0 should NOT report false-positive Z-fighting
+      await service.aiAgent.executeToolCall('modeler_create_primitive', {
+        name: 'Floor_Slab',
+        type: 'box',
+        options: { width: 6, height: 0.2, depth: 6 },
+        position: { x: 0, y: -0.1, z: 0 },
+      });
+      await service.aiAgent.executeToolCall('modeler_create_primitive', {
+        name: 'Resting_Pillar',
+        type: 'box',
+        options: { width: 0.6, height: 2.0, depth: 0.6 },
+        position: { x: 0, y: 1.0, z: 0 },
+      });
+      // Parametric wall with openings, plinth, cornice and arch should also be clean
+      await service.aiAgent.executeToolCall('modeler_create_wall', {
+        name: 'Clean_Wall',
+        width: 4.0,
+        height: 3.0,
+        thickness: 0.3,
+        plinthHeight: 0.2,
+        corniceHeight: 0.15,
+        position: { x: 0, y: 0, z: -2.0 },
+        openings: [{ type: 'rect', x: 0, y: 1.2, width: 1.0, height: 1.0, frame: true }],
+      });
+      await service.aiAgent.executeToolCall('modeler_create_arch', {
+        name: 'Clean_Arch',
+        style: 'round',
+        span: 2.0,
+        position: { x: 0, y: 0, z: 2.0 },
+      });
+
+      const cleanCheck = JSON.parse(await service.aiAgent.executeToolCall('modeler_check_z_fighting', {}));
+      expect(cleanCheck.issues).toEqual([]);
+      expect(cleanCheck.hasIssues).toBe(false);
+
+      // 2. Mesh created with Mesh.DOUBLESIDE + backFaceCulling = false duplicates faces and SHOULD be detected
+      const dupBox = MeshBuilder.CreateBox(
+        'DoubleSide_Dup_Box',
+        { size: 1, sideOrientation: Mesh.DOUBLESIDE },
+        service.scene
+      );
+      dupBox.position.set(3, 0.5, 0);
+      dupBox.material = service.aiAgent.getOrCreateMaterial('dup_mat', '#cccccc');
+      service.aiAgent.registerCreatedMesh(dupBox);
+
+      const dupCheck = JSON.parse(
+        await service.aiAgent.executeToolCall('modeler_check_z_fighting', {
+          meshNames: ['DoubleSide_Dup_Box'],
+        })
+      );
+      expect(dupCheck.hasIssues).toBe(true);
+      expect(dupCheck.issues.some((i: any) => i.kind === 'intra_mesh_coplanar')).toBe(true);
+    });
+
+    it('automatically triggers a Z-fighting self-correction turn in runPrompt when coplanar overlap is detected and repairs via facet_inset', async () => {
+      let callCount = 0;
+      const recordedPayloads: any[] = [];
+
+      service.aiAgent.saveConfig({ checkZFighting: true, visualCritique: false });
+      service.aiAgent.customFetch = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+        callCount++;
+        const body = JSON.parse(String(init?.body || '{}'));
+        recordedPayloads.push(body);
+
+        if (callCount === 1) {
+          // Turn 1: AI creates a wall and a flush coplanar sign box at z = 0.25
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'tc_wall',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_create_primitive',
+                          arguments: JSON.stringify({
+                            name: 'Cabinet_Body',
+                            type: 'box',
+                            options: { width: 2.0, height: 2.0, depth: 0.5 },
+                            position: { x: 0, y: 1.0, z: 0 },
+                          }),
+                        },
+                      },
+                      {
+                        id: 'tc_panel',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_create_primitive',
+                          arguments: JSON.stringify({
+                            name: 'Door_Panel',
+                            type: 'box',
+                            options: { width: 1.4, height: 1.4, depth: 0.1 },
+                            position: { x: 0, y: 1.0, z: 0.2 }, // max.z = 0.25 == Cabinet_Body max.z
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          };
+        }
+
+        if (callCount === 2) {
+          // Turn 2: AI tries to finish -> automatic Z-fighting check detects the overlap and asks AI to fix
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: 'Built the cabinet and door panel.',
+                  },
+                },
+              ],
+            }),
+          };
+        }
+
+        if (callCount === 3) {
+          // Turn 3: AI receives [Z-FIGHTING & TEXTURE BLEEDING CHECK] and fixes via modeler_facet_inset with depth
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'tc_fix_inset',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_facet_inset',
+                          arguments: JSON.stringify({
+                            meshName: 'Door_Panel',
+                            direction: 'front',
+                            insetAmount: 0.1,
+                            depth: 0.03,
+                          }),
+                        },
+                      },
+                      {
+                        id: 'tc_fix_extrude',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_transform_mesh',
+                          arguments: {
+                            meshName: 'Door_Panel',
+                            position: { x: 0, y: 1.0, z: 0.22 },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'Fixed Z-fighting on Door_Panel by offsetting and insetting the front face.',
+                },
+              },
+            ],
+          }),
+        };
+      });
+
+      const res = await service.aiAgent.runPrompt({
+        prompt: 'Build a cabinet with a front door panel',
+      });
+
+      expect(callCount).toBe(4);
+      // Verify Turn 3 received the automatic [Z-FIGHTING & TEXTURE BLEEDING CHECK] diagnostic prompt
+      const zFightPromptMsg = recordedPayloads[2].messages[recordedPayloads[2].messages.length - 1];
+      expect(zFightPromptMsg.role).toBe('user');
+      expect(zFightPromptMsg.content).toContain('[Z-FIGHTING & TEXTURE BLEEDING CHECK]');
+      expect(zFightPromptMsg.content).toContain('Door_Panel');
+      expect(zFightPromptMsg.content).toContain('Cabinet_Body');
+      expect(res.content).toContain('Fixed Z-fighting');
+      expect(service.aiAgent.checkSceneZFighting().hasIssues).toBe(false);
+    });
+
+    it('wires #aiCheckZFightingCheckQuick and #aiCheckZFightingCheck in UI and persists config', async () => {
+      const container = document.createElement('div');
+      container.id = 'test-zf-ui';
+      document.body.appendChild(container);
+      const app = new MeshEditorApp({
+        container,
+        engine: new NullEngine(),
+      });
+
+      const quickChk = container.querySelector('#aiCheckZFightingCheckQuick') as HTMLInputElement;
+      const modalChk = container.querySelector('#aiCheckZFightingCheck') as HTMLInputElement;
+      expect(quickChk).not.toBeNull();
+      expect(modalChk).not.toBeNull();
+      expect(quickChk.checked).toBe(true);
+      expect(modalChk.checked).toBe(true);
+
+      quickChk.checked = false;
+      quickChk.dispatchEvent(new Event('change'));
+      expect(app.service.aiAgent.getConfig().checkZFighting).toBe(false);
+      expect(modalChk.checked).toBe(false);
+
+      modalChk.checked = true;
+      modalChk.dispatchEvent(new Event('change'));
+      expect(app.service.aiAgent.getConfig().checkZFighting).toBe(true);
+      expect(quickChk.checked).toBe(true);
+
+      app.dispose();
+      container.remove();
     });
   });
 });

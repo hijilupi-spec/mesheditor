@@ -34,6 +34,10 @@
                 <input type="checkbox" id="aiVisualCritiqueCheckQuick" />
                 <span>Visual Check</span>
               </label>
+              <label class="ai-checkbox-label" title="Automatically check generated meshes for coplanar Z-fighting / texture bleeding and self-correct">
+                <input type="checkbox" id="aiCheckZFightingCheckQuick" checked />
+                <span>Z-Fight Check</span>
+              </label>
               <label class="ai-checkbox-label" title="Send a screenshot of the current 3D viewport to the vision model">
                 <input type="checkbox" id="aiIncludeViewportCheck" />
                 <span>+ 3D View</span>
@@ -88,8 +92,8 @@
               <textarea
                 id="aiPromptInput"
                 class="ai-prompt-textarea"
-                rows="3"
-                placeholder="Enter a prompt (e.g. 'Build a stone archway' or 'Add a roof to selected mesh')... Attach images via button, Drag & Drop or Cmd+V."
+                rows="5"
+                placeholder="Enter a prompt (e.g. 'Build a stone archway' or 'Add a roof to selected mesh')... Sometimes image-to-model works better than text-to-model, use the image tools below. Attach images via button, Drag & Drop or Cmd+V."
               ></textarea>
               <div class="ai-controls-row">
                 <div class="ai-controls-left">

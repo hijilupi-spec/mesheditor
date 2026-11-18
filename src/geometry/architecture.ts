@@ -184,25 +184,32 @@ export function buildWallMesh(scene: Scene, name: string, opts: WallBuildOptions
   const height = Math.max(0.2, Number(opts.height ?? 3.0));
   const thickness = Math.max(0.05, Number(opts.thickness ?? 0.25));
   const openings = Array.isArray(opts.openings) ? opts.openings : [];
+  const plinthH = Number(opts.plinthHeight ?? 0);
+  const corniceH = Number(opts.corniceHeight ?? 0);
+  const hasPlinth = plinthH > 0.01 && openings.every((o) => (o.y ?? 1) > plinthH);
+  const hasCornice = corniceH > 0.01;
+  const wallBottomY = hasPlinth ? Math.min(plinthH * 0.5, height * 0.25) : 0;
+  const wallTopY = hasCornice ? Math.max(wallBottomY + 0.05, height - corniceH * 0.5) : height;
+  const wallCoreH = Math.max(0.05, wallTopY - wallBottomY);
   const parts: Mesh[] = [];
 
   if (openings.length === 0) {
     const bevel = opts.bevelRadius !== undefined ? Number(opts.bevelRadius) : Math.min(thickness * 0.08, 0.02);
     const box = createRoundedBoxMesh(
       `${name}_body`,
-      { width, height, depth: thickness, radius: bevel, segments: 2 },
+      { width, height: wallCoreH, depth: thickness, radius: bevel, segments: 2 },
       scene
     );
-    box.position.set(0, height * 0.5, 0);
+    box.position.set(0, wallBottomY + wallCoreH * 0.5, 0);
     box.bakeCurrentTransformIntoVertices();
     parts.push(box);
   } else {
     const hw = width * 0.5;
     const outer: Vector3[] = [
-      new Vector3(-hw, 0, 0),
-      new Vector3(hw, 0, 0),
-      new Vector3(hw, 0, height),
-      new Vector3(-hw, 0, height),
+      new Vector3(-hw, 0, wallBottomY),
+      new Vector3(hw, 0, wallBottomY),
+      new Vector3(hw, 0, wallTopY),
+      new Vector3(-hw, 0, wallTopY),
     ];
     const holes: Vector3[][] = openings.map((op) => buildOpeningContour2D(op, width, height));
 
@@ -213,7 +220,7 @@ export function buildWallMesh(scene: Scene, name: string, opts: WallBuildOptions
         shape: outer,
         holes,
         depth: thickness,
-        sideOrientation: Mesh.DOUBLESIDE,
+        sideOrientation: Mesh.DEFAULTSIDE,
         updatable: true,
       },
       scene,
@@ -246,9 +253,10 @@ export function buildWallMesh(scene: Scene, name: string, opts: WallBuildOptions
         const dy = yEnd - yStart;
         const segLen = Math.hypot(dx, dy);
         if (segLen < 1e-3) continue;
+        const segDepth = j % 2 === 0 ? fd : Math.max(thickness + 0.01, fd - 0.008);
         const bar = MeshBuilder.CreateBox(
           `${name}_frame_${i}_${j}`,
-          { width: segLen + fw * 0.4, height: fw, depth: fd },
+          { width: segLen + fw * 0.4, height: fw, depth: segDepth },
           scene
         );
         bar.rotation.z = Math.atan2(dy, dx);
@@ -260,8 +268,7 @@ export function buildWallMesh(scene: Scene, name: string, opts: WallBuildOptions
   }
 
   // Optional plinth band at base
-  const plinthH = Number(opts.plinthHeight ?? 0);
-  if (plinthH > 0.01 && openings.every((o) => (o.y ?? 1) > plinthH)) {
+  if (hasPlinth) {
     const plinth = createRoundedBoxMesh(
       `${name}_plinth`,
       { width: width + 0.06, height: plinthH, depth: thickness + 0.06, radius: 0.015, segments: 2 },
@@ -273,8 +280,7 @@ export function buildWallMesh(scene: Scene, name: string, opts: WallBuildOptions
   }
 
   // Optional cornice band at top
-  const corniceH = Number(opts.corniceHeight ?? 0);
-  if (corniceH > 0.01) {
+  if (hasCornice) {
     const cornice = createRoundedBoxMesh(
       `${name}_cornice`,
       { width: width + 0.1, height: corniceH, depth: thickness + 0.1, radius: 0.02, segments: 2 },
@@ -308,19 +314,25 @@ export function buildArchMesh(scene: Scene, name: string, opts: ArchBuildOptions
 
   // 1. Left and Right Piers + Plinth Bases + Impost Caps
   if (pierHeight > 0.02) {
+    const baseH = Math.min(0.16, pierHeight * 0.12);
+    const hasImpost = opts.impostCap !== false;
+    const capH = hasImpost ? Math.min(0.12, pierHeight * 0.08 + 0.04) : 0;
+    const pierBottomY = baseH * 0.5;
+    const pierTopY = hasImpost ? Math.max(pierBottomY + 0.02, pierHeight - capH * 0.5) : pierHeight;
+    const pierCoreH = Math.max(0.02, pierTopY - pierBottomY);
+
     for (const side of [-1, 1]) {
       const px = side * (halfSpan + pierWidth * 0.5);
       const pier = createRoundedBoxMesh(
         `${name}_pier_${side}`,
-        { width: pierWidth, height: pierHeight, depth, radius: Math.min(0.02, pierWidth * 0.08), segments: 2 },
+        { width: pierWidth, height: pierCoreH, depth, radius: Math.min(0.02, pierWidth * 0.08), segments: 2 },
         scene
       );
-      pier.position.set(px, pierHeight * 0.5, 0);
+      pier.position.set(px, pierBottomY + pierCoreH * 0.5, 0);
       pier.bakeCurrentTransformIntoVertices();
       parts.push(pier);
 
       // Base plinth
-      const baseH = Math.min(0.16, pierHeight * 0.12);
       const base = createRoundedBoxMesh(
         `${name}_pier_base_${side}`,
         { width: pierWidth + 0.08, height: baseH, depth: depth + 0.08, radius: 0.018, segments: 2 },
@@ -331,8 +343,7 @@ export function buildArchMesh(scene: Scene, name: string, opts: ArchBuildOptions
       parts.push(base);
 
       // Impost cap at spring line
-      if (opts.impostCap !== false) {
-        const capH = Math.min(0.12, pierHeight * 0.08 + 0.04);
+      if (hasImpost) {
         const cap = createRoundedBoxMesh(
           `${name}_impost_${side}`,
           { width: pierWidth + 0.08, height: capH, depth: depth + 0.08, radius: 0.018, segments: 2 },
@@ -397,13 +408,13 @@ export function buildArchMesh(scene: Scene, name: string, opts: ArchBuildOptions
     innerPts.push(new Vector3(p.x, 0, p.y));
     outerPts.push(new Vector3(p.x + p.nx * thickness, 0, p.y + p.ny * thickness));
   }
-  const ringContour: Vector3[] = [...innerPts, ...outerPts.reverse()];
+  const ringContour: Vector3[] = [...innerPts, ...outerPts.reverse()].reverse();
   const ringMesh = MeshBuilder.ExtrudePolygon(
     `${name}_ring`,
     {
       shape: ringContour,
       depth,
-      sideOrientation: Mesh.DOUBLESIDE,
+      sideOrientation: Mesh.DEFAULTSIDE,
       updatable: true,
     },
     scene,
@@ -466,7 +477,7 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
     const plinthW = baseRadius * 2.65;
     const plinth = createRoundedBoxMesh(
       `${name}_plinth`,
-      { width: plinthW, height: plinthH, depth: plinthW, radius: 0.015, segments: 2 },
+      { width: plinthW, height: plinthH, depth: plinthW, radius: 0.015, segments: 1 },
       scene
     );
     plinth.position.set(0, plinthH * 0.5, 0);
@@ -484,14 +495,14 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
     ];
     const baseLathe = MeshBuilder.CreateLathe(
       `${name}_base_torus`,
-      { shape: torusBaseProfile, tessellation: radialSegs, sideOrientation: Mesh.DOUBLESIDE },
+      { shape: torusBaseProfile, tessellation: radialSegs, sideOrientation: Mesh.DEFAULTSIDE },
       scene
     );
     parts.push(baseLathe);
   }
 
   // 2. Parametric Fluted & Entasis Shaft
-  const vSegs = 12;
+  const vSegs = 8;
   const shaftPos: number[] = [];
   const shaftNorm: number[] = [];
   const shaftUV: number[] = [];
@@ -586,7 +597,7 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
     ];
     const echinus = MeshBuilder.CreateLathe(
       `${name}_echinus`,
-      { shape: capProfile, tessellation: radialSegs, sideOrientation: Mesh.DOUBLESIDE },
+      { shape: capProfile, tessellation: radialSegs, sideOrientation: Mesh.DEFAULTSIDE },
       scene
     );
     parts.push(echinus);
@@ -594,7 +605,7 @@ export function buildColumnMesh(scene: Scene, name: string, opts: ColumnBuildOpt
     const abacusW = topR * 2.85;
     const abacus = createRoundedBoxMesh(
       `${name}_abacus`,
-      { width: abacusW, height: abacusH, depth: abacusW, radius: 0.015, segments: 2 },
+      { width: abacusW, height: abacusH, depth: abacusW, radius: 0.015, segments: 1 },
       scene
     );
     abacus.position.set(0, totalHeight - abacusH * 0.5, 0);
@@ -873,7 +884,7 @@ export function buildStairsMesh(scene: Scene, name: string, opts: StairsBuildOpt
 
       const tread = createRoundedBoxMesh(
         `${name}_spiral_tread_${i}`,
-        { width: outerR - innerR, height: treadH, depth: arcChord, radius: 0.01, segments: 2 },
+        { width: outerR - innerR, height: treadH, depth: arcChord, radius: 0.01, segments: 1 },
         scene
       );
       tread.rotation.y = -a;
@@ -924,7 +935,7 @@ export function buildStairsMesh(scene: Scene, name: string, opts: StairsBuildOpt
         height: treadThickness,
         depth: stepRun + nosing,
         radius: Math.min(0.012, treadThickness * 0.35),
-        segments: 2,
+        segments: 1,
       },
       scene
     );
@@ -1023,7 +1034,7 @@ export function buildRoofMesh(scene: Scene, name: string, opts: RoofBuildOptions
         diameterZ: totalD,
         slice: 0.5,
         segments: 24,
-        sideOrientation: Mesh.DOUBLESIDE,
+        sideOrientation: Mesh.DEFAULTSIDE,
       },
       scene
     );
@@ -1115,15 +1126,25 @@ export function buildRoofMesh(scene: Scene, name: string, opts: RoofBuildOptions
   const slopeRun = hw;
   const slopeLen = Math.hypot(slopeRun, height);
   const slopeAngle = Math.atan2(height, slopeRun);
+  const ridgeTrim =
+    opts.ridgeCap !== false
+      ? Math.min(slopeLen * 0.35, thickness * 0.5 * Math.tan(slopeAngle) + 0.01)
+      : 0;
+  const slabWidth = Math.max(0.1, slopeLen - ridgeTrim);
+  const slopeShift = ridgeTrim * 0.5;
 
   for (const side of [-1, 1]) {
     const slab = createRoundedBoxMesh(
       `${name}_slope_${side}`,
-      { width: slopeLen + thickness * 0.5, height: thickness, depth: totalD, radius: 0.012, segments: 2 },
+      { width: slabWidth, height: thickness, depth: totalD, radius: 0.012, segments: 2 },
       scene
     );
     slab.rotation.z = -side * slopeAngle;
-    slab.position.set(side * (slopeRun * 0.5), height * 0.5 + thickness * 0.4, 0);
+    slab.position.set(
+      side * (slopeRun * 0.5 + slopeShift * Math.cos(slopeAngle)),
+      height * 0.5 + thickness * 0.4 - slopeShift * Math.sin(slopeAngle),
+      0
+    );
     slab.bakeCurrentTransformIntoVertices();
     parts.push(slab);
   }
@@ -1150,7 +1171,7 @@ export function buildRoofMesh(scene: Scene, name: string, opts: RoofBuildOptions
     ];
     const gableMesh = MeshBuilder.ExtrudePolygon(
       `${name}_gable_core`,
-      { shape: gableShape, depth, sideOrientation: Mesh.DOUBLESIDE, updatable: true },
+      { shape: gableShape, depth, sideOrientation: Mesh.DEFAULTSIDE, updatable: true },
       scene,
       earcut
     );

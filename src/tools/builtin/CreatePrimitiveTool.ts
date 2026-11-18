@@ -267,7 +267,7 @@ export class CreatePrimitiveTool extends AbstractTool {
           {
             width: opts.width ?? opts.size ?? 1,
             height: opts.height ?? opts.size ?? 1,
-            sideOrientation: Mesh.DOUBLESIDE,
+            sideOrientation: Mesh.DEFAULTSIDE,
           },
           context.scene
         );
@@ -280,7 +280,7 @@ export class CreatePrimitiveTool extends AbstractTool {
           {
             radius: diam * 0.5,
             tessellation: opts.tessellation ?? opts.segments ?? adaptiveTess,
-            sideOrientation: Mesh.DOUBLESIDE,
+            sideOrientation: Mesh.DEFAULTSIDE,
           },
           context.scene
         );

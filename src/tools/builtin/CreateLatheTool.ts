@@ -55,7 +55,7 @@ export class CreateLatheTool extends AbstractTool {
         tessellation: args.tessellation !== undefined ? Number(args.tessellation) : 32,
         arc: args.arc !== undefined ? Number(args.arc) : 1,
         cap: Mesh.CAP_ALL,
-        sideOrientation: Mesh.DOUBLESIDE,
+        sideOrientation: Mesh.DEFAULTSIDE,
       },
       context.scene
     );

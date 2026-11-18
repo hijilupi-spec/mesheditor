@@ -46,6 +46,7 @@ import {
   CreateTextMeshTool,
   DecalTool,
   CreateHeightmapTool,
+  CheckZFightingTool,
 } from './builtin';
 
 /**
@@ -175,5 +176,6 @@ export function createDefaultToolRegistry(): ToolRegistry {
     new CreateTextMeshTool(),
     new DecalTool(),
     new CreateHeightmapTool(),
+    new CheckZFightingTool(),
   ]);
 }

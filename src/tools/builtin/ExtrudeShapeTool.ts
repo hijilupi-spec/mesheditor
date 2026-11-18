@@ -63,7 +63,7 @@ export class ExtrudeShapeTool extends AbstractTool {
         scale: args.scale !== undefined ? Number(args.scale) : 1,
         rotation: args.rotation !== undefined && typeof args.rotation === 'number' ? args.rotation : 0,
         cap: args.cap !== undefined ? Number(args.cap) : Mesh.CAP_ALL,
-        sideOrientation: Mesh.DOUBLESIDE,
+        sideOrientation: Mesh.DEFAULTSIDE,
       },
       context.scene
     );

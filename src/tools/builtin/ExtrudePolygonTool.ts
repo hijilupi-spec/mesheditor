@@ -72,7 +72,7 @@ export class ExtrudePolygonTool extends AbstractTool {
         shape,
         depth,
         holes,
-        sideOrientation: Mesh.DOUBLESIDE,
+        sideOrientation: Mesh.DEFAULTSIDE,
       },
       context.scene,
       earcut

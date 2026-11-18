@@ -22,6 +22,10 @@ const DEFAULT_AGY_MODELS = [
   'gemini-3.8-flash-medium',
   'gemini-3.8-flash-high',
   'gemini-3.8-flash-low',
+  'gemini-4-neon-medium',
+  'gemini-4-neon-high',
+  'gemini-4-neon-xhigh',
+  'gemini-4-neon-low',
   'gemini-4-argon-medium',
   'gemini-4-argon-high',
   'gemini-4-argon-low',
@@ -29,6 +33,7 @@ const DEFAULT_AGY_MODELS = [
   'gemini-4-hydrogen-high',
   'gemini-4-hydrogen-xhigh',
   'gemini-4-hydrogen-low',
+  'gemini-pro-orchestrator-neon',
   'gemini-pro-orchestrator-g1-pro',
   'claude-sonnet-5-5-medium',
   'claude-sonnet-5-5-high',
@@ -81,6 +86,13 @@ function normalizeAgyModel(requestedModel) {
     if (raw.includes('low')) return 'gemini-3.8-flash-low';
     return 'gemini-3.8-flash-medium';
   }
+  if (raw.includes('neon')) {
+    if (raw.includes('orchestrator')) return 'gemini-pro-orchestrator-neon';
+    if (raw.includes('xhigh')) return 'gemini-4-neon-xhigh';
+    if (raw.includes('high')) return 'gemini-4-neon-high';
+    if (raw.includes('low')) return 'gemini-4-neon-low';
+    return 'gemini-4-neon-medium';
+  }
   if (raw.includes('hydrogen')) {
     if (raw.includes('xhigh')) return 'gemini-4-hydrogen-xhigh';
     if (raw.includes('high')) return 'gemini-4-hydrogen-high';
@@ -113,11 +125,34 @@ function normalizeAgyModel(requestedModel) {
 }
 
 /**
+ * Parses the final JSON status object emitted by `agy --output-format json`.
+ */
+function parseLastAgyJson(stdout) {
+  const lines = String(stdout || '')
+    .trim()
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].startsWith('{') && lines[i].endsWith('}')) {
+      try {
+        return JSON.parse(lines[i]);
+      } catch {
+        // continue searching
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Runs a command and captures stdout/stderr with a timeout.
  */
 function execProcess(bin, args, options = {}) {
   return new Promise((resolve, reject) => {
     const timeoutMs = options.timeoutMs || 600000; // 10 minutes timeout
+    const jsonGraceMs = options.jsonGraceMs ?? 2500; // Allow agy to finish SQLite/store shutdown cleanly
     const isWin = process.platform === 'win32';
     const child = spawn(bin, args, {
       cwd: options.cwd || os.tmpdir(),
@@ -129,21 +164,46 @@ function execProcess(bin, args, options = {}) {
     let stdout = '';
     let stderr = '';
     let timer = null;
+    let jsonEarlyTimer = null;
+    let exitTimer = null;
+    let exited = false;
     let settled = false;
+
+    const killProcessGroup = (signalName) => {
+      try {
+        if (child.pid && !isWin) {
+          process.kill(-child.pid, signalName);
+        } else {
+          child.kill(signalName);
+        }
+      } catch {
+        // ignore if already exited
+      }
+    };
 
     const cleanup = () => {
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
-      try {
-        if (child.pid && !isWin) {
-          process.kill(-child.pid, 'SIGKILL');
-        } else {
-          child.kill('SIGKILL');
+      if (jsonEarlyTimer) {
+        clearTimeout(jsonEarlyTimer);
+        jsonEarlyTimer = null;
+      }
+      if (exitTimer) {
+        clearTimeout(exitTimer);
+        exitTimer = null;
+      }
+      if (exited) {
+        // Main process already exited cleanly; reap any lingering grandchild processes (e.g. stdio MCP servers)
+        killProcessGroup('SIGKILL');
+      } else {
+        // Terminate gracefully first so SQLite WAL/stores are not corrupted mid-flush
+        killProcessGroup('SIGTERM');
+        const forceKill = setTimeout(() => killProcessGroup('SIGKILL'), 300);
+        if (typeof forceKill.unref === 'function') {
+          forceKill.unref();
         }
-      } catch {
-        // ignore if already exited
       }
     };
 
@@ -169,18 +229,23 @@ function execProcess(bin, args, options = {}) {
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString();
-      // When agy outputs its complete JSON result in print mode, resolve immediately.
-      // This prevents persistent child/grandchild processes (such as stdio MCP servers)
-      // from holding the stdout/stderr pipe open and blocking stdio stream closure.
+      // When agy outputs its complete JSON result in print mode, wait briefly for agy
+      // to finish its own clean shutdown (typically ~200ms) and only force-resolve if
+      // persistent grandchild processes (such as stdio MCP servers) keep pipes open.
       if (
         options.waitForJson !== false &&
+        !jsonEarlyTimer &&
+        !exited &&
         stdout.includes('"conversation_id"') &&
         (stdout.includes('"status":"SUCCESS"') || stdout.includes('"status":"ERROR"'))
       ) {
-        setTimeout(() => {
-          const earlyCode = stdout.includes('"status":"ERROR"') ? 1 : 0;
-          finish({ code: earlyCode, stdout, stderr });
-        }, 60);
+        const parsed = parseLastAgyJson(stdout);
+        if (parsed && (parsed.status === 'SUCCESS' || parsed.status === 'ERROR')) {
+          jsonEarlyTimer = setTimeout(() => {
+            const earlyCode = parsed.status === 'ERROR' ? 1 : 0;
+            finish({ code: earlyCode, stdout, stderr });
+          }, jsonGraceMs);
+        }
       }
     });
 
@@ -193,12 +258,18 @@ function execProcess(bin, args, options = {}) {
     });
 
     child.on('exit', (code) => {
-      setTimeout(() => {
+      exited = true;
+      if (jsonEarlyTimer) {
+        clearTimeout(jsonEarlyTimer);
+        jsonEarlyTimer = null;
+      }
+      exitTimer = setTimeout(() => {
         finish({ code: code ?? 0, stdout, stderr });
       }, 50);
     });
 
     child.on('close', (code) => {
+      exited = true;
       finish({ code: code ?? 0, stdout, stderr });
     });
   });
@@ -563,6 +634,20 @@ function readRequestBody(req) {
   });
 }
 
+const TRANSIENT_STARTUP_ERROR_PATTERN =
+  /failed to start conversation|backend returned an empty conversation id|initialized by another opener|database is locked|SQLITE_BUSY|trajectory not found/i;
+
+/**
+ * Returns true if an agy CLI failure is a transient startup/SQLite-lock race that should be retried.
+ */
+function isTransientBridgeStartupError(err, stdout = '', stderr = '') {
+  if (err && typeof err.statusCode === 'number' && err.statusCode !== 500) {
+    return false;
+  }
+  const combined = `${err?.message || ''}\n${stderr || ''}\n${stdout || ''}`;
+  return TRANSIENT_STARTUP_ERROR_PATTERN.test(combined);
+}
+
 /**
  * Normalizes error messages from agy CLI into a clear human-readable string and status code.
  */
@@ -591,10 +676,12 @@ function extractBridgeErrorDetails(err, stdout, stderr, code) {
 /**
  * Executes a chat completion request via `agy` and returns an OpenAI-formatted response object.
  */
-async function runAgyChatCompletion(body) {
+async function runAgyChatCompletion(body, options = {}) {
   const bin = resolveAgyBinary();
   const model = normalizeAgyModel(body?.model);
   const { prompt, tempImageFiles } = buildAgyPromptFromOpenAI(body?.messages || [], body?.tools || []);
+  const execFn = options.execFn || execProcess;
+  const retryDelaysMs = Array.isArray(options.retryDelaysMs) ? options.retryDelaysMs : [350, 900];
 
   // Always supply --dangerously-skip-permissions and --print-timeout 600s so agy never hangs waiting for stdin confirmation
   const args = [
@@ -613,35 +700,34 @@ async function runAgyChatCompletion(body) {
   args.push('-p', prompt);
 
   try {
-    const { code, stdout, stderr } = await execProcess(bin, args, { cwd: os.tmpdir(), timeoutMs: 600000 });
-
-    // Parse last JSON line from agy stdout
     let agyResult = null;
-    const lines = String(stdout || '')
-      .trim()
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
+    let rawStdout = '';
+    const maxAttempts = 1 + retryDelaysMs.length;
 
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i].startsWith('{') && lines[i].endsWith('}')) {
-        try {
-          agyResult = JSON.parse(lines[i]);
-          break;
-        } catch {
-          // continue searching
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const { code, stdout, stderr } = await execFn(bin, args, { cwd: os.tmpdir(), timeoutMs: 600000 });
+      rawStdout = stdout;
+      agyResult = parseLastAgyJson(stdout);
+
+      if (agyResult?.status === 'ERROR' || agyResult?.finished_reason === 'error' || (code !== 0 && !agyResult)) {
+        const errDetails = extractBridgeErrorDetails(new Error(agyResult?.error || ''), stdout, stderr, code);
+        const bridgeErr = new Error(errDetails.message);
+        bridgeErr.statusCode = errDetails.statusCode;
+
+        if (attempt < retryDelaysMs.length && isTransientBridgeStartupError(bridgeErr, stdout, stderr)) {
+          const delayMs = retryDelaysMs[attempt];
+          console.warn(
+            `[Antigravity Bridge] Transient CLI startup error (${bridgeErr.message}); retrying in ${delayMs}ms (attempt ${attempt + 2}/${maxAttempts})...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
         }
+        throw bridgeErr;
       }
+      break;
     }
 
-    if (agyResult?.status === 'ERROR' || agyResult?.finished_reason === 'error' || (code !== 0 && !agyResult)) {
-      const errDetails = extractBridgeErrorDetails(new Error(agyResult?.error || ''), stdout, stderr, code);
-      const bridgeErr = new Error(errDetails.message);
-      (bridgeErr).statusCode = errDetails.statusCode;
-      throw bridgeErr;
-    }
-
-    const rawResponseText = agyResult ? agyResult.response || '' : stdout;
+    const rawResponseText = agyResult ? agyResult.response || '' : rawStdout;
     const hasExecutedBabylonCode = (body?.messages || []).some(
       (m) => m && m.role === 'tool' && m.name === 'modeler_execute_babylon_code'
     );
@@ -949,6 +1035,8 @@ module.exports = {
   listAgyModels,
   buildAgyPromptFromOpenAI,
   parseStructuredAgentResponse,
+  parseLastAgyJson,
+  isTransientBridgeStartupError,
   extractBridgeErrorDetails,
   runAgyChatCompletion,
   setupAntigravityBridgeRoutes,

@@ -546,6 +546,86 @@ describe('MeshEditorService Integration Tests (Babylon NullEngine)', () => {
       expect(service.importedMeshes.length).toBe(2);
     });
 
+    it('preserves original mesh position and geometry when copying and pasting a mesh with an off-center pivot', () => {
+      const box = service.createPrimitive(defaultPrimitiveConfig({ name: 'OffsetBox', size: 2 }));
+      // Shift vertices away from local origin (simulating imported/tube/baked geometry)
+      const positions = Array.from(box.getVerticesData(VertexBuffer.PositionKind)!);
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i] += 5;
+        positions[i + 1] += 2;
+        positions[i + 2] -= 3;
+      }
+      box.setVerticesData(VertexBuffer.PositionKind, positions);
+      box.computeWorldMatrix(true);
+      box.refreshBoundingInfo();
+
+      const origPos = box.position.clone();
+      const origCenter = box.getBoundingInfo().boundingBox.centerWorld.clone();
+      const origVerts = Array.from(box.getVerticesData(VertexBuffer.PositionKind)!);
+
+      service.selectMesh(box);
+      service.copySelected();
+      const pasted = service.pasteAtCursor(200, 200);
+
+      expect(pasted.length).toBe(1);
+      const clone = pasted[0] as Mesh;
+      expect(clone).not.toBe(box);
+      expect(clone.geometry).not.toBe(box.geometry);
+
+      box.computeWorldMatrix(true);
+      box.refreshBoundingInfo();
+      expect(box.position.x).toBeCloseTo(origPos.x, 5);
+      expect(box.position.y).toBeCloseTo(origPos.y, 5);
+      expect(box.position.z).toBeCloseTo(origPos.z, 5);
+
+      const afterCenter = box.getBoundingInfo().boundingBox.centerWorld;
+      expect(afterCenter.x).toBeCloseTo(origCenter.x, 5);
+      expect(afterCenter.y).toBeCloseTo(origCenter.y, 5);
+      expect(afterCenter.z).toBeCloseTo(origCenter.z, 5);
+
+      const afterVerts = Array.from(box.getVerticesData(VertexBuffer.PositionKind)!);
+      expect(afterVerts).toEqual(origVerts);
+    });
+
+    it('preserves original positions when copying and pasting multiple selected meshes and groups', () => {
+      const m1 = service.createPrimitive(defaultPrimitiveConfig({ name: 'MultiA', size: 2 }));
+      const m2 = service.createPrimitive(defaultPrimitiveConfig({ name: 'MultiB', size: 2 }));
+      // Give m1 off-center vertices and move m2
+      const p1 = Array.from(m1.getVerticesData(VertexBuffer.PositionKind)!);
+      for (let i = 0; i < p1.length; i += 3) {
+        p1[i] += 4;
+        p1[i + 2] += 2;
+      }
+      m1.setVerticesData(VertexBuffer.PositionKind, p1);
+      m1.computeWorldMatrix(true);
+      m1.refreshBoundingInfo();
+
+      m2.position.set(-3, 1, 2);
+      m2.computeWorldMatrix(true);
+      m2.refreshBoundingInfo();
+
+      const m1OrigCenter = m1.getBoundingInfo().boundingBox.centerWorld.clone();
+      const m2OrigCenter = m2.getBoundingInfo().boundingBox.centerWorld.clone();
+
+      service.selectNodes([m1, m2]);
+      service.copySelected();
+      const pasted = service.pasteAtCursor(300, 300);
+
+      expect(pasted.length).toBe(2);
+      service.clearSelectionProxy();
+      m1.computeWorldMatrix(true);
+      m1.refreshBoundingInfo();
+      m2.computeWorldMatrix(true);
+      m2.refreshBoundingInfo();
+
+      expect(m1.getBoundingInfo().boundingBox.centerWorld.x).toBeCloseTo(m1OrigCenter.x, 5);
+      expect(m1.getBoundingInfo().boundingBox.centerWorld.y).toBeCloseTo(m1OrigCenter.y, 5);
+      expect(m1.getBoundingInfo().boundingBox.centerWorld.z).toBeCloseTo(m1OrigCenter.z, 5);
+      expect(m2.getBoundingInfo().boundingBox.centerWorld.x).toBeCloseTo(m2OrigCenter.x, 5);
+      expect(m2.getBoundingInfo().boundingBox.centerWorld.y).toBeCloseTo(m2OrigCenter.y, 5);
+      expect(m2.getBoundingInfo().boundingBox.centerWorld.z).toBeCloseTo(m2OrigCenter.z, 5);
+    });
+
     it('deletes selected meshes and restores them via undo', () => {
       const m1 = service.createPrimitive(defaultPrimitiveConfig({ name: 'DeleteMe' }));
       expect(service.importedMeshes).toContain(m1);

@@ -169,6 +169,7 @@ export interface AIAgentEndpointConfig {
   createTextures?: boolean;
   createNormalMaps?: boolean;
   visualCritique?: boolean;
+  checkZFighting?: boolean;
   promptSuffix?: string;
   neural3DProviders?: Neural3DProvidersMap;
   imageGeneratorEnabled?: boolean;
@@ -209,6 +210,7 @@ export interface AIAgentRequestOptions {
   mode?: 'create_or_update' | 'replace_scene';
   includeViewportSnapshot?: boolean;
   visualCritique?: boolean;
+  checkZFighting?: boolean;
   signal?: AbortSignal;
   onStep?: (step: AIAgentToolExecutionStep) => void;
   onStatus?: (statusText: string) => void;

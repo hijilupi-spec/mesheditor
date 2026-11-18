@@ -5,7 +5,7 @@ import { ToolExecutionContext } from '../ToolExecutionContext';
 export class RetopologizeMeshTool extends AbstractTool {
   public readonly name = 'modeler_retopologize_mesh';
   public readonly description =
-    'Retopologizes a high-poly sculpt into a game-ready low-poly mesh via Quadric Error Decimation, Shrinkwrap Surface Projection, Quad-Flow Cage generation, or Quad-Draw Strips.';
+    'Retopologizes a high-poly sculpt, SDF mesh, or dense imported 3D asset into a game-ready low-poly mesh via Quadric Error Decimation, Shrinkwrap Surface Projection, Quad-Flow Cage generation, or Quad-Draw Strips. Avoid decimating clean low/mid-poly parametric architectural meshes unless the scene exceeds polygon budget.';
 
   public readonly parameters = {
     type: 'object',

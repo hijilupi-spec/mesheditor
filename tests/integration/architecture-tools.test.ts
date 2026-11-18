@@ -262,5 +262,38 @@ describe('Parametric Architecture, Beveled Box & Model Planning Tools', () => {
     expect(eyePart.recommendedPolygons).toBeLessThan(400);
     expect(eyePart.recommendedSegments).toBe(8);
   });
+
+  it('does not emit false proportionWarnings for classical columns alongside a large temple roof', async () => {
+    const colTool = new CreateColumnTool();
+    const roofTool = new CreateRoofTool();
+    const ctx = service.aiAgent.createToolContext();
+
+    await roofTool.execute(
+      {
+        name: 'temple_roof',
+        style: 'gable',
+        width: 4.5,
+        depth: 5.0,
+        height: 1.4,
+        overhang: 0.3,
+        position: { x: 0, y: 3.6, z: 0 },
+      },
+      ctx
+    );
+    await colTool.execute(
+      {
+        name: 'ionic_column_1',
+        order: 'ionic',
+        height: 3.0,
+        radius: 0.22,
+        flutes: 20,
+        entasis: 0.04,
+      },
+      ctx
+    );
+
+    const summary = service.aiAgent.buildSceneSummary();
+    expect(summary.diagnostics.proportionWarnings).toEqual([]);
+  });
 });
 

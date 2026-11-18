@@ -105,12 +105,13 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('2. ToolRegistry Management', () => {
-    it('initializes default registry with all 45 built-in modeling tools', () => {
+    it('initializes default registry with all 46 built-in modeling tools', () => {
       const registry = createDefaultToolRegistry();
       const allTools = registry.getAll();
 
-      expect(allTools.length).toBe(45);
+      expect(allTools.length).toBe(46);
       expect(registry.has('modeler_get_scene_info')).toBe(true);
+      expect(registry.has('modeler_check_z_fighting')).toBe(true);
       expect(registry.has('modeler_plan_model')).toBe(true);
       expect(registry.has('modeler_create_primitive')).toBe(true);
       expect(registry.has('modeler_create_rounded_box')).toBe(true);
@@ -157,7 +158,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(registry.has('modeler_create_heightmap')).toBe(true);
 
       const openAiDefs = registry.getOpenAITools();
-      expect(openAiDefs.length).toBe(45);
+      expect(openAiDefs.length).toBe(46);
       expect(openAiDefs.every((d) => d.type === 'function' && typeof d.function.name === 'string')).toBe(true);
     });
 

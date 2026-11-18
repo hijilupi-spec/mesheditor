@@ -65,6 +65,11 @@ import {
   ToolExecutionContext,
   createDefaultToolRegistry,
 } from './tools';
+import {
+  detectZFighting,
+  ZFightingCheckOptions,
+  ZFightingReport,
+} from './geometry/zFightingDetector';
 
 export type {
   ProceduralTextureType,
@@ -92,6 +97,7 @@ export const DEFAULT_AI_AGENT_CONFIG: AIAgentEndpointConfig = {
   createTextures: true,
   createNormalMaps: true,
   visualCritique: false,
+  checkZFighting: true,
   promptSuffix: '',
   neural3DProviders: createDefaultNeural3DProviders(),
   imageGeneratorEnabled: true,
@@ -363,6 +369,8 @@ export class AIAgentService {
           typeof parsed.createNormalMaps === 'boolean' ? parsed.createNormalMaps : DEFAULT_AI_AGENT_CONFIG.createNormalMaps,
         visualCritique:
           typeof parsed.visualCritique === 'boolean' ? parsed.visualCritique : DEFAULT_AI_AGENT_CONFIG.visualCritique,
+        checkZFighting:
+          typeof parsed.checkZFighting === 'boolean' ? parsed.checkZFighting : DEFAULT_AI_AGENT_CONFIG.checkZFighting,
         promptSuffix:
           typeof parsed.promptSuffix === 'string' ? parsed.promptSuffix : DEFAULT_AI_AGENT_CONFIG.promptSuffix,
         neural3DProviders: normalizeNeural3DProviders(parsed.neural3DProviders),
@@ -873,6 +881,16 @@ export class AIAgentService {
   /* =========================================================================
      SYSTEM PROMPT & SCENE CONTEXT BUILDER
      ========================================================================= */
+  /**
+   * Checks all active visible scene meshes for coplanar overlapping faces that cause Z-fighting or texture bleeding.
+   */
+  public checkSceneZFighting(options?: ZFightingCheckOptions): ZFightingReport {
+    const validMeshes = this.service.importedMeshes.filter(
+      (m) => !this.service.isEditorHelper(m) && !m.isDisposed()
+    );
+    return detectZFighting(validMeshes, options);
+  }
+
   public buildSceneSummary(): Record<string, any> {
     const validMeshes = this.service.importedMeshes.filter(
       (m) => !this.service.isEditorHelper(m) && !m.isDisposed()
@@ -965,7 +983,7 @@ export class AIAgentService {
       for (const m of meshes) {
         if (
           m.name !== primary.name &&
-          m.volumeApprox < primary.volumeApprox * 0.08 &&
+          m.volumeApprox < primary.volumeApprox * 0.015 &&
           m.triangles > primary.triangles
         ) {
           proportionWarnings.push(
@@ -996,6 +1014,8 @@ export class AIAgentService {
           .map((cm) => cm.name),
       }));
 
+    const zFightingReport = this.checkSceneZFighting({ maxIssues: 12 });
+
     return {
       totalMeshes: meshes.length,
       totalSceneTriangles,
@@ -1004,6 +1024,22 @@ export class AIAgentService {
       diagnostics: {
         budgetStatus,
         proportionWarnings,
+        zFightingIssueCount: zFightingReport.issueCount,
+        zFightingIssues: zFightingReport.issues.map((zf) => ({
+          id: zf.id,
+          kind: zf.kind,
+          severity: zf.severity,
+          meshA: zf.meshA,
+          meshB: zf.meshB,
+          faceDirectionA: zf.faceDirectionA,
+          faceDirectionB: zf.faceDirectionB,
+          representativeFaceIdA: zf.representativeFaceIdA,
+          representativeFaceIdB: zf.representativeFaceIdB,
+          overlapPoint: zf.overlapPoint,
+          overlapArea: zf.overlapArea,
+          summary: zf.summary,
+          recommendedFixes: zf.recommendedFixes,
+        })),
       },
       groups,
       meshes,
@@ -1107,8 +1143,12 @@ ${textureRule}
    - Target Polygon Budget: **${minPoly.toLocaleString()} to ${maxPoly.toLocaleString()} triangles**.
    - **Proportional Density Rule**: Primary volumes (torso, head, main walls, roof) must receive **50–65%** of the polygon budget; Secondary parts (limbs, columns, arches) **25–35%**; Tertiary details (eyes, pupils, buttons, bolts, rivets, fingers) **< 10–15%**. NEVER give a small detail (such as an eye) more triangles than the torso or main body! Use \`detailTier: "tertiary"\` or low \`segments\` (6–8) on small spheres/cylinders.
    - **Minimum Polygons (${minPoly.toLocaleString()})**: Ensure the asset has sufficient geometric definition, bevels, segments, or facets to meet or exceed this baseline.
-   - **Maximum Polygons (${maxPoly.toLocaleString()})**: Do NOT exceed this limit! Use \`modeler_retopologize_mesh\` if a high-poly sculpt or SDF mesh exceeds the budget.
-7. **Double-Sided Materials & Geometries Mandate**: ALWAYS ensure materials and meshes are double-sided (\`backFaceCulling = false\` and \`twoSidedLighting = true\` on materials, \`sideOrientation: Mesh.DOUBLESIDE\` on meshes). Single-sided materials lead to backface culling artifacts where thin geometries, clothing, leaves, wings, cavities, or inverted face normal patches render as missing or hollow holes.`;
+   - **Maximum Polygons (${maxPoly.toLocaleString()})**: Do NOT exceed this limit! Use \`modeler_retopologize_mesh\` ONLY when a high-poly organic sculpt, SDF mesh, or neural 3D asset exceeds the budget. Do NOT decimate clean parametric architectural meshes (\`modeler_create_column\`, \`modeler_create_stairs\`, \`modeler_create_wall\`, \`modeler_create_arch\`, \`modeler_create_molding\`, \`modeler_create_roof\`) unless total scene polygons actually exceed \`${maxPoly.toLocaleString()}\`.
+7. **Double-Sided Materials & Geometries Mandate**: ALWAYS ensure materials are double-sided (\`backFaceCulling = false\` and \`twoSidedLighting = true\`). Do NOT combine \`sideOrientation: Mesh.DOUBLESIDE\` on closed solids (\`ExtrudePolygon\`, \`ExtrudeShape\`, \`CreateBox\`, \`CreateLathe\`) with \`backFaceCulling = false\`, as duplicating faces at identical coordinates causes self-Z-fighting.
+8. **Zero Z-Fighting & Texture Bleeding Mandate**:
+   - NEVER place two faces on the exact same geometric plane (e.g. a flush panel, door, window, trim, sign, or rug at \`0.000m\` offset on a wall or floor face). Coplanar overlapping faces cause Z-fighting and texture bleeding.
+   - To add recessed or raised surface detail (windows, doors, panels, screens, inlays), prefer \`modeler_facet_inset\` (with non-zero \`depth\`, e.g. \`depth: -0.02\` or \`0.02\`) and \`modeler_facet_extrude\` (e.g. \`distance: 0.02\`), OR offset secondary meshes by at least \`0.01\` to \`0.03m\` along the face normal, OR carve cleanly with \`modeler_boolean_operation\`.
+   - Call \`modeler_check_z_fighting\` after assembling multi-part geometry to verify zero coplanar overlaps remain, and fix any flagged faces via \`modeler_facet_extrude\`, \`modeler_facet_inset\`, or \`modeler_transform_mesh\`.`;
   }
 
   /* =========================================================================
@@ -1513,7 +1553,10 @@ ${textureRule}
     const maxIterations = Math.max(1, Math.min(25, this.config.maxIterations || 12));
     const enableVisualCritique =
       options.visualCritique !== undefined ? options.visualCritique : !!this.config.visualCritique;
+    const enableZFightingCheck =
+      options.checkZFighting !== undefined ? options.checkZFighting : this.config.checkZFighting !== false;
     let critiqueCompleted = false;
+    let zFightingCheckCompleted = false;
     let finalAssistantText = '';
     let toolsSupported = true;
 
@@ -1705,13 +1748,14 @@ ${JSON.stringify(
   2
 )}
 
-Evaluate all 4 criteria:
+Evaluate all 5 criteria:
 1. Silhouette & Organic/Architectural Quality: Does the model look natural and detailed rather than blocky or wooden?
 2. Alignment & Grounding: Are any parts floating, detached, or mispositioned in the Front/Side views?
 3. Proportional Polygon Density (Wireframe View): Does any small detail (such as an eye, button, or trim) have more triangles than the torso/main body, or is total triangle count outside the budget?
 4. Completeness: Are all requested features and materials present?
+5. Z-Fighting & Texture Bleeding: Check \`diagnostics.zFightingIssues\` and inspect surfaces for flickering or bleeding coplanar faces. If \`zFightingIssueCount > 0\`, fix each overlap using \`modeler_facet_extrude\`, \`modeler_facet_inset\` (with non-zero \`depth\`), or \`modeler_transform_mesh\`.
 
-If you detect ANY issues or warnings above, call the appropriate \`modeler_*\` tools NOW to fix them (e.g. transform mispositioned parts, replace disproportionate primitives, smooth/sculpt wooden forms, or retopologize). If the model is already well-proportioned and complete, reply with a concise final summary and no tool calls.`;
+If you detect ANY issues or warnings above, call the appropriate \`modeler_*\` tools NOW to fix them (e.g. transform mispositioned parts, extrude/inset coplanar Z-fighting faces, replace disproportionate primitives, smooth/sculpt wooden forms, or retopologize overly dense organic/sculpt meshes — avoid decimating crisp parametric architectural parts unless total scene triangles exceed \`maxPolygons\`). If the model is already clean, well-proportioned, and complete, reply with a concise final summary and no tool calls.`;
 
           if (multiViewUrl) {
             apiMessages.push({
@@ -1728,6 +1772,43 @@ If you detect ANY issues or warnings above, call the appropriate \`modeler_*\` t
             });
           }
           continue;
+        }
+
+        // Automatic Z-Fighting & Texture Bleeding Geometry Check (zero extra LLM calls when clean)
+        if (
+          enableZFightingCheck &&
+          !zFightingCheckCompleted &&
+          executedSteps.length > 0 &&
+          iteration + 1 < maxIterations
+        ) {
+          const zReport = this.checkSceneZFighting({ maxIssues: 15 });
+          if (zReport.hasIssues) {
+            zFightingCheckCompleted = true;
+            options.onStatus?.(
+              `Z-fighting check: ${zReport.issueCount} coplanar overlap(s) detected, requesting AI fix...`
+            );
+
+            if (assistantContent) {
+              apiMessages.push({
+                role: 'assistant',
+                content: assistantContent,
+              });
+            }
+
+            apiMessages.push({
+              role: 'user',
+              content: `[Z-FIGHTING & TEXTURE BLEEDING CHECK]
+An automatic geometric inspection of the scene detected ${zReport.issueCount} coplanar overlapping face issue(s) that cause Z-fighting / texture bleeding:
+
+${JSON.stringify(zReport, null, 2)}
+
+Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
+- Prefer \`modeler_facet_extrude\` (small offset like \`distance: 0.02\` or \`-0.02\`) or \`modeler_facet_inset\` (with non-zero \`depth\`, e.g. \`insetAmount: 0.15, depth: -0.02\` or \`0.02\`) to separate coplanar faces cleanly.
+- Or use \`modeler_transform_mesh\` to offset one of the overlapping meshes slightly along the shared plane normal (\`0.01\` to \`0.02\`m), or \`modeler_boolean_operation\` to carve/union cleanly.
+- After fixing, you may call \`modeler_check_z_fighting\` to confirm \`hasIssues: false\`.`,
+            });
+            continue;
+          }
         }
 
         // No more tool calls -> finished!
@@ -1940,7 +2021,47 @@ If you detect ANY issues or warnings above, call the appropriate \`modeler_*\` t
     }
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
+      let errText = await res.text().catch(() => '');
+
+      // Retry transient Antigravity CLI conversation-initialization races (e.g. empty conversation id)
+      const isAgyBridge =
+        url.toLowerCase().includes('/api/antigravity') ||
+        url.includes('localhost:8787') ||
+        url.includes('127.0.0.1:8787');
+      if (
+        isAgyBridge &&
+        res.status === 500 &&
+        /failed to start conversation|empty conversation id|initialized by another opener/i.test(errText) &&
+        !signal?.aborted
+      ) {
+        for (const delayMs of [400, 900]) {
+          if (signal?.aborted) break;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          if (signal?.aborted) break;
+          try {
+            const retryRes = await fetchFn(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(body),
+              signal,
+            });
+            if (retryRes.ok) {
+              return await retryRes.json();
+            }
+            res = retryRes;
+            errText = await retryRes.text().catch(() => '');
+            if (
+              retryRes.status !== 500 ||
+              !/failed to start conversation|empty conversation id|initialized by another opener/i.test(errText)
+            ) {
+              break;
+            }
+          } catch {
+            // Fall through to error reporting
+            break;
+          }
+        }
+      }
 
       // Auto-switch to local Antigravity Bridge if Google AI Studio returns 402 (depleted prepayment credits)
       if (res.status === 402 && url.toLowerCase().includes('generativelanguage.googleapis.com')) {

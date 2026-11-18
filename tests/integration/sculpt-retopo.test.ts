@@ -5,6 +5,7 @@ import { MeshEditorService } from '../../src/MeshEditorService';
 import { SculptController } from '../../src/sculpting/SculptController';
 import { SculptEditorTool } from '../../src/tools/editor/SculptEditorTool';
 import { SpawnBaseMeshTool, RetopologizeMeshTool } from '../../src/tools/builtin';
+import { buildColumnMesh, buildStairsMesh } from '../../src/geometry/architecture';
 
 describe('Figure Sculpt & Retopology (Anatomy, Sculpting, and Game Retopo)', () => {
   let canvas: HTMLCanvasElement;
@@ -292,6 +293,77 @@ describe('Figure Sculpt & Retopology (Anatomy, Sculpting, and Game Retopo)', () 
       expect(res.status).toBe('ok');
       expect(res.meshName).toBe('AI_DenseMesh');
       expect(res.totalTriangles).toBeLessThan(denseMesh.getTotalIndices() / 3 + 1);
+    });
+
+    it('preserves multi-component architectural columns and stairs during retopology decimation', async () => {
+      const retopoTool = new RetopologizeMeshTool();
+      const context = service.aiAgent.createToolContext();
+
+      const col = buildColumnMesh(service.scene, 'Ionic_Column_Retopo', {
+        order: 'ionic',
+        height: 3.0,
+        radius: 0.22,
+        flutes: 20,
+        entasis: 0.04,
+      });
+      service.addMesh(col);
+      const colInitialTris = col.getTotalIndices() / 3;
+
+      const colRes = JSON.parse(
+        await retopoTool.execute(
+          { meshName: 'Ionic_Column_Retopo', targetFaces: 1000 },
+          context
+        )
+      );
+      expect(colRes.status).toBe('ok');
+      expect(colRes.totalTriangles).toBeLessThan(colInitialTris);
+
+      // Verify the middle fluted shaft did NOT collapse/disappear
+      const colPos = col.getVerticesData(VertexBuffer.PositionKind)!;
+      const colIdx = col.getIndices()!;
+      let midShaftTris = 0;
+      for (let i = 0; i < colIdx.length; i += 3) {
+        const yc =
+          (colPos[colIdx[i] * 3 + 1] +
+            colPos[colIdx[i + 1] * 3 + 1] +
+            colPos[colIdx[i + 2] * 3 + 1]) /
+          3;
+        if (yc > 0.4 && yc < 2.6) midShaftTris++;
+      }
+      expect(midShaftTris).toBeGreaterThan(80);
+      const colBB = col.getBoundingInfo().boundingBox;
+      expect(colBB.maximum.y - colBB.minimum.y).toBeGreaterThan(2.8);
+
+      // Verify stairs preserve all step risers when decimated
+      const stairs = buildStairsMesh(service.scene, 'Front_Stairs_Retopo', {
+        style: 'straight',
+        width: 3.2,
+        height: 0.6,
+        length: 1.2,
+        steps: 6,
+      });
+      service.addMesh(stairs);
+
+      const stairsRes = JSON.parse(
+        await retopoTool.execute(
+          { meshName: 'Front_Stairs_Retopo', targetFaces: 400 },
+          context
+        )
+      );
+      expect(stairsRes.status).toBe('ok');
+
+      const sPos = stairs.getVerticesData(VertexBuffer.PositionKind)!;
+      const sIdx = stairs.getIndices()!;
+      let groundTouchingTris = 0;
+      for (let i = 0; i < sIdx.length; i += 3) {
+        const minY = Math.min(
+          sPos[sIdx[i] * 3 + 1],
+          sPos[sIdx[i + 1] * 3 + 1],
+          sPos[sIdx[i + 2] * 3 + 1]
+        );
+        if (minY < 0.01) groundTouchingTris++;
+      }
+      expect(groundTouchingTris).toBeGreaterThanOrEqual(48);
     });
   });
 

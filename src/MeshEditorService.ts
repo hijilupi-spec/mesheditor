@@ -1864,30 +1864,60 @@ export class MeshEditorService {
     const pastedMeshes: Mesh[] = [];
     const pastedGroups: TransformNode[] = [];
 
+    const makeMeshHierarchyGeometryUnique = (rootMesh: Mesh): void => {
+      rootMesh.makeGeometryUnique();
+      for (const childMesh of rootMesh.getChildMeshes()) {
+        if (childMesh instanceof Mesh) {
+          childMesh.makeGeometryUnique();
+        }
+      }
+    };
+
+    const cloneGroupForPaste = (
+      sourceGroup: TransformNode,
+      parentNode: Nullable<any>,
+      worldDelta?: Vector3
+    ): TransformNode => {
+      const groupCloneName = `${sourceGroup.name}_copy_${Date.now().toString().slice(-4)}`;
+      const groupClone = new TransformNode(groupCloneName, this.scene);
+      (groupClone as any).metadata = { isEditorGroup: true };
+      groupClone.parent = parentNode ?? null;
+      groupClone.position.copyFrom(sourceGroup.position);
+      if (sourceGroup.rotationQuaternion) {
+        groupClone.rotationQuaternion = sourceGroup.rotationQuaternion.clone();
+      } else {
+        groupClone.rotation.copyFrom(sourceGroup.rotation);
+      }
+      groupClone.scaling.copyFrom(sourceGroup.scaling);
+
+      if (worldDelta) {
+        sourceGroup.computeWorldMatrix(true);
+        groupClone.computeWorldMatrix(true);
+        groupClone.setAbsolutePosition(sourceGroup.getAbsolutePosition().add(worldDelta));
+      }
+
+      for (const child of sourceGroup.getChildren()) {
+        if (this.isGroupNode(child)) {
+          const subClone = cloneGroupForPaste(child as TransformNode, groupClone);
+          this.groups.push(subClone);
+          pastedGroups.push(subClone);
+        } else if (child instanceof Mesh) {
+          const childClone = child.clone(`${child.name}_copy_${Date.now().toString().slice(-4)}`, groupClone);
+          if (childClone) {
+            makeMeshHierarchyGeometryUnique(childClone);
+            this.importedMeshes.push(childClone);
+            pastedMeshes.push(childClone);
+          }
+        }
+      }
+      return groupClone;
+    };
+
     for (const item of this.clipboardNodes) {
       if (item.isDisposed()) continue;
 
       if (this.isGroupNode(item)) {
-        const groupCloneName = `${item.name}_copy_${Date.now().toString().slice(-4)}`;
-        const groupClone = new TransformNode(groupCloneName, this.scene);
-        (groupClone as any).metadata = { isEditorGroup: true };
-        groupClone.position.copyFrom(item.position.add(delta));
-        if (item.rotationQuaternion) {
-          groupClone.rotationQuaternion = item.rotationQuaternion.clone();
-        } else {
-          groupClone.rotation.copyFrom(item.rotation);
-        }
-        groupClone.scaling.copyFrom(item.scaling);
-
-        for (const child of item.getChildren()) {
-          if (child instanceof Mesh) {
-            const childClone = child.clone(`${child.name}_copy_${Date.now().toString().slice(-4)}`, groupClone);
-            if (childClone) {
-              this.importedMeshes.push(childClone);
-              pastedMeshes.push(childClone);
-            }
-          }
-        }
+        const groupClone = cloneGroupForPaste(item, item.parent, delta);
         this.groups.push(groupClone);
         pastedGroups.push(groupClone);
         pastedNodes.push(groupClone);
@@ -1895,6 +1925,9 @@ export class MeshEditorService {
         const uniqueName = `${item.name}_copy_${Date.now().toString().slice(-4)}`;
         const cloned = item.clone(uniqueName, item.parent);
         if (cloned) {
+          // Detach cloned geometry from the original mesh before centering pivot or editing vertices.
+          makeMeshHierarchyGeometryUnique(cloned);
+          item.computeWorldMatrix(true);
           cloned.computeWorldMatrix(true);
           cloned.setAbsolutePosition(item.getAbsolutePosition().add(delta));
           this.importedMeshes.push(cloned);
@@ -2081,9 +2114,12 @@ export class MeshEditorService {
     if (!mesh || mesh.isDisposed()) return;
     mesh.computeWorldMatrix(true);
     const bb = mesh.getBoundingInfo().boundingBox;
-    const center = bb.centerWorld;
+    const center = bb.centerWorld.clone();
 
     const delta = center.subtract(mesh.getAbsolutePosition());
+    if (delta.lengthSquared() < 1e-10) return;
+
+    mesh.makeGeometryUnique();
     mesh.setAbsolutePosition(center);
 
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
@@ -2097,6 +2133,7 @@ export class MeshEditorService {
         positions[i + 2] -= localDelta.z;
       }
       mesh.setVerticesData(VertexBuffer.PositionKind, positions);
+      mesh.computeWorldMatrix(true);
       mesh.refreshBoundingInfo();
     }
   }

@@ -43,4 +43,5 @@ export * from './GenerateTextureTool';
 export * from './CreateTextMeshTool';
 export * from './DecalTool';
 export * from './CreateHeightmapTool';
+export * from './CheckZFightingTool';
 

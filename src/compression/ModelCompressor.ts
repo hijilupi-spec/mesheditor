@@ -8,6 +8,7 @@ import {
   QuadraticErrorSimplification,
   Scene,
   SceneLoader,
+  SubMesh,
   Vector3,
   VertexBuffer,
   VertexData,
@@ -510,17 +511,16 @@ export class ModelCompressor {
   }
 
   /**
-   * Decimates polygon count of a mesh using Quadric Error Metric simplification.
+   * Executes Babylon's Quadric Error Metric simplifier on a single isolated mesh.
    */
-  public static async simplifyMesh(mesh: Mesh, targetRatio: number): Promise<void> {
-    if (targetRatio >= 1.0 || targetRatio <= 0.0) return;
-
+  private static runBabylonQEM(mesh: Mesh, quality: number): Promise<void> {
+    const clampedQuality = Math.max(0.05, Math.min(0.98, quality));
     return new Promise<void>((resolve) => {
       try {
         const simplifier = new QuadraticErrorSimplification(mesh);
         simplifier.simplify(
           {
-            quality: Math.max(0.05, Math.min(0.95, targetRatio)),
+            quality: clampedQuality,
             distance: 0,
             optimizeMesh: true,
           },
@@ -538,6 +538,455 @@ export class ModelCompressor {
         resolve();
       }
     });
+  }
+
+  /**
+   * Verifies that decimation did not collapse bounding dimensions, center, or triangle count
+   * of a topological island below safe structural thresholds.
+   */
+  private static isIslandGeometryIntact(
+    beforeMin: Vector3,
+    beforeMax: Vector3,
+    mesh: Mesh,
+    minAllowedFaces: number
+  ): boolean {
+    const afterFaces = mesh.getTotalIndices() > 0 ? Math.floor(mesh.getTotalIndices() / 3) : 0;
+    if (afterFaces < minAllowedFaces) return false;
+
+    const pos = mesh.getVerticesData(VertexBuffer.PositionKind);
+    if (!pos || pos.length < 9) return false;
+    for (let i = 0; i < pos.length; i++) {
+      if (!Number.isFinite(pos[i])) return false;
+    }
+
+    mesh.refreshBoundingInfo();
+    const bb = mesh.getBoundingInfo()?.boundingBox;
+    if (!bb) return false;
+
+    const afterMin = bb.minimum;
+    const afterMax = bb.maximum;
+    const axes: Array<'x' | 'y' | 'z'> = ['x', 'y', 'z'];
+    for (const axis of axes) {
+      const beforeSpan = beforeMax[axis] - beforeMin[axis];
+      const afterSpan = afterMax[axis] - afterMin[axis];
+      if (beforeSpan > 0.02) {
+        if (afterSpan < beforeSpan * 0.8) return false;
+        const beforeCenter = (beforeMin[axis] + beforeMax[axis]) * 0.5;
+        const afterCenter = (afterMin[axis] + afterMax[axis]) * 0.5;
+        if (Math.abs(afterCenter - beforeCenter) > Math.max(0.05, beforeSpan * 0.25)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Runs QEM simplification on a single island mesh with a fallback retry and rollback guard
+   * so structural spans cannot be collapsed to zero.
+   */
+  private static async simplifyIslandSafely(mesh: Mesh, targetRatio: number): Promise<void> {
+    const beforeFaces = mesh.getTotalIndices() > 0 ? Math.floor(mesh.getTotalIndices() / 3) : 0;
+    if (beforeFaces <= 0) return;
+
+    mesh.refreshBoundingInfo();
+    const bb = mesh.getBoundingInfo().boundingBox;
+    const beforeMin = bb.minimum.clone();
+    const beforeMax = bb.maximum.clone();
+    const snapshot = VertexData.ExtractFromMesh(mesh);
+    const isUpdatable = mesh.isVertexBufferUpdatable(VertexBuffer.PositionKind);
+
+    const minFloor = (ratio: number) =>
+      Math.min(beforeFaces, Math.max(16, Math.floor(beforeFaces * ratio * 0.4)));
+
+    await this.runBabylonQEM(mesh, targetRatio);
+    if (this.isIslandGeometryIntact(beforeMin, beforeMax, mesh, minFloor(targetRatio))) {
+      return;
+    }
+
+    // Retry once at a gentler ratio before giving up on simplifying this island
+    snapshot.applyToMesh(mesh, isUpdatable);
+    mesh.refreshBoundingInfo();
+    const gentleRatio = Math.min(0.85, Math.max(targetRatio * 1.5, 0.55));
+    if (gentleRatio > targetRatio + 0.05 && gentleRatio < 0.98) {
+      await this.runBabylonQEM(mesh, gentleRatio);
+      if (this.isIslandGeometryIntact(beforeMin, beforeMax, mesh, minFloor(gentleRatio))) {
+        return;
+      }
+    }
+
+    // Restore original island geometry if QEM distorted its structural bounds
+    snapshot.applyToMesh(mesh, isUpdatable);
+    mesh.refreshBoundingInfo();
+  }
+
+  /**
+   * Decimates polygon count of a mesh using Quadric Error Metric simplification.
+   * Isolates disconnected topological islands and protects low-poly parts and bounding spans
+   * so composite/architectural meshes never lose structural components.
+   */
+  public static async simplifyMesh(mesh: Mesh, targetRatio: number): Promise<void> {
+    if (targetRatio >= 1.0 || targetRatio <= 0.0) return;
+
+    const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+    const indices = mesh.getIndices();
+    if (!positions || !indices || indices.length < 9) return;
+
+    const totalFaces = Math.floor(indices.length / 3);
+    const MIN_PROTECTED_FACES = 80;
+    if (totalFaces <= MIN_PROTECTED_FACES) return;
+
+    const normals = mesh.getVerticesData(VertexBuffer.NormalKind);
+    const uvs = mesh.getVerticesData(VertexBuffer.UVKind);
+    const uvs2 = mesh.getVerticesData(VertexBuffer.UV2Kind);
+    const colors = mesh.getVerticesData(VertexBuffer.ColorKind);
+
+    const hasMultiSubMesh = !!(mesh.subMeshes && mesh.subMeshes.length > 1);
+    const subMeshesCopy = hasMultiSubMesh
+      ? mesh.subMeshes.map((sm) => ({
+          materialIndex: sm.materialIndex,
+          indexStart: sm.indexStart,
+          indexCount: sm.indexCount,
+        }))
+      : [{ materialIndex: 0, indexStart: 0, indexCount: indices.length }];
+
+    // Map each triangle to its submesh slot
+    const triSubMesh = new Int32Array(totalFaces);
+    if (hasMultiSubMesh) {
+      for (let smIdx = 0; smIdx < subMeshesCopy.length; smIdx++) {
+        const sm = subMeshesCopy[smIdx];
+        const startTri = Math.floor(sm.indexStart / 3);
+        const endTri = Math.min(totalFaces, Math.floor((sm.indexStart + sm.indexCount) / 3));
+        for (let t = startTri; t < endTri; t++) {
+          triSubMesh[t] = smIdx;
+        }
+      }
+    }
+
+    // Group triangles into connected topological islands via spatially welded vertices (per submesh)
+    const numVertices = Math.floor(positions.length / 3);
+    const parent = new Int32Array(numVertices);
+    const weldMap = new Map<string, number>();
+    const triVertSubMesh = new Int32Array(numVertices).fill(-1);
+    for (let t = 0; t < totalFaces; t++) {
+      const smIdx = triSubMesh[t];
+      for (let k = 0; k < 3; k++) {
+        const vi = indices[t * 3 + k];
+        if (vi >= 0 && vi < numVertices && triVertSubMesh[vi] === -1) {
+          triVertSubMesh[vi] = smIdx;
+        }
+      }
+    }
+
+    for (let i = 0; i < numVertices; i++) {
+      const smIdx = triVertSubMesh[i];
+      if (smIdx < 0) {
+        parent[i] = i;
+        continue;
+      }
+      const qx = Math.round(positions[i * 3] * 1e4);
+      const qy = Math.round(positions[i * 3 + 1] * 1e4);
+      const qz = Math.round(positions[i * 3 + 2] * 1e4);
+      const key = `${smIdx}|${qx},${qy},${qz}`;
+      const rep = weldMap.get(key);
+      if (rep !== undefined) {
+        parent[i] = rep;
+      } else {
+        weldMap.set(key, i);
+        parent[i] = i;
+      }
+    }
+
+    const find = (x: number): number => {
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+      }
+      return x;
+    };
+    const union = (a: number, b: number): void => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent[rb] = ra;
+    };
+
+    for (let t = 0; t < totalFaces; t++) {
+      const i0 = indices[t * 3];
+      const i1 = indices[t * 3 + 1];
+      const i2 = indices[t * 3 + 2];
+      union(i0, i1);
+      union(i1, i2);
+    }
+
+    interface IslandBucket {
+      subMeshIndex: number;
+      triIndices: number[];
+    }
+    const islandMap = new Map<string, IslandBucket>();
+    for (let t = 0; t < totalFaces; t++) {
+      const smIdx = triSubMesh[t];
+      const root = find(indices[t * 3]);
+      const key = `${smIdx}|${root}`;
+      let bucket = islandMap.get(key);
+      if (!bucket) {
+        bucket = { subMeshIndex: smIdx, triIndices: [] };
+        islandMap.set(key, bucket);
+      }
+      bucket.triIndices.push(indices[t * 3], indices[t * 3 + 1], indices[t * 3 + 2]);
+    }
+
+    const islands = Array.from(islandMap.values());
+
+    // Fast path for single-island, single-submesh meshes
+    if (islands.length <= 1 && !hasMultiSubMesh) {
+      await this.simplifyIslandSafely(mesh, targetRatio);
+      const postPos = mesh.getVerticesData(VertexBuffer.PositionKind);
+      const postIdx = mesh.getIndices();
+      if (postPos && postIdx && postIdx.length > 0) {
+        const computedNormals: number[] = [];
+        VertexData.ComputeNormals(postPos, postIdx, computedNormals);
+        mesh.setVerticesData(
+          VertexBuffer.NormalKind,
+          computedNormals,
+          mesh.isVertexBufferUpdatable(VertexBuffer.NormalKind)
+        );
+      }
+      return;
+    }
+
+    // Multi-island / MultiMaterial path: protect low-poly islands and distribute budget
+    let protectedFaces = 0;
+    let simplifiableFaces = 0;
+    let simplifiableCount = 0;
+    for (const isl of islands) {
+      const fCount = isl.triIndices.length / 3;
+      if (fCount <= MIN_PROTECTED_FACES) {
+        protectedFaces += fCount;
+      } else {
+        simplifiableFaces += fCount;
+        simplifiableCount++;
+      }
+    }
+
+    if (simplifiableCount === 0 || simplifiableFaces === 0) return;
+
+    const desiredTotalFaces = Math.max(1, Math.round(totalFaces * targetRatio));
+    const desiredSimplifiableFaces = Math.max(
+      simplifiableCount * 24,
+      desiredTotalFaces - protectedFaces
+    );
+    const adjustedRatio = Math.max(
+      0.08,
+      Math.min(0.98, desiredSimplifiableFaces / simplifiableFaces)
+    );
+    if (adjustedRatio >= 0.98) return;
+
+    const scene = mesh.getScene();
+    const isUpdatable = mesh.isVertexBufferUpdatable(VertexBuffer.PositionKind);
+
+    interface ProcessedIsland {
+      subMeshIndex: number;
+      positions: FloatArray;
+      normals: Nullable<FloatArray>;
+      uvs: Nullable<FloatArray>;
+      uvs2: Nullable<FloatArray>;
+      colors: Nullable<FloatArray>;
+      indices: IndicesArray;
+    }
+
+    const processedBySubMesh: ProcessedIsland[][] = subMeshesCopy.map(() => []);
+
+    for (let idx = 0; idx < islands.length; idx++) {
+      const isl = islands[idx];
+      const fCount = isl.triIndices.length / 3;
+
+      const partPos: number[] = [];
+      const partNorm: number[] = [];
+      const partUV: number[] = [];
+      const partUV2: number[] = [];
+      const partCol: number[] = [];
+      const partIdx: number[] = [];
+      const remap = new Map<number, number>();
+
+      for (let k = 0; k < isl.triIndices.length; k++) {
+        const oldV = isl.triIndices[k];
+        let newV = remap.get(oldV);
+        if (newV === undefined) {
+          newV = partPos.length / 3;
+          remap.set(oldV, newV);
+          partPos.push(positions[oldV * 3], positions[oldV * 3 + 1], positions[oldV * 3 + 2]);
+          if (normals && normals.length >= (oldV + 1) * 3) {
+            partNorm.push(normals[oldV * 3], normals[oldV * 3 + 1], normals[oldV * 3 + 2]);
+          }
+          if (uvs && uvs.length >= (oldV + 1) * 2) {
+            partUV.push(uvs[oldV * 2], uvs[oldV * 2 + 1]);
+          }
+          if (uvs2 && uvs2.length >= (oldV + 1) * 2) {
+            partUV2.push(uvs2[oldV * 2], uvs2[oldV * 2 + 1]);
+          }
+          if (colors && colors.length >= (oldV + 1) * 4) {
+            partCol.push(
+              colors[oldV * 4],
+              colors[oldV * 4 + 1],
+              colors[oldV * 4 + 2],
+              colors[oldV * 4 + 3]
+            );
+          }
+        }
+        partIdx.push(newV);
+      }
+
+      if (fCount <= MIN_PROTECTED_FACES) {
+        processedBySubMesh[isl.subMeshIndex].push({
+          subMeshIndex: isl.subMeshIndex,
+          positions: partPos,
+          normals: partNorm.length === partPos.length ? partNorm : null,
+          uvs: partUV.length === (partPos.length / 3) * 2 ? partUV : null,
+          uvs2: partUV2.length === (partPos.length / 3) * 2 ? partUV2 : null,
+          colors: partCol.length === (partPos.length / 3) * 4 ? partCol : null,
+          indices: partIdx,
+        });
+        continue;
+      }
+
+      const part = new Mesh(`${mesh.name}_island_${idx}`, scene);
+      try {
+        const partVD = new VertexData();
+        partVD.positions = partPos;
+        partVD.indices = partIdx;
+        if (partNorm.length === partPos.length) partVD.normals = partNorm;
+        if (partUV.length === (partPos.length / 3) * 2) partVD.uvs = partUV;
+        if (partUV2.length === (partPos.length / 3) * 2) partVD.uvs2 = partUV2;
+        if (partCol.length === (partPos.length / 3) * 4) partVD.colors = partCol;
+        partVD.applyToMesh(part, true);
+
+        await this.simplifyIslandSafely(part, adjustedRatio);
+
+        const outPos = part.getVerticesData(VertexBuffer.PositionKind) || partPos;
+        const outIdx = part.getIndices() || partIdx;
+        const outNorm: number[] = [];
+        VertexData.ComputeNormals(outPos, outIdx, outNorm);
+
+        processedBySubMesh[isl.subMeshIndex].push({
+          subMeshIndex: isl.subMeshIndex,
+          positions: outPos,
+          normals: outNorm,
+          uvs: part.getVerticesData(VertexBuffer.UVKind),
+          uvs2: part.getVerticesData(VertexBuffer.UV2Kind),
+          colors: part.getVerticesData(VertexBuffer.ColorKind),
+          indices: outIdx,
+        });
+      } finally {
+        if (!part.isDisposed()) {
+          part.dispose(true, false);
+        }
+      }
+    }
+
+    // Concatenate processed islands back onto the target mesh cleanly
+    const finalPositions: number[] = [];
+    const finalNormals: number[] = [];
+    const finalUVs: number[] = [];
+    const finalUV2s: number[] = [];
+    const finalColors: number[] = [];
+    const finalIndices: number[] = [];
+    const includeNormals = true;
+    const includeUVs = !!uvs;
+    const includeUV2s = !!uvs2;
+    const includeColors = !!colors;
+
+    const newSubMeshDefs: Array<{
+      materialIndex: number;
+      verticesStart: number;
+      verticesCount: number;
+      indexStart: number;
+      indexCount: number;
+    }> = [];
+
+    for (let smIdx = 0; smIdx < subMeshesCopy.length; smIdx++) {
+      const smIslands = processedBySubMesh[smIdx];
+      if (smIslands.length === 0) continue;
+
+      const smVerticesStart = finalPositions.length / 3;
+      const smIndexStart = finalIndices.length;
+
+      for (const isl of smIslands) {
+        const vOffset = finalPositions.length / 3;
+        const vCount = isl.positions.length / 3;
+        for (let i = 0; i < isl.positions.length; i++) finalPositions.push(isl.positions[i]);
+
+        if (includeNormals) {
+          if (isl.normals && isl.normals.length === isl.positions.length) {
+            for (let i = 0; i < isl.normals.length; i++) finalNormals.push(isl.normals[i]);
+          } else {
+            const compNorm: number[] = [];
+            VertexData.ComputeNormals(isl.positions, isl.indices, compNorm);
+            for (let i = 0; i < compNorm.length; i++) finalNormals.push(compNorm[i]);
+          }
+        }
+        if (includeUVs) {
+          if (isl.uvs && isl.uvs.length === vCount * 2) {
+            for (let i = 0; i < isl.uvs.length; i++) finalUVs.push(isl.uvs[i]);
+          } else {
+            for (let i = 0; i < vCount * 2; i++) finalUVs.push(0);
+          }
+        }
+        if (includeUV2s) {
+          if (isl.uvs2 && isl.uvs2.length === vCount * 2) {
+            for (let i = 0; i < isl.uvs2.length; i++) finalUV2s.push(isl.uvs2[i]);
+          } else {
+            for (let i = 0; i < vCount * 2; i++) finalUV2s.push(0);
+          }
+        }
+        if (includeColors) {
+          if (isl.colors && isl.colors.length === vCount * 4) {
+            for (let i = 0; i < isl.colors.length; i++) finalColors.push(isl.colors[i]);
+          } else {
+            for (let i = 0; i < vCount; i++) finalColors.push(1, 1, 1, 1);
+          }
+        }
+        for (let i = 0; i < isl.indices.length; i++) {
+          finalIndices.push(isl.indices[i] + vOffset);
+        }
+      }
+
+      newSubMeshDefs.push({
+        materialIndex: subMeshesCopy[smIdx].materialIndex,
+        verticesStart: smVerticesStart,
+        verticesCount: finalPositions.length / 3 - smVerticesStart,
+        indexStart: smIndexStart,
+        indexCount: finalIndices.length - smIndexStart,
+      });
+    }
+
+    const finalVD = new VertexData();
+    finalVD.positions = finalPositions;
+    finalVD.indices = finalIndices;
+    if (finalNormals.length === finalPositions.length) finalVD.normals = finalNormals;
+    if (includeUVs && finalUVs.length === (finalPositions.length / 3) * 2) finalVD.uvs = finalUVs;
+    if (includeUV2s && finalUV2s.length === (finalPositions.length / 3) * 2) finalVD.uvs2 = finalUV2s;
+    if (includeColors && finalColors.length === (finalPositions.length / 3) * 4) {
+      finalVD.colors = finalColors;
+    }
+
+    const preMat = mesh.material;
+    finalVD.applyToMesh(mesh, isUpdatable);
+    mesh.material = preMat;
+
+    if (hasMultiSubMesh && newSubMeshDefs.length > 0) {
+      mesh.subMeshes = [];
+      for (const def of newSubMeshDefs) {
+        new SubMesh(
+          def.materialIndex,
+          def.verticesStart,
+          def.verticesCount,
+          def.indexStart,
+          def.indexCount,
+          mesh
+        );
+      }
+    }
+    mesh.refreshBoundingInfo();
   }
 
   /**
