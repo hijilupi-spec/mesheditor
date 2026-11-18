@@ -1032,11 +1032,33 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
       expect(fb.textContent).toContain('API key missing for OpenAI');
     });
 
+    const endpointTestSpy = vi
+      .spyOn(app.service.aiAgent, 'testEndpointConnection')
+      .mockResolvedValueOnce({ ok: true, message: 'Connected to gpt-4o (120 ms).', status: 200, latencyMs: 120, model: 'gpt-4o' })
+      .mockResolvedValueOnce({ ok: false, message: 'Endpoint error (401): Invalid API key', status: 401, latencyMs: 45 });
+
+    const btnTestEndpoint = container.querySelector('#btnTestAIEndpoint') as HTMLButtonElement;
+    expect(btnTestEndpoint).not.toBeNull();
+    btnTestEndpoint.click();
+    await vi.waitFor(() => {
+      const fb = container.querySelector('#aiEndpointFeedback') as HTMLElement;
+      expect(fb.classList.contains('is-success')).toBe(true);
+      expect(fb.textContent).toContain('Connected to gpt-4o (120 ms).');
+    });
+
+    btnTestEndpoint.click();
+    await vi.waitFor(() => {
+      const fb = container.querySelector('#aiEndpointFeedback') as HTMLElement;
+      expect(fb.classList.contains('is-error')).toBe(true);
+      expect(fb.textContent).toContain('Endpoint error (401): Invalid API key');
+    });
+
     // None of the modal actions should trigger the backdrop-covered #toast element
     expect(toastEl.classList.contains('show')).toBe(false);
     fetchSpy.mockRestore();
     neuralTestSpy.mockRestore();
     imgTestSpy.mockRestore();
+    endpointTestSpy.mockRestore();
   });
 
   it('masks API key fields without type="password" so browsers and password managers do not trigger form warnings', () => {

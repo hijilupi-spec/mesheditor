@@ -2607,9 +2607,18 @@ export class MeshEditorApp {
   }
 
   /**
-   * Opens the Settings modal dialog, optionally selecting a specific tab.
+   * Opens the Settings modal dialog, optionally selecting a specific tab
+   * and showing inline endpoint feedback (e.g. when auto-opened after a request error).
    */
-  public openSettingsModal(tab?: 'editing' | 'ai'): void {
+  public openSettingsModal(
+    tab?: 'editing' | 'ai',
+    options?: {
+      endpointFeedback?: {
+        message: string;
+        type?: 'info' | 'success' | 'warning' | 'error';
+      };
+    }
+  ): void {
     this.closeAllDropdowns();
     this.setSettingsInlineFeedback('settingsFooterFeedback', '', 'info');
     if (tab) {
@@ -2619,6 +2628,20 @@ export class MeshEditorApp {
       this.renderAISkills();
     }
     this.syncSettingsUI();
+
+    const settingsStatus = this.getElement<HTMLElement>('aiSettingsStatus');
+    if (options?.endpointFeedback?.message) {
+      const feedbackType = options.endpointFeedback.type ?? 'error';
+      this.setSettingsInlineFeedback('aiEndpointFeedback', options.endpointFeedback.message, feedbackType);
+      if (settingsStatus && feedbackType === 'error') {
+        settingsStatus.textContent = 'Request failed';
+      }
+      const modalBody = this.getElement<HTMLElement>('settingsModalBody');
+      if (modalBody) {
+        modalBody.scrollTop = 0;
+      }
+    }
+
     const settingsModal = this.getElement<HTMLDialogElement>('settingsModal');
     if (!settingsModal) return;
 
@@ -3299,6 +3322,46 @@ export class MeshEditorApp {
         );
       } finally {
         if (btnFetchModels) btnFetchModels.disabled = false;
+      }
+    });
+
+    // Test OpenAI-compatible endpoint connection & model
+    const btnTestEndpoint = this.getElement<HTMLButtonElement>('btnTestAIEndpoint');
+    btnTestEndpoint?.addEventListener('click', async () => {
+      const baseUrl = endpointInput?.value.trim() || '';
+      const apiKey = apiKeyInput?.value.trim() || '';
+      const isCustomVisible = !!modelInput && modelInput.style.display !== 'none';
+      const model =
+        (isCustomVisible ? modelInput?.value.trim() : modelSelect?.value.trim()) ||
+        modelInput?.value.trim() ||
+        '';
+
+      if (btnTestEndpoint) btnTestEndpoint.disabled = true;
+      if (settingsStatus) settingsStatus.textContent = 'Testing...';
+      this.setSettingsInlineFeedback('aiEndpointFeedback', 'Testing endpoint connection...', 'info');
+      try {
+        const res = await this.service.aiAgent.testEndpointConnection({
+          baseUrl,
+          apiKey,
+          model,
+        });
+        if (settingsStatus) {
+          settingsStatus.textContent = res.ok ? 'Connected' : 'Test failed';
+        }
+        this.setSettingsInlineFeedback(
+          'aiEndpointFeedback',
+          res.message,
+          res.ok ? 'success' : 'error'
+        );
+      } catch (err: any) {
+        if (settingsStatus) settingsStatus.textContent = 'Test failed';
+        this.setSettingsInlineFeedback(
+          'aiEndpointFeedback',
+          err?.message || 'Endpoint connection test failed.',
+          'error'
+        );
+      } finally {
+        if (btnTestEndpoint) btnTestEndpoint.disabled = false;
       }
     });
 
@@ -9017,8 +9080,19 @@ export class MeshEditorApp {
       this.showToast(errMsg, 'error');
 
       // Automatically open endpoint settings if API key or connection failed
-      if (errMsg.includes('401') || errMsg.includes('API key') || errMsg.includes('Endpoint')) {
-        this.openSettingsModal('ai');
+      // and surface the error inline inside the modal so it isn't hidden behind the backdrop.
+      if (
+        errMsg.includes('401') ||
+        errMsg.includes('API key') ||
+        errMsg.includes('Endpoint') ||
+        /failed to fetch|networkerror|econnrefused|load failed/i.test(errMsg)
+      ) {
+        this.openSettingsModal('ai', {
+          endpointFeedback: {
+            message: errMsg,
+            type: 'error',
+          },
+        });
       }
     } finally {
       this.aiAbortController = null;

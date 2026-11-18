@@ -2370,5 +2370,120 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       container.remove();
     });
   });
+
+  describe('OpenAI-Compatible Endpoint Connection Test & Error Visibility', () => {
+    it('testEndpointConnection reports success, HTTP errors, empty URL, and retries without max_tokens on HTTP 400', async () => {
+      // 1. Empty URL
+      const emptyRes = await service.aiAgent.testEndpointConnection({ baseUrl: '   ', model: 'gpt-4o' });
+      expect(emptyRes.ok).toBe(false);
+      expect(emptyRes.message).toContain('Base URL is required');
+
+      // 2. Success
+      service.aiAgent.customFetch = (async () => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          model: 'gpt-4o-mini',
+          choices: [{ message: { role: 'assistant', content: 'OK' } }],
+        }),
+        text: async () => '',
+      })) as any;
+
+      const okRes = await service.aiAgent.testEndpointConnection({
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-4o-mini',
+      });
+      expect(okRes.ok).toBe(true);
+      expect(okRes.status).toBe(200);
+      expect(okRes.model).toBe('gpt-4o-mini');
+      expect(okRes.message).toContain('Connected to gpt-4o-mini');
+
+      // 3. HTTP 401 JSON error
+      service.aiAgent.customFetch = (async () => ({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () => JSON.stringify({ error: { message: 'Incorrect API key provided' } }),
+      })) as any;
+
+      const errRes = await service.aiAgent.testEndpointConnection({
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-bad',
+        model: 'gpt-4o',
+      });
+      expect(errRes.ok).toBe(false);
+      expect(errRes.status).toBe(401);
+      expect(errRes.message).toContain('Endpoint error (401): Incorrect API key provided');
+
+      // 4. Reasoning model rejecting max_tokens retries with minimal payload
+      let attempts = 0;
+      service.aiAgent.customFetch = (async (_url: any, init: any) => {
+        attempts++;
+        const parsed = JSON.parse(String(init?.body || '{}'));
+        if (attempts === 1) {
+          expect(parsed.max_tokens).toBe(8);
+          return {
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            text: async () => JSON.stringify({ error: { message: 'Unsupported parameter: max_tokens' } }),
+          } as any;
+        }
+        expect(parsed.max_tokens).toBeUndefined();
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ model: 'o3-mini', choices: [{ message: { role: 'assistant', content: 'OK' } }] }),
+          text: async () => '',
+        } as any;
+      }) as any;
+
+      const retryRes = await service.aiAgent.testEndpointConnection({
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-test',
+        model: 'o3-mini',
+      });
+      expect(attempts).toBe(2);
+      expect(retryRes.ok).toBe(true);
+      expect(retryRes.model).toBe('o3-mini');
+    });
+
+    it('shows the agent request error inline inside the Settings modal when auto-opened on failure', async () => {
+      const container = document.createElement('div');
+      container.id = 'test-ai-error-settings-ui';
+      document.body.appendChild(container);
+      const app = new MeshEditorApp({
+        container,
+        engine: new NullEngine(),
+      });
+
+      const runSpy = vi
+        .spyOn(app.service.aiAgent, 'runPrompt')
+        .mockRejectedValueOnce(new Error('Endpoint error (401): Invalid API key provided'));
+
+      const promptInput = container.querySelector('#aiPromptInput') as HTMLTextAreaElement;
+      const btnGenerate = container.querySelector('#btnAIGenerate') as HTMLButtonElement;
+      promptInput.value = 'Build a cube';
+      btnGenerate.click();
+
+      await vi.waitFor(() => {
+        const settingsModal = container.querySelector('#settingsModal') as HTMLDialogElement;
+        expect(settingsModal.hasAttribute('open')).toBe(true);
+        const feedback = container.querySelector('#aiEndpointFeedback') as HTMLElement;
+        expect(feedback.style.display).not.toBe('none');
+        expect(feedback.classList.contains('is-error')).toBe(true);
+        expect(feedback.textContent).toContain('Endpoint error (401): Invalid API key provided');
+        const status = container.querySelector('#aiSettingsStatus') as HTMLElement;
+        expect(status.textContent).toBe('Request failed');
+      });
+
+      runSpy.mockRestore();
+      app.dispose();
+      container.remove();
+    });
+  });
 });
 

@@ -7658,6 +7658,12 @@ dialog#settingsModal::backdrop {
   gap: 10px;
 }
 
+.settings-section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ai-settings-status {
   font-size: 11px;
   color: var(--text-secondary);

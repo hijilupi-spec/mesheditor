@@ -717,6 +717,169 @@ export class AIAgentService {
   }
 
   /**
+   * Tests connectivity, authentication, and model availability against the configured
+   * OpenAI-compatible chat completions endpoint using a minimal prompt.
+   */
+  public async testEndpointConnection(
+    overrideConfig?: Partial<AIAgentEndpointConfig>
+  ): Promise<{ ok: boolean; message: string; status?: number; latencyMs?: number; model?: string }> {
+    const cfg = { ...this.config, ...overrideConfig };
+    const rawBaseUrl = (cfg.baseUrl ?? '').trim();
+    if (!rawBaseUrl) {
+      return { ok: false, message: 'Base URL is required.' };
+    }
+
+    const url = this.getChatCompletionsUrl(rawBaseUrl);
+    const activeModel = this.normalizeModelName(cfg.model || DEFAULT_AI_AGENT_CONFIG.model, url).trim();
+    if (!activeModel) {
+      return { ok: false, message: 'Model ID is required.' };
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    if (cfg.apiKey && cfg.apiKey.trim()) {
+      headers['Authorization'] = `Bearer ${cfg.apiKey.trim()}`;
+    }
+
+    const baseMessages = [{ role: 'user', content: 'Reply with OK.' }];
+    const buildPayload = (minimal: boolean) =>
+      minimal
+        ? { model: activeModel, messages: baseMessages }
+        : { model: activeModel, messages: baseMessages, max_tokens: 8, temperature: 0 };
+
+    const fetchFn = this.customFetch || globalThis.fetch.bind(globalThis);
+    const timeoutMs = 20000;
+    const timeoutController = new AbortController();
+    const timer = setTimeout(() => {
+      timeoutController.abort(new Error('Connection test timed out after 20s.'));
+    }, timeoutMs);
+
+    const startTime = Date.now();
+    const postRequest = async (payload: Record<string, any>): Promise<Response> => {
+      let res: Response;
+      try {
+        res = await fetchFn(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          signal: timeoutController.signal,
+        });
+        if (res.status === 404 && url.startsWith('/api/antigravity/v1')) {
+          res = await fetchFn(url.replace(/^\/api\/antigravity\/v1/, 'http://localhost:8787/v1'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+            signal: timeoutController.signal,
+          });
+        }
+      } catch (err) {
+        if (url.startsWith('/api/antigravity/v1') && !timeoutController.signal.aborted) {
+          res = await fetchFn(url.replace(/^\/api\/antigravity\/v1/, 'http://localhost:8787/v1'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+            signal: timeoutController.signal,
+          });
+        } else {
+          throw err;
+        }
+      }
+      return res;
+    };
+
+    try {
+      let res = await postRequest(buildPayload(false));
+      let errText = '';
+
+      if (!res.ok) {
+        errText = await res.text().catch(() => '');
+        // Some reasoning models reject max_tokens or temperature: 0 — retry once with minimal payload
+        if (res.status === 400 && /max_tokens|temperature/i.test(errText)) {
+          res = await postRequest(buildPayload(true));
+          if (!res.ok) {
+            errText = await res.text().catch(() => '');
+          }
+        }
+      }
+
+      const latencyMs = Date.now() - startTime;
+
+      if (!res.ok) {
+        let friendlyError = errText || res.statusText || 'Unknown error';
+        try {
+          const parsedErr = JSON.parse(errText);
+          const errObj = Array.isArray(parsedErr) ? parsedErr[0]?.error : parsedErr?.error;
+          if (errObj?.message) {
+            friendlyError = errObj.message;
+          }
+        } catch {
+          // Keep raw text
+        }
+        return {
+          ok: false,
+          status: res.status,
+          latencyMs,
+          model: activeModel,
+          message: `Endpoint error (${res.status}): ${friendlyError}`,
+        };
+      }
+
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        return {
+          ok: false,
+          status: res.status,
+          latencyMs,
+          model: activeModel,
+          message: 'Endpoint returned an invalid JSON response.',
+        };
+      }
+
+      if (data?.error?.message) {
+        return {
+          ok: false,
+          status: res.status,
+          latencyMs,
+          model: activeModel,
+          message: `Endpoint error: ${data.error.message}`,
+        };
+      }
+
+      const resolvedModel =
+        typeof data?.model === 'string' && data.model.trim() ? data.model.trim() : activeModel;
+      return {
+        ok: true,
+        status: res.status,
+        latencyMs,
+        model: resolvedModel,
+        message: `Connected to ${resolvedModel} (${latencyMs} ms).`,
+      };
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      if (err?.name === 'AbortError' || timeoutController.signal.aborted) {
+        return {
+          ok: false,
+          latencyMs,
+          model: activeModel,
+          message: 'Connection test timed out after 20s.',
+        };
+      }
+      return {
+        ok: false,
+        latencyMs,
+        model: activeModel,
+        message: `Connection failed: ${err?.message || String(err)}`,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
    * Captures a PNG data URL snapshot of the current 3D Babylon canvas for vision-assisted mesh updates.
    */
   public captureViewportDataUrl(): string | null {
