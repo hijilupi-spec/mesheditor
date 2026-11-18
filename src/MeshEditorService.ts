@@ -1154,46 +1154,41 @@ export class MeshEditorService {
     return false;
   }
 
-  public isSculptModeActive(): boolean {
-    if (!this.sculptController) return false;
-    if (this.sculptController.isActive) return true;
-    if (this.isSceneInteractionLocked) return false;
-    if (typeof document !== 'undefined') {
-      const sculptDialog = document.getElementById('dialog-sculpt');
-      if (
-        sculptDialog &&
-        sculptDialog.style.display !== 'none' &&
-        !sculptDialog.classList.contains('minimized') &&
-        !this.voxelPainter?.isActive &&
-        !this.pathExtrusion?.isActive &&
-        !this.isWeightPaintModeActive() &&
-        !this.facetEditorActive
-      ) {
-        this.sculptController.setActive(true);
-        return true;
-      }
+  public deactivateOtherInteractive3DTools(
+    activeTool: 'facet' | 'sculpt' | 'decal' | 'voxel' | 'path' | 'uv' | 'weight' | 'text_place' | 'none'
+  ): void {
+    if (activeTool !== 'facet' && this.facetEditorActive) {
+      this.toggleFacetEditor(false);
     }
-    return false;
+    if (activeTool !== 'sculpt' && this.sculptController?.isActive) {
+      this.sculptController.setActive(false);
+    }
+    if (activeTool !== 'decal' && this.decalController?.isActive) {
+      this.decalController.setActive(false);
+    }
+    if (activeTool !== 'voxel' && this.voxelPainter?.isActive) {
+      this.voxelPainter.setActive(false);
+    }
+    if (activeTool !== 'path' && this.pathExtrusion?.isActive) {
+      this.pathExtrusion.setActive(false);
+    }
+    if (activeTool !== 'uv' && this.uvUnwrapController?.isActive) {
+      this.uvUnwrapController.setActive(false);
+    }
+    if (activeTool !== 'weight' && this.weightPaintController?.isActive) {
+      this.weightPaintController.setActive(false);
+    }
+    if (activeTool !== 'text_place' && this.textMeshController?.isSurfacePlacementActive) {
+      this.textMeshController.setSurfacePlacementActive(false);
+    }
+  }
+
+  public isSculptModeActive(): boolean {
+    return Boolean(this.sculptController?.isActive) && !this.isSceneInteractionLocked;
   }
 
   public isWeightPaintModeActive(): boolean {
-    if (!this.weightPaintController) return false;
-    if (this.weightPaintController.isActive) return true;
-    if (this.isSceneInteractionLocked) return false;
-    if (typeof document !== 'undefined') {
-      const riggingDialog = document.getElementById('dialog-rigging');
-      if (
-        riggingDialog &&
-        riggingDialog.style.display !== 'none' &&
-        !riggingDialog.classList.contains('minimized') &&
-        !this.voxelPainter?.isActive &&
-        !this.pathExtrusion?.isActive
-      ) {
-        this.weightPaintController.setActive(true);
-        return true;
-      }
-    }
-    return false;
+    return Boolean(this.weightPaintController?.isActive) && !this.isSceneInteractionLocked;
   }
 
   public isGizmoMesh(mesh: Nullable<AbstractMesh | TransformNode>): boolean {
@@ -3289,7 +3284,14 @@ export class MeshEditorService {
      10. FACET & VERTEX EDITING
      ========================================================================= */
   public toggleFacetEditor(active?: boolean): boolean {
-    this.facetEditorActive = active !== undefined ? active : !this.facetEditorActive;
+    const nextActive = active !== undefined ? active : !this.facetEditorActive;
+    if (nextActive === this.facetEditorActive) {
+      return this.facetEditorActive;
+    }
+    if (nextActive) {
+      this.deactivateOtherInteractive3DTools('facet');
+    }
+    this.facetEditorActive = nextActive;
     if (!this.facetEditorActive) {
       if (this.facetHighlightMesh) {
         this.facetHighlightMesh.dispose();
@@ -3313,6 +3315,7 @@ export class MeshEditorService {
           this.highlightFace(this.selectedMesh, this.selectedFaceId);
         }
       }
+      this.refreshGizmoAttachment();
     }
     this.events.onFacetEditorStateChanged?.(this.facetEditorActive);
     this.events.onToast?.(

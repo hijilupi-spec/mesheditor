@@ -137,6 +137,10 @@ export class WeightPaintController {
   }
 
   public setActive(active: boolean): void {
+    if (!active && !this.isActive) return;
+    if (active) {
+      this.service.deactivateOtherInteractive3DTools('weight');
+    }
     this.isActive = active;
     if (this.cursorRing) this.cursorRing.isVisible = false;
 
@@ -149,18 +153,6 @@ export class WeightPaintController {
     const targets = this.getTargetMeshes(mesh);
 
     if (active) {
-      if (this.service.sculptController?.isActive) {
-        this.service.sculptController.setActive(false);
-      }
-      if (this.service.voxelPainter?.isActive) {
-        this.service.voxelPainter.setActive(false);
-      }
-      if (this.service.pathExtrusion?.isActive) {
-        this.service.pathExtrusion.setActive(false);
-      }
-      if ((this.service as any).uvUnwrapController?.isActive) {
-        (this.service as any).uvUnwrapController.setActive(false);
-      }
       this.service.gizmoManager?.attachToNode(null);
       if (this.service.highlightLayer) {
         this.service.highlightLayer.removeAllMeshes();

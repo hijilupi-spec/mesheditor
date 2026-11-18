@@ -1229,11 +1229,7 @@ export class MeshEditorApp {
       btnBounds?.classList.toggle('active', mode === 'bounds');
 
       // Switching to standard transform gizmos deactivates exclusive 3D tools without closing their dialogs
-      for (const tool of this.editorTools) {
-        if (tool.isExclusive3DTool && tool.isActive?.(this)) {
-          tool.onDeactivate?.(this);
-        }
-      }
+      this.deactivateOtherExclusiveTools(null);
 
       this.service.setGizmoMode(mode);
       this.updatePanelButtonStates();
@@ -3846,6 +3842,27 @@ export class MeshEditorApp {
     }
   }
 
+  private deactivateOtherExclusiveTools(exceptTool?: ToolInterface | null): void {
+    for (const other of this.editorTools) {
+      if (other !== exceptTool && other.isExclusive3DTool) {
+        other.onDeactivate?.(this);
+      }
+    }
+    if (this.service.textMeshController?.isSurfacePlacementActive) {
+      this.service.textMeshController.setSurfacePlacementActive(false);
+    }
+  }
+
+  public activateExclusive3DTool(toolName: string): void {
+    if (this.isAIGenerating) return;
+    const targetTool = this.getToolByName(toolName);
+    if (targetTool) {
+      this.deactivateOtherExclusiveTools(targetTool);
+      targetTool.onActivate?.(this);
+    }
+    this.updatePanelButtonStates();
+  }
+
   public toggleDialogMinimize(dialog: HTMLElement, forceState?: boolean): void {
     const isCurrentlyMin = dialog.classList.contains('minimized');
     const willBeMin = forceState !== undefined ? forceState : !isCurrentlyMin;
@@ -3864,6 +3881,9 @@ export class MeshEditorApp {
       if (this.isAIGenerating && tool?.isExclusive3DTool) {
         tool.onUpdateUI?.(this);
       } else {
+        if (tool?.isExclusive3DTool) {
+          this.deactivateOtherExclusiveTools(tool);
+        }
         tool?.onMaximize?.(this);
       }
     }
@@ -3941,12 +3961,8 @@ export class MeshEditorApp {
       }
 
       // When opening an exclusive 3D tool, deactivate other exclusive 3D tools without closing their dialogs
-      if (tool?.isExclusive3DTool) {
-        for (const other of this.editorTools) {
-          if (other !== tool && other.isExclusive3DTool) {
-            other.onDeactivate?.(this);
-          }
-        }
+      if (tool?.isExclusive3DTool && !this.isAIGenerating) {
+        this.deactivateOtherExclusiveTools(tool);
       }
       if (this.isAIGenerating && tool?.isExclusive3DTool) {
         tool.onUpdateUI?.(this);
@@ -4340,9 +4356,17 @@ export class MeshEditorApp {
     btnSnap?.classList.toggle('active', this.service.touchSnapActive || this.service.isSnapModifierActive);
   }
 
-  private initFacetToolUI(): void {
+  public updateFacetPickUI(): void {
     const btnPickToggle = this.getElement<HTMLButtonElement>('btnFacetPickToggle');
     const lblPickState = this.getElement<HTMLElement>('lblFacetPickState');
+    const active = this.service.facetEditorActive;
+    btnPickToggle?.classList.toggle('active', active);
+    btnPickToggle?.setAttribute('aria-pressed', String(active));
+    if (lblPickState) lblPickState.textContent = active ? 'Pick: ON' : 'Pick: OFF';
+  }
+
+  private initFacetToolUI(): void {
+    const btnPickToggle = this.getElement<HTMLButtonElement>('btnFacetPickToggle');
     const badge = this.getElement<HTMLElement>('facetSelectedBadge');
     const btnModeFace = this.getElement<HTMLButtonElement>('btnFacetModeFace');
     const btnModeVertex = this.getElement<HTMLButtonElement>('btnFacetModeVertex');
@@ -4350,12 +4374,6 @@ export class MeshEditorApp {
     const inputX = this.getElement<HTMLInputElement>('facetVertexX');
     const inputY = this.getElement<HTMLInputElement>('facetVertexY');
     const inputZ = this.getElement<HTMLInputElement>('facetVertexZ');
-
-    const updatePickUI = () => {
-      const active = this.service.facetEditorActive;
-      btnPickToggle?.classList.toggle('active', active);
-      if (lblPickState) lblPickState.textContent = active ? 'Pick: ON' : 'Pick: OFF';
-    };
 
     const updateModeUI = (mode: 'face' | 'vertex') => {
       btnModeFace?.classList.toggle('active', mode === 'face');
@@ -4380,15 +4398,22 @@ export class MeshEditorApp {
     });
 
     btnPickToggle?.addEventListener('click', () => {
-      this.service.toggleFacetEditor();
-      updatePickUI();
+      if (!this.service.facetEditorActive) {
+        this.activateExclusive3DTool('facet_editor');
+      } else {
+        this.service.toggleFacetEditor(false);
+      }
+      this.updateFacetPickUI();
       this.updatePanelButtonStates();
     });
 
     this.service.events.onFacetEditorStateChanged = (active: boolean) => {
-      updatePickUI();
+      this.facetParams.active = active;
+      this.updateFacetPickUI();
       this.updatePanelButtonStates();
     };
+
+    this.updateFacetPickUI();
 
     this.service.events.onFacetEditModeChanged = (mode: 'face' | 'vertex') => {
       updateModeUI(mode);
@@ -4438,7 +4463,7 @@ export class MeshEditorApp {
     inputZ?.addEventListener('change', applyVertexCoords);
 
     // Initial sync
-    updatePickUI();
+    this.updateFacetPickUI();
     updateModeUI(this.service.facetEditMode);
     this.updateFacetSurfaceUI();
 
@@ -6179,7 +6204,13 @@ export class MeshEditorApp {
     this.guiFacet
       .add(this.facetParams, 'active')
       .name('Enable Face Pick')
-      .onChange((v) => this.service.toggleFacetEditor(v));
+      .onChange((v) => {
+        if (v) {
+          this.activateExclusive3DTool('facet_editor');
+        } else {
+          this.service.toggleFacetEditor(false);
+        }
+      });
     this.guiFacet.add(this.facetParams, 'extrudeDist', 0.05, 5, 0.05).name('Distance');
     this.guiFacet.add(this.facetParams, 'extrudeNow').name('Extrude Face');
     this.guiFacet.add(this.facetParams, 'deleteFacet').name('Delete Face');
@@ -6280,12 +6311,13 @@ export class MeshEditorApp {
       this.getToolByDialogId(activeDialog.id) ||
       (activeDialog.id === 'pathExtrusionStudioDialog' ? this.getToolByName('path_extrusion') : null);
 
-    if (targetTool?.isExclusive3DTool && !targetTool.isActive?.(this) && !this.isAIGenerating) {
-      for (const other of this.editorTools) {
-        if (other !== targetTool && other.isExclusive3DTool) {
-          other.onDeactivate?.(this);
-        }
-      }
+    if (
+      targetTool?.isExclusive3DTool &&
+      !activeDialog.classList.contains('minimized') &&
+      !targetTool.isActive?.(this) &&
+      !this.isAIGenerating
+    ) {
+      this.deactivateOtherExclusiveTools(targetTool);
       targetTool.onActivate?.(this);
       this.updatePanelButtonStates();
     }
@@ -7232,11 +7264,7 @@ export class MeshEditorApp {
         if (this.service.isPlaceModeActive) {
           this.service.cancelPlacementMode();
         }
-        for (const tool of this.editorTools) {
-          if (tool.isExclusive3DTool) {
-            tool.onDeactivate?.(this);
-          }
-        }
+        this.deactivateOtherExclusiveTools(null);
         this.updatePanelButtonStates();
       }
     });
@@ -7470,11 +7498,7 @@ export class MeshEditorApp {
       if (this.service.isPlaceModeActive) {
         this.service.cancelPlacementMode();
       }
-      for (const tool of this.editorTools) {
-        if (tool.isExclusive3DTool && tool.isActive?.(this)) {
-          tool.onDeactivate?.(this);
-        }
-      }
+      this.deactivateOtherExclusiveTools(null);
       this.service.setSceneInteractionLocked(true);
       this.updatePanelButtonStates();
       this.showSceneLoader('AI Agent working...', 'AI MESH AGENT • LIVE SCENE GENERATION', {
@@ -8841,19 +8865,19 @@ export class MeshEditorApp {
     };
 
     btnPaint?.addEventListener('click', () => {
-      this.service.voxelPainter.setActive(true);
+      this.activateExclusive3DTool('voxel_painter');
       this.service.voxelPainter.setMode('paint');
       updateModeButtons('paint');
       this.updatePanelButtonStates();
     });
     btnErase?.addEventListener('click', () => {
-      this.service.voxelPainter.setActive(true);
+      this.activateExclusive3DTool('voxel_painter');
       this.service.voxelPainter.setMode('erase');
       updateModeButtons('erase');
       this.updatePanelButtonStates();
     });
     btnPick?.addEventListener('click', () => {
-      this.service.voxelPainter.setActive(true);
+      this.activateExclusive3DTool('voxel_painter');
       this.service.voxelPainter.setMode('pick');
       updateModeButtons('pick');
       this.updatePanelButtonStates();
@@ -9902,7 +9926,7 @@ export class MeshEditorApp {
       this.service.pathExtrusion.tapToPlaceMode = Boolean(chkTapPlace.checked);
     });
     btnOpenStudio?.addEventListener('click', () => {
-      this.service.pathExtrusion.setActive(true);
+      this.activateExclusive3DTool('path_extrusion');
       PathExtrusionStudio.open(this.service, this.service.pathExtrusion, () => {
         this.updatePanelButtonStates();
       });
@@ -10430,28 +10454,35 @@ export class MeshEditorApp {
     const dialog = this.getElement('dialog-sculpt');
     if (!dialog) return;
 
-    // Hook model modification
+    // Hook model modification & active state changes
     this.service.sculptController.onMeshModified = () => {
       this.updateSculptUI();
     };
+    this.service.sculptController.onStateChanged = () => {
+      this.updateSculptUI();
+      this.updatePanelButtonStates();
+    };
 
-    // Clicking anywhere in the sculpt dialog reactivates sculpt mode if it was dormant
-    dialog.addEventListener('click', () => {
-      if (!this.service.sculptController.isActive) {
-        this.service.sculptController.setActive(true);
-        this.updatePanelButtonStates();
+    // Explicit toggle button for Draw / Sculpt brushes
+    const btnDrawToggle = this.getElement<HTMLButtonElement>('btnSculptDrawToggle');
+    btnDrawToggle?.addEventListener('click', () => {
+      if (this.service.sculptController.isActive) {
+        this.service.sculptController.setActive(false);
+      } else {
+        this.activateExclusive3DTool('sculpt_retopo');
       }
+      this.updateSculptUI();
+      this.updatePanelButtonStates();
     });
 
     // Brush selection pills
     const brushButtons = dialog.querySelectorAll<HTMLButtonElement>('.btn-sculpt-brush');
     brushButtons.forEach((btn) => {
       btn.addEventListener('click', () => {
-        brushButtons.forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
         const brush = (btn.dataset.brush || 'clay') as SculptBrushType;
         this.service.sculptController.setBrushType(brush);
-        this.service.sculptController.setActive(true);
+        this.activateExclusive3DTool('sculpt_retopo');
+        this.updateSculptUI();
         this.updatePanelButtonStates();
       });
     });
@@ -10507,7 +10538,7 @@ export class MeshEditorApp {
       const pose = getSelectedPose();
       const style = getSelectedStyle();
       const mesh = this.service.sculptController.spawnHumanoidBaseMesh({ pose, style });
-      this.service.sculptController.setActive(true);
+      this.activateExclusive3DTool('sculpt_retopo');
       this.showToast(`Spawned Humanoid Base Mesh "${mesh.name}" (8-Head ${pose === 't_pose' ? 'T-Pose' : 'A-Pose'}).`, 'success');
       this.updateSculptUI();
       this.updatePanelButtonStates();
@@ -10517,7 +10548,7 @@ export class MeshEditorApp {
       const pose = getSelectedPose();
       const style = getSelectedStyle();
       const mesh = this.service.sculptController.spawnChibiBaseMesh({ pose, style });
-      this.service.sculptController.setActive(true);
+      this.activateExclusive3DTool('sculpt_retopo');
       this.showToast(`Spawned Chibi / Toon Base Mesh "${mesh.name}" (3.5-Head ${pose === 't_pose' ? 'T-Pose' : 'A-Pose'}, ${style}).`, 'success');
       this.updateSculptUI();
       this.updatePanelButtonStates();
@@ -10525,7 +10556,7 @@ export class MeshEditorApp {
 
     this.getElement('btnSpawnCreatureBase')?.addEventListener('click', () => {
       const mesh = this.service.sculptController.spawnOrganicCreatureBaseMesh();
-      this.service.sculptController.setActive(true);
+      this.activateExclusive3DTool('sculpt_retopo');
       this.showToast(`Spawned Organic Creature / Demon Base Mesh "${mesh.name}" (Soft Continuous Contours).`, 'success');
       this.updateSculptUI();
       this.updatePanelButtonStates();
@@ -10533,7 +10564,7 @@ export class MeshEditorApp {
 
     this.getElement('btnSpawnQuadrupedBase')?.addEventListener('click', () => {
       const mesh = this.service.sculptController.spawnQuadrupedBaseMesh();
-      this.service.sculptController.setActive(true);
+      this.activateExclusive3DTool('sculpt_retopo');
       this.showToast(`Spawned Quadruped Base Mesh "${mesh.name}" (Digitigrade locomotion).`, 'success');
       this.updateSculptUI();
       this.updatePanelButtonStates();
@@ -10541,7 +10572,7 @@ export class MeshEditorApp {
 
     this.getElement('btnSpawnHeadBust')?.addEventListener('click', () => {
       const mesh = this.service.sculptController.spawnHeadBust();
-      this.service.sculptController.setActive(true);
+      this.activateExclusive3DTool('sculpt_retopo');
       this.showToast(`Spawned Head & Facial Plane Bust "${mesh.name}".`, 'success');
       this.updateSculptUI();
       this.updatePanelButtonStates();
@@ -10549,7 +10580,7 @@ export class MeshEditorApp {
 
     this.getElement('btnSpawnSculptSphere')?.addEventListener('click', () => {
       const mesh = this.service.sculptController.spawnSculptSphere();
-      this.service.sculptController.setActive(true);
+      this.activateExclusive3DTool('sculpt_retopo');
       this.showToast(`Spawned Digital Clay Sphere "${mesh.name}".`, 'success');
       this.updateSculptUI();
       this.updatePanelButtonStates();
@@ -10644,6 +10675,21 @@ export class MeshEditorApp {
     const dialog = this.getElement('dialog-sculpt');
     if (!dialog) return;
 
+    const isSculptActive = Boolean(this.service.sculptController?.isActive);
+    const activeBrush = this.service.sculptController?.brushType || 'clay';
+    const btnDrawToggle = this.getElement<HTMLButtonElement>('btnSculptDrawToggle');
+    const lblDrawState = this.getElement<HTMLElement>('lblSculptDrawState');
+    btnDrawToggle?.classList.toggle('active', isSculptActive);
+    btnDrawToggle?.setAttribute('aria-pressed', String(isSculptActive));
+    if (lblDrawState) {
+      lblDrawState.textContent = isSculptActive ? 'Draw: ON' : 'Draw: OFF';
+    }
+    dialog.querySelectorAll<HTMLButtonElement>('.btn-sculpt-brush').forEach((btn) => {
+      const isSelected = isSculptActive && btn.dataset.brush === activeBrush;
+      btn.classList.toggle('active', isSelected);
+      btn.setAttribute('aria-pressed', String(isSelected));
+    });
+
     const targetMesh = this.service.selectedMesh || (this.service.importedMeshes[0] as Mesh);
     const nameEl = this.getElement('sculptMeshName');
     const triEl = this.getElement('sculptTriCount');
@@ -10732,10 +10778,17 @@ export class MeshEditorApp {
       chkSeamPick.addEventListener('change', () => {
         this.service.uvUnwrapController.seamPickMode = chkSeamPick.checked;
         if (chkSeamPick.checked) {
-          this.service.uvUnwrapController.setActive(true);
+          this.activateExclusive3DTool('uv_unwrap');
         }
       });
     }
+    this.service.uvUnwrapController.onStateChanged = (active: boolean) => {
+      if (chkSeamPick) {
+        chkSeamPick.checked = active && this.service.uvUnwrapController.seamPickMode;
+      }
+      this.updateUVUnwrapUI();
+      this.updatePanelButtonStates();
+    };
 
     this.getElement('btnUVMarkSmartSeams')?.addEventListener('click', () => {
       const mesh = this.service.uvUnwrapController.getActiveTargetMesh();
@@ -11153,7 +11206,7 @@ export class MeshEditorApp {
 
       const preset = (selectPreset?.value || 'humanoid') as 'humanoid' | 'chibi' | 'quadruped' | 'spine_chain';
       const skel = this.service.weightPaintController.createAutoRig(mesh, preset);
-      this.service.weightPaintController.setActive(true);
+      this.activateExclusive3DTool('rigging_skinning');
       this.showToast(
         `Created ${preset} skeleton "${skel.name}" (${skel.bones.length} bones) and bound envelope skin weights!`,
         'success'
@@ -11244,7 +11297,7 @@ export class MeshEditorApp {
       const merged = this.service.mergeSelectedMeshes();
       if (merged) {
         this.service.selectNodes([merged]);
-        this.service.weightPaintController.setActive(true);
+        this.activateExclusive3DTool('rigging_skinning');
         this.showToast(`Merged ${targets.length} character parts into "${merged.name}".`, 'success');
         this.updateRiggingUI();
       }
@@ -11266,7 +11319,7 @@ export class MeshEditorApp {
         btn.classList.add('active');
         const mode = (btn.dataset.mode || 'add') as 'add' | 'subtract' | 'smooth' | 'replace';
         this.service.weightPaintController.setBrushMode(mode);
-        this.service.weightPaintController.setActive(true);
+        this.activateExclusive3DTool('rigging_skinning');
         this.updatePanelButtonStates();
       });
     });
@@ -11624,7 +11677,7 @@ export class MeshEditorApp {
       }
       this.service.decalController.setTexture(item.albedoDataUrl, item.name);
       this.toggleDialog('dialog-decal', true);
-      this.service.decalController.setActive(true);
+      this.activateExclusive3DTool('decal_painter');
       this.updateDecalUI();
       this.showToast(`Loaded "${item.name}" into Decal Painter! Click on a mesh to paint.`, 'info');
     });
@@ -11812,8 +11865,17 @@ export class MeshEditorApp {
       if (metallicVal) metallicVal.textContent = Number(metallicRange.value).toFixed(2);
     });
     surfacePlaceCheck?.addEventListener('change', () => {
+      if (surfacePlaceCheck.checked) {
+        this.deactivateOtherExclusiveTools(null);
+      }
       this.service.textMeshController.setSurfacePlacementActive(Boolean(surfacePlaceCheck.checked));
+      this.updatePanelButtonStates();
     });
+    this.service.textMeshController.onSurfacePlacementChanged = (active: boolean) => {
+      if (surfacePlaceCheck) {
+        surfacePlaceCheck.checked = active;
+      }
+    };
 
     const readFormConfig = () => ({
       text: textInput?.value.trim() || 'Hello 3D',
@@ -11934,7 +11996,11 @@ export class MeshEditorApp {
 
     btnToggleMode?.addEventListener('click', () => {
       const next = !this.service.decalController.isActive;
-      this.service.decalController.setActive(next);
+      if (next) {
+        this.activateExclusive3DTool('decal_painter');
+      } else {
+        this.service.decalController.setActive(false);
+      }
       this.updateDecalUI();
       this.updatePanelButtonStates();
     });
@@ -12051,6 +12117,7 @@ export class MeshEditorApp {
     };
     this.service.decalController.onConfigChanged = () => {
       this.updateDecalUI();
+      this.updatePanelButtonStates();
     };
 
     this.updateDecalUI();

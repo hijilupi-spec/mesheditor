@@ -82,6 +82,7 @@ export class TextMeshController {
 
   public onMeshCreated?: (mesh: Mesh) => void;
   public onMeshUpdated?: (mesh: Mesh) => void;
+  public onSurfacePlacementChanged?: (active: boolean) => void;
 
   constructor(service: MeshEditorService) {
     this.service = service;
@@ -89,12 +90,15 @@ export class TextMeshController {
 
   public setSurfacePlacementActive(active: boolean): void {
     if (this.isSurfacePlacementActive === active) return;
-    this.isSurfacePlacementActive = active;
     if (active) {
+      this.service.deactivateOtherInteractive3DTools('text_place');
+      this.isSurfacePlacementActive = true;
       this.attachPointerObserver();
     } else {
+      this.isSurfacePlacementActive = false;
       this.detachPointerObserver();
     }
+    this.onSurfacePlacementChanged?.(active);
   }
 
   private attachPointerObserver(): void {

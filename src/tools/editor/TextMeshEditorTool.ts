@@ -32,6 +32,10 @@ export class TextMeshEditorTool extends AbstractEditorTool {
     app.service?.textMeshController?.setSurfacePlacementActive(false);
   }
 
+  public onMinimize(app: any): void {
+    app.service?.textMeshController?.setSurfacePlacementActive(false);
+  }
+
   public onUpdateUI(app: any): void {
     app.updateTextMeshUI?.();
   }

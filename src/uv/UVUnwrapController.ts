@@ -86,24 +86,15 @@ export class UVUnwrapController {
   }
 
   public setActive(active: boolean): void {
+    if (!active && !this.isActive) return;
+    if (active) {
+      this.service.deactivateOtherInteractive3DTools('uv');
+    }
     this.isActive = active;
     if (!active) {
       this.seamPickMode = false;
       this.clearSeamOverlay();
     } else {
-      // Deactivate other exclusive 3D tools
-      if (this.service.sculptController?.isActive) {
-        this.service.sculptController.setActive(false);
-      }
-      if (this.service.voxelPainter?.isActive) {
-        this.service.voxelPainter.setActive(false);
-      }
-      if (this.service.pathExtrusion?.isActive) {
-        this.service.pathExtrusion.setActive(false);
-      }
-      if ((this.service as any).weightPaintController?.isActive) {
-        (this.service as any).weightPaintController.setActive(false);
-      }
       const mesh = this.getActiveTargetMesh();
       if (mesh) {
         this.refreshSeamOverlay(mesh);

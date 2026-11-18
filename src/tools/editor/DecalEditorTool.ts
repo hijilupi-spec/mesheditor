@@ -25,22 +25,40 @@ export class DecalEditorTool extends AbstractEditorTool {
     </ul>
   `;
 
-  public onOpen(app: any): void {
+  public isActive(app: any): boolean {
+    return Boolean(app.service?.decalController?.isActive);
+  }
+
+  public onActivate(app: any): void {
     app.service?.decalController?.setActive(true);
+    app.updatePanelButtonStates?.();
     app.updateDecalUI?.();
   }
 
-  public onClose(app: any): void {
+  public onDeactivate(app: any): void {
     app.service?.decalController?.setActive(false);
+    app.updatePanelButtonStates?.();
     app.updateDecalUI?.();
+  }
+
+  public onOpen(app: any): void {
+    this.onActivate(app);
+  }
+
+  public onClose(app: any): void {
+    this.onDeactivate(app);
+  }
+
+  public onMinimize(app: any): void {
+    this.onDeactivate(app);
+  }
+
+  public onMaximize(app: any): void {
+    this.onActivate(app);
   }
 
   public onUpdateUI(app: any): void {
     app.updateDecalUI?.();
-  }
-
-  public isActive(app: any): boolean {
-    return Boolean(app.service?.decalController?.isActive);
   }
 }
 

@@ -186,6 +186,13 @@ export class SculptController {
   }
 
   public setActive(active: boolean): void {
+    if (!active && !this.isActive) return;
+
+    if (active) {
+      // Deactivate other exclusive tools before claiming 3D pointer input and detaching gizmos
+      this.service.deactivateOtherInteractive3DTools('sculpt');
+    }
+
     this.isActive = active;
     if (this.cursorRing) this.cursorRing.isVisible = false;
     if (this.symCursorRing) this.symCursorRing.isVisible = false;
@@ -196,13 +203,6 @@ export class SculptController {
     }
 
     if (active) {
-      // Deactivate other exclusive tools if running
-      if (this.service.voxelPainter?.isActive) {
-        this.service.voxelPainter.setActive(false);
-      }
-      if (this.service.pathExtrusion?.isActive) {
-        this.service.pathExtrusion.setActive(false);
-      }
       // Detach gizmo arrows so they do not intercept or steal sculpting pointer events
       this.service.gizmoManager?.attachToNode(null);
       this.scene.constantlyUpdateMeshUnderPointer = true;

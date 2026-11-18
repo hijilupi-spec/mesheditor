@@ -159,6 +159,12 @@ export class VoxelPainterController {
   }
 
   public setActive(active: boolean): void {
+    if (!active && !this.isActive) return;
+
+    if (active) {
+      this.service.deactivateOtherInteractive3DTools('voxel');
+    }
+
     this.isActive = active;
     if (this.highlightBox) {
       this.highlightBox.isVisible = false;
@@ -168,9 +174,6 @@ export class VoxelPainterController {
       canvas.style.cursor = active ? 'crosshair' : 'default';
     }
     if (active) {
-      if (this.service.pathExtrusion?.isActive) {
-        this.service.pathExtrusion.setActive(false);
-      }
       this.scene.constantlyUpdateMeshUnderPointer = true;
       this.service.gizmoManager?.attachToMesh(null);
       this.renderDirty = true;
@@ -181,6 +184,9 @@ export class VoxelPainterController {
         this.paintTimer = null;
       }
       this.isPointerDown = false;
+      if (!this.service.isSceneInteractionLocked) {
+        this.service.refreshGizmoAttachment();
+      }
     }
   }
 

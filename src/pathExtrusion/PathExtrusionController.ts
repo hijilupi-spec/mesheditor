@@ -113,15 +113,14 @@ export class PathExtrusionController {
 
   public setActive(active: boolean): void {
     if (this.isActive === active) return;
-    this.isActive = active;
     if (active) {
-      if (this.service.voxelPainter?.isActive) {
-        this.service.voxelPainter.setActive(false);
-      }
+      this.service.deactivateOtherInteractive3DTools('path');
+      this.isActive = true;
       this.setupPointerEvents();
       this.setupGizmoEvents();
       this.refreshScene();
     } else {
+      this.isActive = false;
       this.cleanupObservers();
       this.clearMarkers();
       if (this.service.selectedNodes.length > 0) {

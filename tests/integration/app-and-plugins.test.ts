@@ -1342,4 +1342,124 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     // Clean up localStorage
     localStorage.removeItem('mesheditor_stackpanel_drawer_collapsed');
   });
+
+  it('disables Facet Pick, Sculpt Draw tools, and Decal Paint mode whenever another tool is activated (stackpanel & floating)', () => {
+    localStorage.removeItem('mesheditor_layout_mode');
+    localStorage.removeItem('mesheditor_window_layout');
+
+    app = new MeshEditorApp({
+      container,
+      engine,
+      layoutMode: 'stackpanel',
+    });
+
+    const pickBtn = container.querySelector('#btnFacetPickToggle') as HTMLButtonElement;
+    const pickLabel = container.querySelector('#lblFacetPickState') as HTMLElement;
+    const sculptDrawBtn = container.querySelector('#btnSculptDrawToggle') as HTMLButtonElement;
+    const sculptDrawLabel = container.querySelector('#lblSculptDrawState') as HTMLElement;
+    const decalPaintBtn = container.querySelector('#btnToggleDecalPaintMode') as HTMLButtonElement;
+    const decalPaintLabel = container.querySelector('#decalPaintModeLabel') as HTMLElement;
+
+    // Initial state in stackpanel mode (Outliner is expanded, Facet is minimized -> Pick is OFF)
+    expect(app.service.facetEditorActive).toBe(false);
+    expect(pickBtn.classList.contains('active')).toBe(false);
+    expect(pickLabel.textContent).toBe('Pick: OFF');
+
+    // 1. Open Facet & Vertex Editor -> Pick ON
+    app.toggleDialog('dialog-facet', true);
+    expect(app.service.facetEditorActive).toBe(true);
+    expect(pickBtn.classList.contains('active')).toBe(true);
+    expect(pickLabel.textContent).toBe('Pick: ON');
+
+    // Opening a non-exclusive tool (Material Editor) in stackpanel minimizes Facet -> Pick OFF
+    app.toggleDialog('dialog-material', true);
+    expect(app.service.facetEditorActive).toBe(false);
+    expect(pickBtn.classList.contains('active')).toBe(false);
+    expect(pickLabel.textContent).toBe('Pick: OFF');
+
+    // Re-open Facet -> Pick ON again
+    app.toggleDialog('dialog-facet', true);
+    expect(app.service.facetEditorActive).toBe(true);
+
+    // 2. Open Figure Sculpt & Retopo -> Facet Pick OFF, Sculpt Draw tools ON
+    app.toggleDialog('dialog-sculpt', true);
+    expect(app.service.facetEditorActive).toBe(false);
+    expect(pickBtn.classList.contains('active')).toBe(false);
+    expect(pickLabel.textContent).toBe('Pick: OFF');
+    expect(app.service.sculptController.isActive).toBe(true);
+    expect(app.service.isSculptModeActive()).toBe(true);
+    expect(sculptDrawBtn.classList.contains('active')).toBe(true);
+    expect(sculptDrawLabel.textContent).toBe('Draw: ON');
+    expect(container.querySelector('#dialog-sculpt .btn-sculpt-brush[data-brush="clay"]')?.classList.contains('active')).toBe(true);
+
+    // Clicking the Sculpt header in stackpanel mode minimizes it and keeps Draw tools disabled (no bubble re-activation)
+    const sculptHeader = container.querySelector('#dialog-sculpt .dialog-header') as HTMLElement;
+    sculptHeader.click();
+    expect(container.querySelector('#dialog-sculpt')?.classList.contains('minimized')).toBe(true);
+    expect(app.service.sculptController.isActive).toBe(false);
+    expect(app.service.isSculptModeActive()).toBe(false);
+    expect(sculptDrawBtn.classList.contains('active')).toBe(false);
+    expect(sculptDrawLabel.textContent).toBe('Draw: OFF');
+    expect(container.querySelectorAll('#dialog-sculpt .btn-sculpt-brush.active').length).toBe(0);
+
+    // Clicking a brush button re-activates Draw tools
+    const grabBrushBtn = container.querySelector('#dialog-sculpt .btn-sculpt-brush[data-brush="grab"]') as HTMLButtonElement;
+    grabBrushBtn.click();
+    expect(app.service.sculptController.isActive).toBe(true);
+    expect(grabBrushBtn.classList.contains('active')).toBe(true);
+
+    // 3. Open Decal Painter -> Sculpt Draw tools OFF, Decal Paint mode ON
+    app.toggleDialog('dialog-decal', true);
+    expect(app.service.sculptController.isActive).toBe(false);
+    expect(app.service.isSculptModeActive()).toBe(false);
+    expect(sculptDrawBtn.classList.contains('active')).toBe(false);
+    expect(sculptDrawLabel.textContent).toBe('Draw: OFF');
+    expect(container.querySelectorAll('#dialog-sculpt .btn-sculpt-brush.active').length).toBe(0);
+    expect(app.service.decalController.isActive).toBe(true);
+    expect(decalPaintBtn.classList.contains('tool-btn-primary')).toBe(true);
+    expect(decalPaintLabel.textContent).toContain('Paint Mode: Active');
+
+    // Opening Voxel Painter disables Decal Paint mode
+    app.toggleDialog('dialog-voxel-painter', true);
+    expect(app.service.decalController.isActive).toBe(false);
+    expect(decalPaintBtn.classList.contains('tool-btn-primary')).toBe(false);
+    expect(decalPaintLabel.textContent).toBe('Activate Decal Paint Mode');
+    expect(app.service.voxelPainter.isActive).toBe(true);
+
+    // 4. Switch to Floating mode: all three remain exclusive when switching between open dialogs
+    app.setLayoutMode('floating', false);
+    app.toggleDialog('dialog-facet', true);
+    app.toggleDialog('dialog-sculpt', true);
+    app.toggleDialog('dialog-decal', true);
+
+    expect(app.service.decalController.isActive).toBe(true);
+    expect(app.service.sculptController.isActive).toBe(false);
+    expect(app.service.facetEditorActive).toBe(false);
+
+    // Pointer move in floating mode must NOT silently re-activate Sculpt while Decal Painter is active
+    app.service.scene.onPointerObservable.notifyObservers({
+      type: PointerEventTypes.POINTERMOVE,
+      event: { pointerType: 'mouse', clientX: 100, clientY: 100 },
+    } as any);
+    expect(app.service.isSculptModeActive()).toBe(false);
+    expect(app.service.sculptController.isActive).toBe(false);
+    expect(app.service.decalController.isActive).toBe(true);
+
+    // Clicking Pick toggle in Facet dialog disables Decal Paint mode
+    pickBtn.click();
+    expect(app.service.facetEditorActive).toBe(true);
+    expect(app.service.decalController.isActive).toBe(false);
+    expect(decalPaintLabel.textContent).toBe('Activate Decal Paint Mode');
+
+    // Clicking Decal Paint Mode toggle disables Facet Pick
+    decalPaintBtn.click();
+    expect(app.service.decalController.isActive).toBe(true);
+    expect(app.service.facetEditorActive).toBe(false);
+    expect(pickLabel.textContent).toBe('Pick: OFF');
+
+    // Pressing Escape disables Decal Paint mode cleanly
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(app.service.decalController.isActive).toBe(false);
+    expect(decalPaintLabel.textContent).toBe('Activate Decal Paint Mode');
+  });
 });

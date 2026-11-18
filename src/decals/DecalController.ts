@@ -238,14 +238,20 @@ export class DecalController {
 
   public setActive(active: boolean): void {
     if (this.isActive === active) return;
-    this.isActive = active;
 
     if (active) {
+      this.service.deactivateOtherInteractive3DTools('decal');
+      this.isActive = true;
+      this.service.gizmoManager?.attachToNode(null);
       this.createProjectorBox();
       this.attachEvents();
     } else {
+      this.isActive = false;
       this.detachEvents();
       this.disposePreviewAndProjector();
+      if (!this.service.isSceneInteractionLocked) {
+        this.service.refreshGizmoAttachment();
+      }
     }
     this.onConfigChanged?.(this.config);
   }

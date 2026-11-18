@@ -50,9 +50,15 @@
 
     <!-- Sculpting & Quad-Draw Brushes -->
     <div class="tool-control-group">
-      <div class="sculpt-section-title"><i class="app-icon" data-lucide="brush"></i> Sculpt &amp; Quad-Draw Brushes</div>
+      <div class="sculpt-slider-header" style="margin-bottom: 6px;">
+        <div class="sculpt-section-title"><i class="app-icon" data-lucide="brush"></i> Sculpt &amp; Quad-Draw Brushes</div>
+        <button type="button" id="btnSculptDrawToggle" class="facet-toggle-btn" title="Toggle 3D sculpt &amp; draw brushes">
+          <i class="app-icon" data-lucide="brush"></i>
+          <span id="lblSculptDrawState">Draw: OFF</span>
+        </button>
+      </div>
       <div class="sculpt-grid-3">
-        <button class="sculpt-btn btn-sculpt-brush active" data-brush="clay" title="Add or carve surface clay along normals">Clay</button>
+        <button class="sculpt-btn btn-sculpt-brush" data-brush="clay" title="Add or carve surface clay along normals">Clay</button>
         <button class="sculpt-btn btn-sculpt-brush" data-brush="grab" title="Pull geometry smoothly along mouse drag (Primary forms)">Grab</button>
         <button class="sculpt-btn btn-sculpt-brush" data-brush="smooth" title="Laplacian smoothing to relax wrinkles and bumps">Smooth</button>
         <button class="sculpt-btn btn-sculpt-brush" data-brush="flatten" title="Project vertices onto contact plane for bone planes">Flatten</button>

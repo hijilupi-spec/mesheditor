@@ -68,23 +68,35 @@ export class FacetEditorTool extends AbstractEditorTool {
   }
 
   public onOpen(app: any): void {
-    app.service?.toggleFacetEditor(true);
-    app.updatePanelButtonStates?.();
+    this.onActivate(app);
   }
 
   public onClose(app: any): void {
-    app.service?.toggleFacetEditor(false);
-    app.updatePanelButtonStates?.();
+    this.onDeactivate(app);
   }
 
   public onActivate(app: any): void {
     app.service?.toggleFacetEditor(true);
+    app.updateFacetPickUI?.();
     app.updatePanelButtonStates?.();
   }
 
   public onDeactivate(app: any): void {
     app.service?.toggleFacetEditor(false);
+    app.updateFacetPickUI?.();
     app.updatePanelButtonStates?.();
+  }
+
+  public onMinimize(app: any): void {
+    this.onDeactivate(app);
+  }
+
+  public onMaximize(app: any): void {
+    this.onActivate(app);
+  }
+
+  public onUpdateUI(app: any): void {
+    app.updateFacetPickUI?.();
   }
 }
 
