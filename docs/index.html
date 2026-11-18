@@ -3,8 +3,45 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mesh Editor — 3D Model Studio &amp; AI Mesh Manipulation Workbench</title>
-  <meta name="description" content="Mesh Editor is a modern, modular 3D model studio and game asset pipeline workbench for Desktop, Tablet & Touch Devices (iPad, iPhone, Android). Co-create 3D meshes with the AI of your choice, sculpt with non-destructive CSG booleans &amp; bevels, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs, bake Normal &amp; AO maps, rig skeletons with weight painting, and deploy across Web, Desktop, and Web Components.">
+  <title>Mesh Editor — Free Open-Source 3D Modeling Studio &amp; AI Mesh Workbench</title>
+  <meta name="description" content="Mesh Editor is a free, open-source 3D modeling studio for Browser, iPad/Mobile Touch, Desktop (Electron), and Web Components. Create, sculpt, unwrap, bake, rig, compress, and co-create 3D assets with your own local or cloud AI — zero installs and zero file uploads.">
+  <link rel="canonical" href="https://peer2p.github.io/mesheditor/">
+
+  <!-- Open Graph / Social Sharing Preview -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mesh Editor">
+  <meta property="og:url" content="https://peer2p.github.io/mesheditor/">
+  <meta property="og:title" content="Mesh Editor — Free Open-Source 3D Modeling Studio &amp; AI Workbench">
+  <meta property="og:description" content="Turn ideas into game-ready, 3D-printable, and web-ready 3D models in your browser, on iPad/mobile, as a native desktop app, or embedded via &lt;mesh-editor&gt;. Sculpt, retopologize, unwrap UVs, bake maps, rig skeletons, and co-create with your own local or cloud AI.">
+  <meta property="og:image" content="https://peer2p.github.io/mesheditor/screenshots/courtyard.jpg">
+  <meta property="og:image:alt" content="Mesh Editor Studio showing a 3D gothic courtyard scene alongside the Scene Objects outliner and AI Mesh Agent panel">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mesh Editor — Free Open-Source 3D Modeling Studio &amp; AI Workbench">
+  <meta name="twitter:description" content="Create, sculpt, unwrap, bake, rig, compress, and co-create 3D assets in your browser, on iPad/mobile, or as a desktop app — with your own local or cloud AI and zero file uploads.">
+  <meta name="twitter:image" content="https://peer2p.github.io/mesheditor/screenshots/courtyard.jpg">
+
+  <!-- Structured Data (Schema.org) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Mesh Editor",
+    "applicationCategory": "DesignApplication",
+    "operatingSystem": "Web, macOS, Windows, Linux, iOS, iPadOS, Android",
+    "license": "https://opensource.org/licenses/Apache-2.0",
+    "url": "https://peer2p.github.io/mesheditor/",
+    "codeRepository": "https://github.com/peer2p/mesheditor",
+    "description": "Free, open-source 3D modeling studio and game asset pipeline powered by Babylon.js with Bring-Your-Own-AI co-creation, touch support, desktop builds, and an embeddable Web Component.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+
   <link rel="icon" type="image/svg+xml" href="app-icon.svg">
   <link rel="stylesheet" href="style.css">
   <!-- Babylon.js CDN for Realtime 3D Model Viewport & GLB Sandbox Previews -->
@@ -59,8 +96,7 @@
             3D Modeling Made Easy.<br/>No Subscription, No Costs.<br/>You and your AI - <span class="text-gradient">Together.</span>
           </h1>
           <p class="hero-subtitle">
-            Mesh Editor is an open 3D Editor for Desktop &amp; Touch Devices to view, edit, convert and sculpt 3D models with your favorite AI.
-            Co-sculpt 3D meshes side-by-side with the <strong>AI of your choice</strong>, build with non-destructive CSG booleans &amp; bevels, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs, bake Normal &amp; AO maps, rig skeletons, and deploy seamlessly as a <strong>Browser App</strong>, native <strong>Desktop App</strong>, or embeddable <strong>Web Component</strong>.
+            A free, open-source 3D modeling studio that runs right in your browser, on iPad &amp; mobile touchscreens, as a native desktop app, or embedded in your own web app. Create game assets, 3D prints, terrains, and voxel worlds manually or side-by-side with your own local or cloud AI — with zero installs and zero file uploads.
           </p>
 
           <div class="hero-cta-group">
@@ -177,92 +213,36 @@
       <div class="container">
         <div class="app-intro-card">
           <p class="app-intro-lead">
-            <strong>Mesh Editor</strong> is a focused 3D model studio and geometric workbench for creating game-ready props, 3D printable assets, mechanical parts, stylized voxel art, architectural structures, and web-ready 3D components.
+            <strong>Turn ideas into game-ready, 3D-printable, and web-ready 3D models — in seconds, with zero subscriptions and 100% client-side privacy.</strong>
           </p>
           <p class="app-intro-sub">
-            Start with simple primitives, drawn Bézier splines, imported geometry, or natural language prompts. Shape your model directly in the viewport, co-sculpt side-by-side with the AI of your choice, carve solids with non-destructive CSG booleans, optimize materials, and export seamlessly to the workflow you need.
+            <strong>Mesh Editor</strong> brings traditional 3D modeling and your own AI together in one lightweight studio. Start from a text prompt, a reference image, a spline curve, or an existing <code>.glb</code>/<code>.obj</code>/<code>.stl</code> file. Shape and sculpt your geometry, unwrap UVs, bake textures, rig characters, shrink file sizes, and export straight to Unity, Unreal, Godot, Blender, or your 3D printer — on desktop, tablet, or embedded via <code>&lt;mesh-editor&gt;</code>.
           </p>
 
           <ul class="overview-bullet-grid">
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Build with primitives &amp; curves:</strong> Create boxes, cylinders, spheres, capsules, and tori, or turn 2D Bézier curve splines and cross-sections into solid 3D geometry, curved pipes, and architectural moldings.</span>
+              <span><strong>Model, sculpt &amp; build worlds:</strong> Craft props, mechanical parts, 3D text, voxel art, and painted heightmap terrains using primitives, Bézier sweeps, sculpting brushes, and non-destructive CSG booleans &amp; bevels.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Co-create with the AI of your choice:</strong> Partner with local or cloud AI models (oMLX, Ollama, LM Studio, Gemini, Claude, GPT-4o) across <strong>5 Surface Topology Archetypes</strong> (SDF clay with Catmull-Clark Sub-D, twist-free Parallel-Transport tapered sweeps, <code>standProud</code> shells), a <strong>6-Pass Image-to-Mesh</strong> workflow, and Neural 3D Generators (TRELLIS 2, Hunyuan3D, Hi3D).</span>
+              <span><strong>Co-create with your own AI (BYO-AI):</strong> Connect local LLMs (oMLX, Ollama, LM Studio) or cloud models (Gemini, Claude, GPT), plus optional Neural 3D generators (TRELLIS 2, Hunyuan3D, Hi3D) and AI PBR texture synthesis.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Combine shapes with non-destructive CSG2 &amp; Bevels:</strong> Combine meshes with editable Union, Subtract, and Intersect Boolean stacks, lossless base-mesh snapshots (Revert to Base), and a live Chamfer/Fillet Bevel Modifier.</span>
+              <span><strong>Complete game-asset pipeline:</strong> Retopologize with Quad-Draw &amp; Shrinkwrap, unwrap UVs with uniform texel density, bake high-to-low-poly Normal &amp; AO maps, rig skeletons, paint skin weights, and preview animations.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Retopologize with Shrinkwrap &amp; Quad-Draw:</strong> Project low-poly cages onto high-poly sculpts like stretch film, draw clean 4-sided Quad-Draw polygon strips with auto-welding, or decimate via Quadric Error Metrics.</span>
+              <span><strong>Convert, compress &amp; ship anywhere:</strong> Import GLB, glTF, DAE, OBJ, STL, PLY, and Babylon scenes; cut file sizes by up to 90% in-browser with Draco &amp; WebP optimization; and export clean meshes or 360° turnaround shots.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Unwrap UVs, Texel Density &amp; Island Packing:</strong> Mark Smart Seams automatically or interactively, unfold 2D charts with harmonic relaxation, enforce uniform Texel Density (<code>px/m</code>), and pack islands without overlaps.</span>
+              <span><strong>Mouse, keyboard &amp; native touch:</strong> Work fast with desktop shortcuts and WASD navigation—or use 1-finger orbit, 2-finger pinch/pan, and the keyboard-free Touch Bar on iPad, iPhone, and Android.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Bake High-to-Low-Poly Normal &amp; AO Maps:</strong> Project micro-relief (pores, creases, bolts) from high-poly sculpts onto low-poly game meshes using an automatic smooth-normal Projection Cage and UV seam dilation.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Rig skeletons &amp; paint skin weights:</strong> Generate Humanoid, Quadruped, or Spine skeletons, auto-bind normalized 4-bone capsule skin weights, paint vertex influence heatmaps with X-symmetry, and test joint poses live.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Shape models &amp; UVs with facet &amp; vertex tools:</strong> Transform, Push/Pull, Extrude, Inset, Bevel, Knife, normal flipping, subdivision, <strong>Single Tri</strong> targeting, plus <strong>per-facet UV mapping</strong> (Fit <code>[0..1]</code>, World Planar, <code>90°</code> rotate, Flip U/V, UV region, corner editing, and Atlas tiles) with automatic shared-vertex isolation.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Sculpt and paint with 3D voxels:</strong> Place, erase, and paint block-by-block voxels directly in the viewport with raycast surface snapping, custom RGB color palettes, and variable brush sizes.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Create mountains, islands &amp; heightmap terrains:</strong> Upload grayscale heightmaps or paint elevation on a black ground in the <strong>2-Tab Paint Editor</strong> (brush <strong>Size</strong> &amp; <strong>Smoothness</strong>), paint RGB <strong>Mix Textures</strong> for trails and roads, assign each of the <strong>3 splat textures</strong> individually with instant re-render on <code>GroundMesh</code> + <code>TerrainMaterial</code>, or generate terrains via AI with <code>modeler_create_heightmap</code>.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Work precisely with mouse, keyboard, or touch:</strong> Navigate via Universal Orbit, Pan, and WASD fly-through on desktop—or 1-finger orbit/tap, 2-finger pinch/pan, and the <strong>keyboard-free Touch Bar</strong> (Box Select, +Select, Snap, Focus) on iPad, iPhone &amp; Android.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Configure 4-Map De-Lit PBR &amp; per-facet materials:</strong> Synthesize coordinated <strong>4-Map PBR sets</strong> (De-Lit Albedo clamped to <code>[30, 240]</code>, Sobel Normal, ORM Roughness, Cavity AO) with <strong>29 Canonical Presets</strong> (Clearcoat, Sheen, Anisotropy, Subsurface Translucency) and double-sided rendering—or assign per-facet textures via automatic <code>MultiMaterial</code> submeshes.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Compress &amp; optimize 3D assets:</strong> Reduce file sizes by up to 90% in-browser using Khronos Draco geometry compression, Meshopt decoding, intelligent decimation, and WebP textures.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Organize scene hierarchies:</strong> Group objects (<kbd>⌘G</kbd> / <kbd>⇧⌘G</kbd>), manage parent-child relationships, filter by name in the Outliner, isolate meshes, and lock transforms for articulated props and complex scenes.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Preview animations &amp; timelines:</strong> Play multi-clip skeletal animations, scrub timelines, toggle synchronized looping, and adjust playback speed controls on imported GLTF/GLB models.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Present with studio lighting:</strong> Render your work with HDR environment lighting, real-time reflections, directional shadows, hemispheric illumination, bloom post-processing, and customizable ground grids.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Capture grid-free screenshots &amp; turnarounds:</strong> Trigger <strong>Actions &rarr; Capture Screenshot...</strong> (<kbd>⌘P</kbd> / <kbd>Ctrl+P</kbd>) to download a single JPEG from the current perspective or a multi-angle <strong>4 Directions</strong> (90°) / <strong>8 Directions</strong> (45°) turntable ZIP archive with the ground grid automatically hidden.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Import &amp; export universal 3D formats:</strong> Import GLB, GLTF, DAE (with multi-file textures), OBJ, STL, PLY, and Babylon scenes. Export textured binary GLB bundles, glTF, Wavefront OBJ, STL meshes for 3D printing, or full <code>.babylon</code> scenes.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Extend with the Plugin SDK:</strong> Add custom dropdown menu items, inject toolbar buttons, hook into lifecycle events, and connect direct export pipelines to Unreal Engine, Unity, Godot, or cloud asset managers.</span>
-            </li>
-            <li class="overview-bullet-item">
-              <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Deploy across Desktop, Touch Web &amp; Embeds:</strong> Run 100% in desktop or mobile/tablet touch browsers (iPad, iPhone, Android) with zero installs, use the native macOS, Windows, and Linux desktop app, or embed <code>&lt;mesh-editor&gt;</code> into your own software.</span>
+              <span><strong>Run standalone or embed in your app:</strong> Launch immediately in the browser, install the native macOS/Windows/Linux desktop app, or drop <code>&lt;mesh-editor&gt;</code> into your own product with the Plugin SDK.</span>
             </li>
           </ul>
 
