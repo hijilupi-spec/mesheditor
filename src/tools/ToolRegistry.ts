@@ -45,6 +45,7 @@ import {
   GenerateTextureTool,
   CreateTextMeshTool,
   DecalTool,
+  PaintTextureTool,
   CreateHeightmapTool,
   CheckZFightingTool,
 } from './builtin';
@@ -175,6 +176,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     new GenerateTextureTool(),
     new CreateTextMeshTool(),
     new DecalTool(),
+    new PaintTextureTool(),
     new CreateHeightmapTool(),
     new CheckZFightingTool(),
   ]);

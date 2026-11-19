@@ -42,6 +42,7 @@ export * from './RigWeightTool';
 export * from './GenerateTextureTool';
 export * from './CreateTextMeshTool';
 export * from './DecalTool';
+export * from './PaintTextureTool';
 export * from './CreateHeightmapTool';
 export * from './CheckZFightingTool';
 

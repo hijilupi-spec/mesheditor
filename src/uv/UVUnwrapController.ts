@@ -586,7 +586,9 @@ export class UVUnwrapController {
               u = Vector3.Dot(pVec, tangentU);
               v = Vector3.Dot(pVec, bitangentV);
             }
-            newUVs.push(u, v);
+            // Offset each chart uniquely before bin-packing so coincident projections (e.g. box faces)
+            // are never merged into a single overlapping island by extractUVIslands.
+            newUVs.push(u + cIdx * 1000, v);
           }
           newIndices.push(localV);
         }

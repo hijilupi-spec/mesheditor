@@ -8144,3 +8144,183 @@ dialog#screenshotModal::backdrop {
 
 
 
+/* =========================================================================
+   3D TEXTURE PAINTER STYLES (Phases 1-3: UV Paint, Layers, Stencil)
+   ========================================================================= */
+.texpaint-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.texpaint-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 3px;
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+}
+
+.texpaint-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #8b949e;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.texpaint-tab:hover {
+  color: #e6edf3;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.texpaint-tab.active {
+  color: #ffffff;
+  background: #238636;
+}
+
+.texpaint-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: inherit;
+}
+
+.texpaint-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.texpaint-mode-grid .sculpt-btn {
+  height: 28px;
+  font-size: 11px;
+  padding: 0 6px;
+}
+
+.texpaint-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+
+.texpaint-swatch {
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.texpaint-swatch:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.7);
+}
+
+.texpaint-swatch.active {
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.texpaint-preview-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.texpaint-layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 195px;
+  overflow-y: auto;
+  padding: 5px;
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+
+.texpaint-layer-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: #161b22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font-size: 11px;
+  color: #c9d1d9;
+}
+
+.texpaint-layer-item.active {
+  background: rgba(35, 134, 54, 0.22);
+  border-color: rgba(63, 185, 80, 0.7);
+  color: #ffffff;
+}
+
+.texpaint-layer-eye {
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.texpaint-layer-eye.visible {
+  color: #58a6ff;
+}
+
+.texpaint-layer-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.texpaint-layer-meta {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #8b949e;
+  text-transform: uppercase;
+}
+
+.texpaint-stencil-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.texpaint-stencil-overlay img {
+  pointer-events: none;
+  user-select: none;
+  max-width: none;
+  max-height: none;
+  border: 1px dashed rgba(88, 166, 255, 0.6);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.35);
+}

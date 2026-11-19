@@ -29,6 +29,7 @@ const TOOLS = [
   { className: 'AITextureEditorTool', file: 'AITextureEditorTool.ejs', id: 'dialog-ai-texture' },
   { className: 'TextMeshEditorTool', file: 'TextMeshEditorTool.ejs', id: 'dialog-text-mesh' },
   { className: 'DecalEditorTool', file: 'DecalEditorTool.ejs', id: 'dialog-decal' },
+  { className: 'TexturePaintEditorTool', file: 'TexturePaintEditorTool.ejs', id: 'dialog-texture-paint' },
   { className: 'HeightmapEditorTool', file: 'HeightmapEditorTool.ejs', id: 'dialog-heightmap' },
 ];
 

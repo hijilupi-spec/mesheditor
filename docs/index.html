@@ -216,7 +216,7 @@
             <strong>Turn ideas into game-ready, 3D-printable, and web-ready 3D models — in seconds, with zero subscriptions and 100% client-side privacy.</strong>
           </p>
           <p class="app-intro-sub">
-            <strong>Mesh Editor</strong> brings traditional 3D modeling and your own AI together in one lightweight studio. Start from a text prompt, a reference image, a spline curve, or an existing <code>.glb</code>/<code>.obj</code>/<code>.stl</code> file. Shape and sculpt your geometry, unwrap UVs, bake textures, rig characters, shrink file sizes, and export straight to Unity, Unreal, Godot, Blender, or your 3D printer — on desktop, tablet, or embedded via <code>&lt;mesh-editor&gt;</code>.
+            <strong>Mesh Editor</strong> brings traditional 3D modeling and your own AI together in one lightweight studio. Start from a text prompt, a reference image, a spline curve, or an existing <code>.glb</code>/<code>.obj</code>/<code>.stl</code> file. Shape and sculpt your geometry, unwrap UVs, hand-paint 3D UV textures, bake maps, rig characters, shrink file sizes, and export straight to Unity, Unreal, Godot, Blender, or your 3D printer — on desktop, tablet, or embedded via <code>&lt;mesh-editor&gt;</code>.
           </p>
 
           <ul class="overview-bullet-grid">
@@ -230,7 +230,7 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Complete game-asset pipeline:</strong> Retopologize with Quad-Draw &amp; Shrinkwrap, unwrap UVs with uniform texel density, bake high-to-low-poly Normal &amp; AO maps, rig skeletons, paint skin weights, and preview animations.</span>
+              <span><strong>Complete game-asset pipeline:</strong> Retopologize with Quad-Draw &amp; Shrinkwrap, unwrap UVs with uniform texel density, hand-paint multi-layer 3D UV textures &amp; stencils, bake Normal &amp; AO maps, rig skeletons, and paint skin weights.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -1671,6 +1671,146 @@
               Create and edit on <strong>iPad, iPhone &amp; Android</strong> with 1-finger tap selection, 1-finger camera orbit, 2-finger pinch/pan, responsive auto-minimized panels (&le; 1024px), tap-to-place 3D Text &amp; Splines, Stamp/Erase Decals, touch 2D Profile Canvas, and the floating <strong>Touch Bar</strong> for Box Select, +Select &amp; Snap.
             </p>
           </div>
+
+          <!-- Feature 19 -->
+          <div class="feature-box">
+            <div class="feature-box-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.622 17.897-10.68-2.913"></path><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"></path><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"></path></svg>
+            </div>
+            <h4 class="feature-box-title">3D UV Texture Painter &amp; Stencils</h4>
+            <p class="feature-box-desc">
+              Hand-paint directly on 3D meshes seamlessly across UV seams with auto-dilation bleed, X-symmetry, Stylized AO &amp; Gradient base shading, multi-layer PBR channels (Albedo, Roughness, Metallic, Emissive), 2D UV canvas painting, and camera stencil projection.
+            </p>
+          </div>
+
+          <!-- Feature 20 -->
+          <div class="feature-box">
+            <div class="feature-box-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 22h14"></path><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"></path><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-3-3c-1.66 0-3 1-3 3s1 2 1 3.5V13"></path></svg>
+            </div>
+            <h4 class="feature-box-title">Surface Decal Painter &amp; Fusion</h4>
+            <p class="feature-box-desc">
+              Stamp built-in surface details (foliage, cracks, rust, runes, emblems), custom PNGs, or AI-generated alpha decals onto curved meshes with rotation, tint, and automatic mesh fusion on GLB/OBJ export.
+            </p>
+          </div>
+        </div>
+
+        <!-- 3D UV Texture Painter & Hand-Painted PBR Showcase -->
+        <div id="texture-painter" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="section-header" style="margin-bottom: 36px;">
+            <span class="section-tag">3D UV Texture Painter &amp; Hand-Painted PBR</span>
+            <h3 class="section-title" style="font-size: 32px;">Hand-Paint Stylized &amp; PBR Textures Directly on 3D Meshes.</h3>
+            <p class="section-desc">
+              Bring simple low-poly meshes to life with Nintendo-style hand-painted textures, multi-layer PBR blending, and camera stencil projection. Paint directly in the 3D viewport seamlessly across UV seams, detail on the live 2D UV canvas, or let the AI Agent paint via <code>modeler_paint_texture</code>.
+            </p>
+          </div>
+
+          <div class="ai-feature-card-grid" style="margin-bottom: 36px;">
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14.622 17.897-10.68-2.913"></path><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"></path><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"></path></svg>
+              </div>
+              <h4 class="card-title">Seamless 3D UV Painting &amp; Stylized Base</h4>
+              <p class="card-desc">
+                True <strong>3D sphere-to-UV rasterization</strong> lets strokes flow seamlessly across UV seams with automatic UV unwrapping and edge <strong>Seam Dilation (Bleed)</strong>. Includes Brush, Eraser, Smudge, UV Island Fill, Eyedropper (<kbd>Alt</kbd>+Click), <strong>X-Symmetry</strong>, and 1-click <strong>Stylized AO &amp; Gradient Base</strong> shading (vertical gradient + soft hemisphere AO + convex edge highlights).
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Seamless UV Seams</span>
+                <span class="card-tag">Auto-Dilation Bleed</span>
+                <span class="card-tag">Stylized AO Base</span>
+                <span class="card-tag">X-Symmetry</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              </div>
+              <h4 class="card-title">Layer Stack, PBR Channels &amp; 2D UV Canvas</h4>
+              <p class="card-desc">
+                Stack non-destructive layers with opacity and blend modes (<code>Normal</code>, <code>Multiply</code>, <code>Overlay</code>, <code>Screen</code>, <code>Soft Light</code>, <code>Add</code>). Paint across <strong>Albedo</strong>, <strong>Roughness</strong>, <strong>Metallic</strong> (glTF ORM), and <strong>Emissive</strong> channels using 6 procedural brush tips (<em>Round</em>, <em>Soft</em>, <em>Chalk</em>, <em>Watercolor</em>, <em>Noise</em>, <em>Square</em>), or paint directly on the live 2D UV wireframe canvas.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Multi-Layer Stack</span>
+                <span class="card-tag">Albedo / ORM / Emissive</span>
+                <span class="card-tag">6 Brush Alphas</span>
+                <span class="card-tag">2D UV Canvas</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
+              </div>
+              <h4 class="card-title">Camera Stencil Projection &amp; AI Painting</h4>
+              <p class="card-desc">
+                Load any PNG/JPG/WebP image or scene texture as a translucent viewport <strong>Stencil Overlay</strong> (with live opacity, scale, rotation, and X/Y offset) and selectively brush through it onto curved meshes&mdash;or click <strong>Project Whole Stencil</strong> in one pass. The AI Agent drives the exact same engine via <code>modeler_paint_texture</code>.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Camera Stencil</span>
+                <span class="card-tag">modeler_paint_texture</span>
+                <span class="card-tag">Symmetrical Stamps</span>
+                <span class="card-tag">GLB Export Ready</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="plugin-section-grid">
+            <div>
+              <span class="section-tag">Human + AI Hand-Painted Workflow</span>
+              <h4 class="section-title" style="font-size: 26px;">Paint Stylized Assets by Hand, or Co-Paint with AI.</h4>
+              <p class="section-desc" style="margin-bottom: 18px;">
+                Open <strong>Tools &rarr; Materials &rarr; 3D Texture Painter</strong> for full artistic control across Paint, Layers, and Stencil tabs&mdash;or prompt the AI Agent to shade and detail any mesh directly in UV space:
+              </p>
+              <ul class="adapter-list" style="margin-bottom: 20px;">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Instant Stylized Shading Base:</strong> Auto-unwrap overlapping UVs and bake a warm-to-cool vertical gradient, soft hemisphere AO, and convex edge highlights in one click (up to <code>2048px</code>).</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Semantic AI Painting &amp; Symmetrical Details:</strong> The AI Agent combines <code>stylized_base</code>, spatial/normal <code>gradient</code> passes, mirrored <code>stamp</code> shapes (<code>eye</code>, <code>star</code>, <code>heart</code>, <code>stripe</code>), 3D <code>stroke</code> paths, and <code>project_stencil</code> graphics.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Clean PNG &amp; GLB Export:</strong> Download any painted channel as a PNG at any time, or export directly to <code>.glb</code>/<code>.gltf</code> with baked Albedo, ORM (Roughness/Metallic), and Emissive maps embedded automatically.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="code-window">
+              <div class="code-header">
+                <div class="code-dots">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="code-title">3D UV Texture Painter &bull; AI Tool Pipeline</span>
+                <span style="font-size: 11px; color: var(--accent-hover);">Hand-Painted PBR</span>
+              </div>
+              <pre class="code-body"><code><span class="code-cm">// 1. Auto-unwrap &amp; bake a Nintendo-style stylized AO + gradient base</span>
+<span class="code-fn">modeler_paint_texture</span>({
+  action: <span class="code-str">'stylized_base'</span>, targetMesh: <span class="code-str">'Hero_Slime'</span>,
+  color: <span class="code-str">'#3498db'</span>, bottomColor: <span class="code-str">'#1b4f72'</span>, topColor: <span class="code-str">'#85c1e9'</span>,
+  aoStrength: <span class="code-num">0.35</span>, edgeHighlightStrength: <span class="code-num">0.25</span>
+});
+
+<span class="code-cm">// 2. Stamp symmetrical stylized eyes directly into the UV texture</span>
+<span class="code-fn">modeler_paint_texture</span>({
+  action: <span class="code-str">'stamp'</span>, targetMesh: <span class="code-str">'Hero_Slime'</span>,
+  shape: <span class="code-str">'eye'</span>, position: [<span class="code-num">0.32</span>, <span class="code-num">0.18</span>, <span class="code-num">-0.92</span>],
+  color: <span class="code-str">'#111111'</span>, secondaryColor: <span class="code-str">'#ffffff'</span>,
+  radius: <span class="code-num">0.24</span>, mirrorX: <span class="code-kw">true</span>, layerName: <span class="code-str">'Face Details'</span>
+});
+
+<span class="code-cm">// 3. Add a glossy roughness accent or glowing emissive rune layer</span>
+<span class="code-fn">modeler_paint_texture</span>({
+  action: <span class="code-str">'stroke'</span>, targetMesh: <span class="code-str">'Hero_Slime'</span>,
+  channel: <span class="code-str">'emissive'</span>, color: <span class="code-str">'#58a6ff'</span>, brushAlpha: <span class="code-str">'watercolor'</span>,
+  points: [[<span class="code-num">-0.3</span>, <span class="code-num">-0.1</span>, <span class="code-num">-0.95</span>], [<span class="code-num">0</span>, <span class="code-num">-0.18</span>, <span class="code-num">-0.98</span>], [<span class="code-num">0.3</span>, <span class="code-num">-0.1</span>, <span class="code-num">-0.95</span>]]
+});</code></pre>
+            </div>
+          </div>
         </div>
 
         <!-- Heightmap Terrain & 3-Texture RGB Splatting Showcase -->
@@ -1800,7 +1940,7 @@
           <div class="feature-card">
             <h3 class="card-title">Game Developers &amp; Indies</h3>
             <p class="card-desc">
-              Complete high-to-low-poly production and environment authoring in one window: paint heightmap terrains with 3-texture RGB splatting, sculpt characters or hard-surface props, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs to uniform Texel Density, bake Normal &amp; AO maps, rig with 4-bone Weight Painting, compress with Draco, and export to Unity, Unreal Engine, or Godot.
+              Complete high-to-low-poly production and environment authoring in one window: paint heightmap terrains with 3-texture RGB splatting, sculpt characters or hard-surface props, retopologize with Shrinkwrap &amp; Quad-Draw, unwrap UVs to uniform Texel Density, hand-paint multi-layer 3D UV textures &amp; stencils, bake Normal &amp; AO maps, rig with 4-bone Weight Painting, compress with Draco, and export to Unity, Unreal Engine, or Godot.
             </p>
           </div>
 

@@ -105,12 +105,13 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('2. ToolRegistry Management', () => {
-    it('initializes default registry with all 46 built-in modeling tools', () => {
+    it('initializes default registry with all 47 built-in modeling tools', () => {
       const registry = createDefaultToolRegistry();
       const allTools = registry.getAll();
 
-      expect(allTools.length).toBe(46);
+      expect(allTools.length).toBe(47);
       expect(registry.has('modeler_get_scene_info')).toBe(true);
+      expect(registry.has('modeler_paint_texture')).toBe(true);
       expect(registry.has('modeler_check_z_fighting')).toBe(true);
       expect(registry.has('modeler_plan_model')).toBe(true);
       expect(registry.has('modeler_create_primitive')).toBe(true);
@@ -158,7 +159,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(registry.has('modeler_create_heightmap')).toBe(true);
 
       const openAiDefs = registry.getOpenAITools();
-      expect(openAiDefs.length).toBe(46);
+      expect(openAiDefs.length).toBe(47);
       expect(openAiDefs.every((d) => d.type === 'function' && typeof d.function.name === 'string')).toBe(true);
     });
 
@@ -275,9 +276,9 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('4. Tool Abstraction, In-App Help Guides & Dialog Wiring', () => {
-    it('provides unified ToolInterface metadata and comprehensive English help text for all 21 editor tools', () => {
+    it('provides unified ToolInterface metadata and comprehensive English help text for all 22 editor tools', () => {
       const editorTools = getBuiltinEditorTools();
-      expect(editorTools.length).toBe(21);
+      expect(editorTools.length).toBe(22);
 
       const requiredTools = [
         'scene_outliner',
@@ -300,6 +301,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
         'ai_texture_generator',
         'text_mesh',
         'decal_painter',
+        'texture_painter',
         'heightmap_terrain',
       ];
 
@@ -448,7 +450,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
 
     it('instantiates all decentralized editor tool classes with self-contained configurations and help guides', () => {
       const tools = createBuiltinEditorTools();
-      expect(tools.length).toBe(21);
+      expect(tools.length).toBe(22);
 
       const heightmapTool = new HeightmapEditorTool();
       expect(heightmapTool.name).toBe('heightmap_terrain');
@@ -636,7 +638,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(physicsBtn).not.toBeNull();
     });
 
-    it('organizes all 21 editor tools into Generic, Materials, Creation, Optimization, and Characters submenus', () => {
+    it('organizes all 22 editor tools into Generic, Materials, Creation, Optimization, and Characters submenus', () => {
       document.body.innerHTML = '';
       const container = document.createElement('div');
       container.id = 'app-test-container-categories';
@@ -649,7 +651,13 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
 
       const expectedByCategory: Record<string, string[]> = {
         Generic: ['Scene Objects', 'Mesh Properties', 'Scene & Environment', 'Animation Player'],
-        Materials: ['AI Texture Generator', 'Material & Texture', 'Normal & AO Baker', 'UV Unwrap & Texel Density'],
+        Materials: [
+          '3D Texture Painter',
+          'AI Texture Generator',
+          'Material & Texture',
+          'Normal & AO Baker',
+          'UV Unwrap & Texel Density',
+        ],
         Creation: [
           'AI Mesh Agent',
           'Create Mesh',

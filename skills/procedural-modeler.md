@@ -293,4 +293,14 @@ To avoid crude, wooden, or blocky results, prefer these high-level parametric to
    - Builds or updates a 3D `GroundMesh` with `TerrainMaterial` for islands, mountain ranges, peaks, volcanoes, canyons, dunes, or custom grayscale sculpted landscapes (`preset`, `width`, `height`, `subdivisions`, `minHeight`, `maxHeight`).
    - Assign the 3 RGB splat textures individually (`texture1` Red = High/Peaks, `texture2` Green = Mid/Path, `texture3` Blue = Low/Base) using built-in presets (`"rock"`, `"grass"`, `"sand"`, `"snow"`, `"dirt"`, `"cobblestone"`, `"gravel"`, `"volcanic"`, `"moss"`, `"water"`) or scene/AI texture names/URLs, and customize `textureScale`.
    - Paint custom grayscale elevation via `heightStrokes` (`{ points: [[x, y], ...], size, smoothness, value }`), paint RGB mix channels via `mixStrokes` (`channel: "r" | "g" | "b"`), or pass `pathPoints` + `pathWidth` to project a pathway onto the green channel and carve a corridor.
+17. **3D Hand-Painted UV Texture Painting (`modeler_paint_texture`)**:
+   - Ideal for **stylized / Nintendo-style low-poly assets** where simple geometry gets rich hand-painted textures directly in UV space with seamless 3D projection across UV seams and automatic edge dilation (bleed).
+   - **Recommended Stylized Workflow**:
+     1. `action: "init"` (`targetMesh`, `resolution: 512`, `color`, `autoUnwrap: true`) to ensure non-overlapping UVs and create the paint canvas.
+     2. `action: "stylized_base"` (`color`, `bottomColor`, `topColor`, `aoStrength: 0.35`, `edgeHighlightStrength: 0.25`) to bake a warm-to-cool vertical gradient, soft hemisphere ambient occlusion, and convex edge highlights.
+     3. `action: "gradient"` (`gradientType: "vertical" | "radial" | "normal_top" | "normal_front"`, `blendMode: "multiply" | "overlay" | "soft-light"`) to add moss/snow on upward faces, blushing cheeks, or warm underside bounce light.
+     4. `action: "stamp"` (`shape: "eye" | "star" | "heart" | "circle" | "oval" | "ring" | "stripe" | "dot_pattern"`, `position` or `face`, `mirrorX: true`) to paint crisp symmetrical eyes, markings, emblems, or buttons directly into the UV texture without creating extra geometry.
+     5. `action: "stroke"` (`points: [[x, y, z], ...]`, `radius`, `hardness`, `brushAlpha: "round" | "soft" | "chalk" | "watercolor" | "noise" | "square"`, `mirrorX: true`) to paint straps, eyebrows, stripes, seams, or painterly strokes.
+     6. `action: "layer"` (`layerAction: "add" | "select" | "set_props" | "flatten"`, `channel: "albedo" | "roughness" | "metallic" | "emissive"`) for multi-layer PBR shading (e.g. glossy eyes with `roughness: 0.15`, glowing runes on `emissive`).
+     7. `action: "project_stencil"` (`prompt` or `stencilUrl`, `face: "front" | "top" | ...`) to project an image or AI-generated graphic onto the UV texture.
 

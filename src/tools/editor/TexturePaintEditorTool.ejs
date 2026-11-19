@@ -1,0 +1,376 @@
+<div id="dialog-texture-paint" class="floating-dialog" style="top: 90px; right: 365px; width: 356px; display: none">
+  <div class="dialog-header">
+    <span class="dialog-title"><i class="app-icon" data-lucide="paintbrush"></i> 3D Texture Painter</span>
+    <div class="dialog-actions">
+      <button class="dialog-btn btn-help" title="Help &amp; Tool Guide" aria-label="Help"><i class="app-icon" data-lucide="help-circle"></i></button>
+      <button class="dialog-btn btn-min" title="Minimize"><i class="app-icon" data-lucide="minus"></i></button>
+      <button class="dialog-btn btn-close" title="Close"><i class="app-icon" data-lucide="x"></i></button>
+    </div>
+  </div>
+
+  <div class="dialog-body sculpt-tool-body texpaint-tool-body">
+    <!-- Top Mode Activation & Target Status -->
+    <div class="tool-control-group">
+      <button
+        type="button"
+        id="btnToggleTexturePaintMode"
+        class="tool-btn sculpt-btn btn-block"
+        style="width: 100%; height: 32px;"
+      >
+        <i class="app-icon" data-lucide="paintbrush"></i> <span id="texPaintModeLabel">Activate 3D Paint Mode</span>
+      </button>
+
+      <div class="tool-row" style="margin-top: 6px; gap: 6px;">
+        <select id="texPaintResolutionSelect" class="tool-select" style="width: 90px;" aria-label="Texture Resolution">
+          <option value="256">256 px</option>
+          <option value="512">512 px</option>
+          <option value="1024" selected>1024 px</option>
+          <option value="2048">2048 px</option>
+        </select>
+        <button
+          type="button"
+          id="btnTexPaintInitCanvas"
+          class="sculpt-btn"
+          style="flex: 1; height: 28px;"
+          title="Load existing mesh texture into layers for editing, or auto-unwrap UVs and initialize a new paint canvas"
+        >
+          <i class="app-icon" data-lucide="sparkles"></i> <span id="texPaintInitCanvasLabel">Load / Init Canvas</span>
+        </button>
+      </div>
+      <div id="texPaintTargetStatus" class="tool-sublabel" style="margin-top: 4px; text-align: center;">
+        Target: No mesh selected
+      </div>
+    </div>
+
+    <!-- Section Tabs: Paint / Layers / Stencil -->
+    <div class="texpaint-tabs" role="tablist" aria-label="Texture Painter Sections">
+      <button type="button" class="texpaint-tab active" data-texpaint-tab="paint" role="tab" aria-selected="true">
+        <i class="app-icon" data-lucide="brush"></i> Paint
+      </button>
+      <button type="button" class="texpaint-tab" data-texpaint-tab="layers" role="tab" aria-selected="false">
+        <i class="app-icon" data-lucide="layers"></i> Layers <span id="texPaintLayerCountBadge" class="texpaint-badge">0</span>
+      </button>
+      <button type="button" class="texpaint-tab" data-texpaint-tab="stencil" role="tab" aria-selected="false">
+        <i class="app-icon" data-lucide="image"></i> Stencil
+      </button>
+    </div>
+
+    <!-- ==================== TAB 1: PAINT ==================== -->
+    <div id="texPaintTabPaint" class="texpaint-tab-panel">
+      <!-- Tool Modes -->
+      <div class="tool-control-group">
+        <div class="texpaint-mode-grid">
+          <button type="button" class="sculpt-btn active" data-texpaint-mode="brush" title="Paint brush (3D seamless across UV seams)">
+            <i class="app-icon" data-lucide="paintbrush"></i> Brush
+          </button>
+          <button type="button" class="sculpt-btn" data-texpaint-mode="eraser" title="Erase active layer alpha">
+            <i class="app-icon" data-lucide="eraser"></i> Eraser
+          </button>
+          <button type="button" class="sculpt-btn" data-texpaint-mode="smudge" title="Smudge and blend painted colors">
+            <i class="app-icon" data-lucide="waves"></i> Smudge
+          </button>
+          <button type="button" class="sculpt-btn" data-texpaint-mode="fill" title="Fill UV island or entire layer">
+            <i class="app-icon" data-lucide="palette"></i> Fill
+          </button>
+          <button type="button" class="sculpt-btn" data-texpaint-mode="eyedropper" title="Sample color from mesh (or Alt+Click)">
+            <i class="app-icon" data-lucide="pipette"></i> Pick
+          </button>
+          <button type="button" class="sculpt-btn" data-texpaint-mode="stencil" title="Brush through loaded stencil overlay">
+            <i class="app-icon" data-lucide="stamp"></i> Stencil
+          </button>
+        </div>
+      </div>
+
+      <!-- PBR Channel & Color / Scalar Value -->
+      <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 8px;">
+        <div class="tool-row" style="gap: 6px;">
+          <label class="tool-label" for="texPaintChannelSelect" style="min-width: 58px;">Channel</label>
+          <select id="texPaintChannelSelect" class="tool-select" style="flex: 1;">
+            <option value="albedo" selected>Albedo (Base Color)</option>
+            <option value="roughness">Roughness (0 Smooth - 1 Matte)</option>
+            <option value="metallic">Metallic (0 Dielectric - 1 Metal)</option>
+            <option value="emissive">Emissive (Glow)</option>
+          </select>
+        </div>
+
+        <!-- Color Picker + Stylized Swatches (shown for Albedo & Emissive) -->
+        <div id="texPaintColorGroup" style="margin-top: 8px;">
+          <div class="tool-row" style="gap: 8px;">
+            <input type="color" id="texPaintColorPicker" value="#e74c3c" class="path-extrusion-color-input" aria-label="Brush Color" />
+            <input type="text" id="texPaintColorHexInput" class="tool-input" value="#e74c3c" style="width: 82px; font-family: monospace;" aria-label="Hex Color Code" />
+            <button type="button" id="btnTexPaintUndo" class="tool-action-btn" style="height: 26px; width: 28px;" title="Undo Paint Stroke" aria-label="Undo Paint Stroke">
+              <i class="app-icon" data-lucide="undo-2"></i>
+            </button>
+            <button type="button" id="btnTexPaintRedo" class="tool-action-btn" style="height: 26px; width: 28px;" title="Redo Paint Stroke" aria-label="Redo Paint Stroke">
+              <i class="app-icon" data-lucide="redo-2"></i>
+            </button>
+          </div>
+          <div id="texPaintSwatches" class="texpaint-swatch-grid" style="margin-top: 6px;">
+            <button type="button" class="texpaint-swatch" data-swatch="#e74c3c" style="background: #e74c3c;" title="Hero Red"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#f39c12" style="background: #f39c12;" title="Warm Gold"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#f1c40f" style="background: #f1c40f;" title="Sun Yellow"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#2ecc71" style="background: #2ecc71;" title="Meadow Green"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#1abc9c" style="background: #1abc9c;" title="Teal Gem"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#3498db" style="background: #3498db;" title="Sky Blue"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#9b59b6" style="background: #9b59b6;" title="Royal Purple"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#f6c7a8" style="background: #f6c7a8;" title="Warm Peach"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#8d5524" style="background: #8d5524;" title="Wood Brown"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#ffffff" style="background: #ffffff;" title="Pure White"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#7f8c8d" style="background: #7f8c8d;" title="Stone Gray"></button>
+            <button type="button" class="texpaint-swatch" data-swatch="#1c2128" style="background: #1c2128;" title="Ink Black"></button>
+          </div>
+        </div>
+
+        <!-- Scalar Value Slider (shown for Roughness & Metallic) -->
+        <div id="texPaintScalarGroup" class="sculpt-slider-row" style="margin-top: 8px; display: none;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintScalarRange">Channel Value</label>
+            <span id="texPaintScalarVal" class="sculpt-slider-val">0.50</span>
+          </div>
+          <input type="range" id="texPaintScalarRange" min="0" max="1" step="0.02" value="0.5" class="tool-range" />
+        </div>
+      </div>
+
+      <!-- Brush Settings -->
+      <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 8px;">
+        <div class="tool-row" style="gap: 6px;">
+          <label class="tool-label" for="texPaintAlphaSelect" style="min-width: 58px;">Brush Tip</label>
+          <select id="texPaintAlphaSelect" class="tool-select" style="flex: 1;">
+            <option value="round" selected>Round (Smooth)</option>
+            <option value="soft">Soft Airbrush</option>
+            <option value="chalk">Dry Chalk / Pastel</option>
+            <option value="watercolor">Watercolor Edge</option>
+            <option value="noise">Stipple / Grunge</option>
+            <option value="square">Flat Painterly Chisel</option>
+          </select>
+        </div>
+
+        <div class="sculpt-slider-row" style="margin-top: 6px;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintRadiusRange">Brush Size</label>
+            <span id="texPaintRadiusVal" class="sculpt-slider-val">0.25</span>
+          </div>
+          <input type="range" id="texPaintRadiusRange" min="0.03" max="2.0" step="0.02" value="0.25" class="tool-range" />
+        </div>
+
+        <div class="sculpt-slider-row" style="margin-top: 5px;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintHardnessRange">Hardness</label>
+            <span id="texPaintHardnessVal" class="sculpt-slider-val">65%</span>
+          </div>
+          <input type="range" id="texPaintHardnessRange" min="0" max="1" step="0.05" value="0.65" class="tool-range" />
+        </div>
+
+        <div class="sculpt-slider-row" style="margin-top: 5px;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintOpacityRange">Opacity</label>
+            <span id="texPaintOpacityVal" class="sculpt-slider-val">90%</span>
+          </div>
+          <input type="range" id="texPaintOpacityRange" min="0.05" max="1" step="0.05" value="0.9" class="tool-range" />
+        </div>
+
+        <div class="sculpt-options-row" style="margin-top: 6px; flex-wrap: wrap; gap: 8px;">
+          <label class="sculpt-checkbox-label" title="Mirror paint strokes across mesh X-axis">
+            <input type="checkbox" id="texPaintSymmetryCheck" />
+            <span>X-Symmetry</span>
+          </label>
+          <label class="sculpt-checkbox-label" title="Only fill clicked UV island in Fill mode">
+            <input type="checkbox" id="texPaintIslandFillCheck" checked />
+            <span>Island Fill</span>
+          </label>
+          <label class="sculpt-checkbox-label" title="Prevent painting through to back-facing triangles">
+            <input type="checkbox" id="texPaintBackfaceCullCheck" checked />
+            <span>Backface Cull</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Hand-Painted Stylized Base & Export -->
+      <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 8px;">
+        <div class="tool-row" style="gap: 6px;">
+          <button
+            type="button"
+            id="btnTexPaintStylizedBase"
+            class="tool-btn tool-btn-primary"
+            style="flex: 1; height: 28px; font-size: 11px;"
+            title="Bake hand-painted vertical gradient, soft hemisphere AO, and convex edge highlights using current brush color"
+          >
+            <i class="app-icon" data-lucide="wand-2"></i> Stylized AO &amp; Gradient Base
+          </button>
+          <button
+            type="button"
+            id="btnTexPaintDownloadPng"
+            class="tool-action-btn"
+            style="height: 28px; padding: 0 8px;"
+            title="Download current painted channel as PNG"
+          >
+            <i class="app-icon" data-lucide="download"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Interactive 2D UV Canvas Preview -->
+      <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 8px;">
+        <div class="sculpt-slider-header" style="margin-bottom: 4px;">
+          <span class="sculpt-section-title" style="margin: 0;"><i class="app-icon" data-lucide="grid"></i> 2D UV Canvas (Paintable)</span>
+          <label class="sculpt-checkbox-label" style="font-size: 10px;">
+            <input type="checkbox" id="texPaintWireframeCheck" checked />
+            <span>UV Wire</span>
+          </label>
+        </div>
+        <canvas
+          id="texPaintPreviewCanvas"
+          width="280"
+          height="280"
+          class="texpaint-preview-canvas"
+          title="Drag directly here to paint in 2D UV space"
+        ></canvas>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 2: LAYERS ==================== -->
+    <div id="texPaintTabLayers" class="texpaint-tab-panel" style="display: none;">
+      <div class="tool-control-group">
+        <div class="tool-row" style="gap: 6px;">
+          <select id="texPaintNewLayerChannel" class="tool-select" style="flex: 1;" aria-label="New Layer Channel">
+            <option value="albedo" selected>Albedo Layer</option>
+            <option value="roughness">Roughness Layer</option>
+            <option value="metallic">Metallic Layer</option>
+            <option value="emissive">Emissive Layer</option>
+          </select>
+          <button type="button" id="btnTexPaintAddLayer" class="tool-btn tool-btn-primary" style="height: 28px; padding: 0 10px;">
+            <i class="app-icon" data-lucide="plus"></i> Add
+          </button>
+        </div>
+
+        <div id="texPaintLayerList" class="texpaint-layer-list" style="margin-top: 8px;">
+          <div class="tool-sublabel" style="padding: 12px; text-align: center;">Initialize canvas to manage layers</div>
+        </div>
+
+        <!-- Selected Layer Blend Mode & Opacity -->
+        <div class="tool-control-group" style="margin-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 8px;">
+          <div class="tool-row" style="gap: 6px;">
+            <label class="tool-label" for="texPaintLayerBlendSelect" style="min-width: 58px;">Blend</label>
+            <select id="texPaintLayerBlendSelect" class="tool-select" style="flex: 1;">
+              <option value="normal">Normal</option>
+              <option value="multiply">Multiply</option>
+              <option value="overlay">Overlay</option>
+              <option value="screen">Screen</option>
+              <option value="soft-light">Soft Light</option>
+              <option value="add">Add (Linear Dodge)</option>
+            </select>
+          </div>
+          <div class="sculpt-slider-row" style="margin-top: 6px;">
+            <div class="sculpt-slider-header">
+              <label class="sculpt-slider-label" for="texPaintLayerOpacityRange">Layer Opacity</label>
+              <span id="texPaintLayerOpacityVal" class="sculpt-slider-val">100%</span>
+            </div>
+            <input type="range" id="texPaintLayerOpacityRange" min="0" max="1" step="0.05" value="1" class="tool-range" />
+          </div>
+        </div>
+
+        <div class="tool-row" style="margin-top: 6px; gap: 5px;">
+          <button type="button" id="btnTexPaintLayerUp" class="tool-action-btn" style="flex: 1; height: 26px;" title="Move Layer Up">
+            <i class="app-icon" data-lucide="arrow-up"></i>
+          </button>
+          <button type="button" id="btnTexPaintLayerDown" class="tool-action-btn" style="flex: 1; height: 26px;" title="Move Layer Down">
+            <i class="app-icon" data-lucide="arrow-down"></i>
+          </button>
+          <button type="button" id="btnTexPaintLayerDuplicate" class="tool-action-btn" style="flex: 1; height: 26px;" title="Duplicate Layer">
+            <i class="app-icon" data-lucide="copy"></i>
+          </button>
+          <button type="button" id="btnTexPaintFlattenLayers" class="tool-action-btn" style="flex: 1; height: 26px;" title="Flatten Albedo Layers">
+            <i class="app-icon" data-lucide="layers"></i>
+          </button>
+          <button type="button" id="btnTexPaintDeleteLayer" class="tool-action-btn btn-danger" style="flex: 1; height: 26px;" title="Delete Layer">
+            <i class="app-icon" data-lucide="trash-2"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 3: STENCIL PROJECTION ==================== -->
+    <div id="texPaintTabStencil" class="texpaint-tab-panel" style="display: none;">
+      <div class="tool-control-group">
+        <div class="tool-row" style="gap: 6px;">
+          <button type="button" id="btnTexPaintUploadStencil" class="sculpt-btn" style="flex: 1; height: 28px;">
+            <i class="app-icon" data-lucide="upload"></i> Upload Image
+          </button>
+          <input type="file" id="texPaintStencilFileInput" accept="image/png,image/webp,image/jpeg" style="display: none" />
+          <button type="button" id="btnTexPaintClearStencil" class="tool-action-btn btn-danger" style="height: 28px; width: 32px;" title="Clear Stencil" aria-label="Clear Stencil">
+            <i class="app-icon" data-lucide="trash-2"></i>
+          </button>
+        </div>
+
+        <div class="tool-row" style="margin-top: 6px; gap: 6px;">
+          <select id="texPaintStencilPresetSelect" class="tool-select" style="flex: 1;" aria-label="Scene or Built-in Stencil">
+            <option value="">-- Pick Decal / Scene Texture --</option>
+          </select>
+          <button type="button" id="btnTexPaintLoadStencilPreset" class="sculpt-btn" style="height: 28px; padding: 0 10px;">Load</button>
+        </div>
+
+        <div class="sculpt-options-row" style="margin-top: 8px;">
+          <label class="sculpt-checkbox-label">
+            <input type="checkbox" id="texPaintStencilVisibleCheck" checked />
+            <span>Show Viewport Overlay</span>
+          </label>
+          <span id="texPaintStencilNameBadge" class="tool-sublabel">No stencil loaded</span>
+        </div>
+
+        <div class="sculpt-slider-row" style="margin-top: 6px;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintStencilOpacityRange">Overlay Opacity</label>
+            <span id="texPaintStencilOpacityVal" class="sculpt-slider-val">45%</span>
+          </div>
+          <input type="range" id="texPaintStencilOpacityRange" min="0.1" max="0.9" step="0.05" value="0.45" class="tool-range" />
+        </div>
+
+        <div class="sculpt-slider-row" style="margin-top: 5px;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintStencilScaleRange">Stencil Scale</label>
+            <span id="texPaintStencilScaleVal" class="sculpt-slider-val">75%</span>
+          </div>
+          <input type="range" id="texPaintStencilScaleRange" min="0.2" max="1.6" step="0.05" value="0.75" class="tool-range" />
+        </div>
+
+        <div class="sculpt-slider-row" style="margin-top: 5px;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintStencilRotRange">Rotation (&deg;)</label>
+            <span id="texPaintStencilRotVal" class="sculpt-slider-val">0&deg;</span>
+          </div>
+          <input type="range" id="texPaintStencilRotRange" min="-180" max="180" step="5" value="0" class="tool-range" />
+        </div>
+
+        <div class="sculpt-slider-row" style="margin-top: 5px;">
+          <div class="sculpt-slider-header">
+            <label class="sculpt-slider-label" for="texPaintStencilOffXRange">Offset X / Y</label>
+            <span id="texPaintStencilOffVal" class="sculpt-slider-val">0%, 0%</span>
+          </div>
+          <div class="tool-row" style="gap: 6px;">
+            <input type="range" id="texPaintStencilOffXRange" min="-0.45" max="0.45" step="0.01" value="0" class="tool-range" aria-label="Stencil Offset X" />
+            <input type="range" id="texPaintStencilOffYRange" min="-0.45" max="0.45" step="0.01" value="0" class="tool-range" aria-label="Stencil Offset Y" />
+          </div>
+        </div>
+
+        <div class="tool-row" style="margin-top: 8px; gap: 6px;">
+          <button
+            type="button"
+            id="btnTexPaintProjectWholeStencil"
+            class="tool-btn tool-btn-primary"
+            style="flex: 1; height: 30px;"
+            title="Project the entire stencil from the current camera view onto the mesh UV texture"
+          >
+            <i class="app-icon" data-lucide="scan"></i> Project Whole Stencil
+          </button>
+          <button type="button" id="btnTexPaintResetStencil" class="tool-action-btn" style="height: 30px; padding: 0 8px;" title="Reset Stencil Transform">
+            Reset
+          </button>
+        </div>
+
+        <div class="tool-help-box" style="margin-top: 8px; font-size: 10px;">
+          Tip: Switch to <strong>Stencil</strong> brush mode on the Paint tab to selectively brush through parts of the overlay onto curved surfaces and across UV seams.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -125,6 +125,7 @@ import { WeightPaintController } from './rigging/WeightPaintController';
 import { AITextureGenerator } from './textures/AITextureGenerator';
 import { TextMeshController } from './textMesh/TextMeshController';
 import { DecalController } from './decals/DecalController';
+import { TexturePaintController } from './painting/TexturePaintController';
 import { HeightmapController } from './heightmap';
 import {
   BevelModifierOptions,
@@ -184,6 +185,7 @@ export class MeshEditorService {
   }
   public textMeshController: TextMeshController;
   public decalController: DecalController;
+  public texturePaintController: TexturePaintController;
   public heightmapController: HeightmapController;
   public get pathWays(): PathExtrusionController {
     return this.pathExtrusion;
@@ -337,6 +339,7 @@ export class MeshEditorService {
     this.aiAgent.syncExternalImageGenerator();
     this.textMeshController = new TextMeshController(this);
     this.decalController = new DecalController(this);
+    this.texturePaintController = new TexturePaintController(this);
     this.heightmapController = new HeightmapController(this);
     const defaultAtlas = this.textureAtlasManager.getAtlases()[0];
     if (defaultAtlas) {
@@ -552,6 +555,7 @@ export class MeshEditorService {
     this.textureBaker?.dispose();
     this.weightPaintController?.dispose();
     this.decalController?.setActive(false);
+    this.texturePaintController?.dispose();
     this.textMeshController?.setSurfacePlacementActive(false);
     if (this.engine) {
       this.engine.stopRenderLoop();
@@ -763,7 +767,8 @@ export class MeshEditorService {
       !this.decalController?.isActive &&
       !this.textMeshController?.isSurfacePlacementActive &&
       !this.isSculptModeActive() &&
-      !this.isWeightPaintModeActive();
+      !this.isWeightPaintModeActive() &&
+      !this.isTexturePaintModeActive();
 
     this.scene.onPointerObservable.add((pointerInfo) => {
       if (this.isSceneInteractionLocked) {
@@ -882,7 +887,8 @@ export class MeshEditorService {
               this.touchDragMode === 'marquee' &&
               !this.isAnyGizmoDragging() &&
               !this.isSculptModeActive() &&
-              !this.isWeightPaintModeActive()
+              !this.isWeightPaintModeActive() &&
+              !this.isTexturePaintModeActive()
             ) {
               if (touchDist > 8) {
                 this.isMarqueeActive = true;
@@ -899,7 +905,8 @@ export class MeshEditorService {
               !this.isAnyGizmoDragging() &&
               !this.voxelPainter?.isActive &&
               !this.sculptController?.isStrokeActive &&
-              !this.weightPaintController?.isStrokeActive
+              !this.weightPaintController?.isStrokeActive &&
+              !this.texturePaintController?.isStrokeActive
             ) {
               this.orbitTouchCamera(
                 cx - this.touchLastSingleClient.x,
@@ -915,7 +922,8 @@ export class MeshEditorService {
           this.isMarqueeCandidate &&
           !this.isAnyGizmoDragging() &&
           !this.isSculptModeActive() &&
-          !this.isWeightPaintModeActive()
+          !this.isWeightPaintModeActive() &&
+          !this.isTexturePaintModeActive()
         ) {
           const dist = Math.hypot(
             this.scene.pointerX - this.marqueeStartPointer.x,
@@ -996,7 +1004,8 @@ export class MeshEditorService {
           this.decalController?.isActive ||
           this.textMeshController?.isSurfacePlacementActive ||
           this.isSculptModeActive() ||
-          this.isWeightPaintModeActive()
+          this.isWeightPaintModeActive() ||
+          this.isTexturePaintModeActive()
         ) {
           return;
         }
@@ -1162,7 +1171,7 @@ export class MeshEditorService {
   }
 
   public deactivateOtherInteractive3DTools(
-    activeTool: 'facet' | 'sculpt' | 'decal' | 'voxel' | 'path' | 'uv' | 'weight' | 'text_place' | 'none'
+    activeTool: 'facet' | 'sculpt' | 'decal' | 'voxel' | 'path' | 'uv' | 'weight' | 'text_place' | 'texture_paint' | 'none'
   ): void {
     if (activeTool !== 'facet' && this.facetEditorActive) {
       this.toggleFacetEditor(false);
@@ -1188,6 +1197,9 @@ export class MeshEditorService {
     if (activeTool !== 'text_place' && this.textMeshController?.isSurfacePlacementActive) {
       this.textMeshController.setSurfacePlacementActive(false);
     }
+    if (activeTool !== 'texture_paint' && this.texturePaintController?.isActive) {
+      this.texturePaintController.setActive(false);
+    }
   }
 
   public isSculptModeActive(): boolean {
@@ -1196,6 +1208,10 @@ export class MeshEditorService {
 
   public isWeightPaintModeActive(): boolean {
     return Boolean(this.weightPaintController?.isActive) && !this.isSceneInteractionLocked;
+  }
+
+  public isTexturePaintModeActive(): boolean {
+    return Boolean(this.texturePaintController?.isActive) && !this.isSceneInteractionLocked;
   }
 
   public isGizmoMesh(mesh: Nullable<AbstractMesh | TransformNode>): boolean {
@@ -8048,6 +8064,7 @@ export class MeshEditorService {
 
     // Restore materials & clean up temporary weight heatmap vertex colors and ensure bone nodes before export
     this.weightPaintController?.prepareMeshesForExport();
+    await this.texturePaintController?.prepareMeshesForExport();
     if (format === 'glb' || format === 'gltf') {
       await this.heightmapController?.prepareMeshesForExport();
     } else if (format === 'babylon') {
@@ -8200,6 +8217,7 @@ export class MeshEditorService {
       this.events.onStatusChanged?.('Export error');
     } finally {
       this.heightmapController?.restoreMeshesAfterExport();
+      this.texturePaintController?.restoreAfterExport();
       this.weightPaintController?.restoreMeshesAfterExport();
     }
   }
@@ -8209,6 +8227,7 @@ export class MeshEditorService {
       this.decalController.mergeAllDecalsIntoMeshes();
     }
     this.weightPaintController?.prepareMeshesForExport();
+    await this.texturePaintController?.prepareMeshesForExport();
     await this.heightmapController?.prepareMeshesForExport();
     try {
       const shouldExport = (node: any) => this.shouldExportNode(node, false);
@@ -8242,6 +8261,7 @@ export class MeshEditorService {
       });
     } finally {
       this.heightmapController?.restoreMeshesAfterExport();
+      this.texturePaintController?.restoreAfterExport();
       this.weightPaintController?.restoreMeshesAfterExport();
     }
   }
@@ -8329,11 +8349,13 @@ export class MeshEditorService {
     }
 
     const baseName = filename || this.currentFilename || 'compressed_model';
+    await this.texturePaintController?.prepareMeshesForExport();
     await this.heightmapController?.prepareMeshesForExport();
     try {
       return await ModelCompressor.exportCompressedModel(this.scene, targetMeshes, baseName, options);
     } finally {
       this.heightmapController?.restoreMeshesAfterExport();
+      this.texturePaintController?.restoreAfterExport();
     }
   }
 

@@ -41,6 +41,11 @@ import {
   ModelCompressorStats,
 } from './compression/ModelCompressor';
 import { SculptBrushType } from './sculpting/SculptController';
+import {
+  initTexturePaintDialogUI,
+  updateTexturePaintDialogUI,
+  updateTexturePaintStencilOverlayUI,
+} from './painting/TexturePaintUI';
 
 export interface MeshEditorAppOptions {
   /**
@@ -771,6 +776,7 @@ export class MeshEditorApp {
         this.updateAITextureUI();
         this.updateTextMeshUI();
         this.updateDecalUI();
+        this.updateTexturePaintUI();
         this.updateHeightmapUI();
         const statsSelection = this.getElement<HTMLElement>('statsSelection');
         if (statsSelection) {
@@ -794,6 +800,7 @@ export class MeshEditorApp {
         this.updateAITextureUI();
         this.updateTextMeshUI();
         this.updateDecalUI();
+        this.updateTexturePaintUI();
         this.updateHeightmapUI();
         options.events?.onSceneModified?.();
       },
@@ -817,6 +824,7 @@ export class MeshEditorApp {
         this.updateCSGGUI();
         this.renderEmbeddedTextures();
         this.updateDecalUI();
+        this.updateTexturePaintUI();
         this.updateHeightmapUI();
         this.adapter.onModelLoaded?.(filename, this);
         options.events?.onModelLoaded?.(filename);
@@ -824,6 +832,7 @@ export class MeshEditorApp {
       onTexturesChanged: () => {
         this.updateMaterialGUI();
         this.updateDecalUI();
+        this.updateTexturePaintUI();
         this.updateHeightmapUI();
       },
       onStatsUpdated: (meshCount, polyCount) => {
@@ -1512,6 +1521,7 @@ export class MeshEditorApp {
     this.initAITextureUI();
     this.initTextMeshUI();
     this.initDecalUI();
+    this.initTexturePaintUI();
     this.initHeightmapUI();
 
     // Restore saved window layout and active tools from localStorage
@@ -4145,6 +4155,7 @@ export class MeshEditorApp {
           this.initAITextureUI();
           this.initTextMeshUI();
           this.initDecalUI();
+          this.initTexturePaintUI();
           this.initHeightmapUI();
           this.refreshIcons();
         }
@@ -11875,6 +11886,7 @@ export class MeshEditorApp {
         this.showToast(`Generated "${item.name}" (${item.size}x${item.size}${backendLabel})`, 'success');
         this.updateAITextureUI();
         this.updateDecalUI();
+        this.updateTexturePaintUI();
         this.updateHeightmapUI();
       } catch (err: any) {
         this.showToast(err?.message || 'Failed to generate texture.', 'error');
@@ -12511,6 +12523,18 @@ export class MeshEditorApp {
     if (countBadge) {
       countBadge.textContent = `${unmergedCount} unmerged decal${unmergedCount === 1 ? '' : 's'}`;
     }
+  }
+
+  public initTexturePaintUI(): void {
+    initTexturePaintDialogUI(this);
+  }
+
+  public updateTexturePaintUI(): void {
+    updateTexturePaintDialogUI(this);
+  }
+
+  public updateTexturePaintStencilOverlay(): void {
+    updateTexturePaintStencilOverlayUI(this);
   }
 
   /* =========================================================================
