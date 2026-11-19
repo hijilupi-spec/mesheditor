@@ -713,8 +713,6 @@ body.layout-dock .stackpanel-sidebar,
 #app-container.layout-dock .stackpanel-sidebar,
 body.layout-dock #stackpanelRightSidebar,
 #app-container.layout-dock #stackpanelRightSidebar {
-  --scrollbar-thumb: rgba(255, 255, 255, 0.42);
-  --scrollbar-track: transparent;
   display: flex !important;
   flex-direction: column !important;
   position: relative !important;
@@ -722,15 +720,10 @@ body.layout-dock #stackpanelRightSidebar,
   flex: 1 1 auto !important;
   min-height: 0 !important;
   width: 100% !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  overscroll-behavior: contain;
+  overflow: hidden !important;
   gap: 8px !important;
   pointer-events: none !important;
-  padding-right: 2px;
+  padding-right: 0;
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
@@ -745,12 +738,10 @@ body.layout-dock #stackpanelRightSidebar,
   #app-container.layout-stackpanel #stackpanelRightSidebar,
   body.layout-stackpanel .toolstackpanel,
   #app-container.layout-stackpanel .toolstackpanel,
-  body.layout-dock .stackpanel-sidebar,
-  #app-container.layout-dock .stackpanel-sidebar,
-  body.layout-dock #stackpanelRightSidebar,
-  #app-container.layout-dock #stackpanelRightSidebar,
   body.layout-dock .dock-toolbar-slot,
-  #app-container.layout-dock .dock-toolbar-slot {
+  #app-container.layout-dock .dock-toolbar-slot,
+  body.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body,
+  #app-container.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body {
     scrollbar-width: auto;
   }
 
@@ -760,12 +751,10 @@ body.layout-dock #stackpanelRightSidebar,
   #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar,
   body.layout-stackpanel .toolstackpanel::-webkit-scrollbar,
   #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar,
-  body.layout-dock .stackpanel-sidebar::-webkit-scrollbar,
-  #app-container.layout-dock .stackpanel-sidebar::-webkit-scrollbar,
-  body.layout-dock #stackpanelRightSidebar::-webkit-scrollbar,
-  #app-container.layout-dock #stackpanelRightSidebar::-webkit-scrollbar,
   body.layout-dock .dock-toolbar-slot::-webkit-scrollbar,
-  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar {
+  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar,
+  body.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body::-webkit-scrollbar,
+  #app-container.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body::-webkit-scrollbar {
     width: 6px;
   }
 
@@ -775,12 +764,10 @@ body.layout-dock #stackpanelRightSidebar,
   #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-track,
   body.layout-stackpanel .toolstackpanel::-webkit-scrollbar-track,
   #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-track,
-  body.layout-dock .stackpanel-sidebar::-webkit-scrollbar-track,
-  #app-container.layout-dock .stackpanel-sidebar::-webkit-scrollbar-track,
-  body.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-track,
-  #app-container.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-track,
   body.layout-dock .dock-toolbar-slot::-webkit-scrollbar-track,
-  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar-track {
+  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar-track,
+  body.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body::-webkit-scrollbar-track,
+  #app-container.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
   }
 
@@ -790,12 +777,10 @@ body.layout-dock #stackpanelRightSidebar,
   #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-thumb,
   body.layout-stackpanel .toolstackpanel::-webkit-scrollbar-thumb,
   #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-thumb,
-  body.layout-dock .stackpanel-sidebar::-webkit-scrollbar-thumb,
-  #app-container.layout-dock .stackpanel-sidebar::-webkit-scrollbar-thumb,
-  body.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-thumb,
-  #app-container.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-thumb,
   body.layout-dock .dock-toolbar-slot::-webkit-scrollbar-thumb,
-  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar-thumb {
+  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar-thumb,
+  body.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body::-webkit-scrollbar-thumb,
+  #app-container.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 3px;
   }
@@ -979,11 +964,35 @@ body.layout-dock .stackpanel-sidebar .floating-dialog.active-focus,
   max-height: 164px;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.42)) var(--scrollbar-track, transparent);
-  padding-right: 2px;
   pointer-events: none;
+}
+
+body.layout-dock .stackpanel-sidebar .floating-dialog,
+#app-container.layout-dock .stackpanel-sidebar .floating-dialog {
+  flex: 0 1 auto !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body.layout-dock .stackpanel-sidebar .floating-dialog > :not(.dialog-body),
+#app-container.layout-dock .stackpanel-sidebar .floating-dialog > :not(.dialog-body) {
+  flex-shrink: 0;
+}
+
+body.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body,
+#app-container.layout-dock .stackpanel-sidebar .floating-dialog > .dialog-body {
+  flex: 0 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.36) transparent;
+  overscroll-behavior: contain;
 }
 
 body.layout-dock .dock-toolbar-slot,
