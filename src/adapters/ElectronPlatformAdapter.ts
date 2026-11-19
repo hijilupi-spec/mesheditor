@@ -151,6 +151,9 @@ export class ElectronPlatformAdapter implements MeshEditorPlatformAdapter {
         case 'view:layout-stack':
           app.setLayoutMode('stackpanel');
           break;
+        case 'view:layout-dock':
+          app.setLayoutMode('dock');
+          break;
         case 'help:documentation':
           if (typeof app.openHelpModal === 'function') {
             app.openHelpModal();

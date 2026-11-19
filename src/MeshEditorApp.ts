@@ -46,6 +46,9 @@ import {
   updateTexturePaintDialogUI,
   updateTexturePaintStencilOverlayUI,
 } from './painting/TexturePaintUI';
+import { TooltipManager } from './utils/TooltipManager';
+
+export type LayoutMode = 'floating' | 'stackpanel' | 'dock';
 
 export interface MeshEditorAppOptions {
   /**
@@ -62,9 +65,9 @@ export interface MeshEditorAppOptions {
   adapter?: MeshEditorPlatformAdapter;
 
   /**
-   * Optional initial layout mode ('floating' | 'stackpanel').
+   * Optional initial layout mode ('floating' | 'stackpanel' | 'dock').
    */
-  layoutMode?: 'floating' | 'stackpanel';
+  layoutMode?: LayoutMode;
 
   /**
    * Optional initial 3D model URL to load upon startup.
@@ -118,6 +121,7 @@ import {
   Cpu,
   createIcons,
   Crosshair,
+  Dock,
   Download,
   Eraser,
   ExternalLink,
@@ -248,6 +252,7 @@ export const editorIcons = {
   CornerDownLeft,
   Cpu,
   Crosshair,
+  Dock,
   Download,
   Eraser,
   ExternalLink,
@@ -436,10 +441,11 @@ export class MeshEditorApp {
   private createControllers: { [key: string]: dat.GUIController } = {};
   private uvControllers: { [key: string]: dat.GUIController } = {};
 
-  // Layout Mode
-  public layoutMode: 'floating' | 'stackpanel' = 'stackpanel';
+  // Layout Mode & Tooltips
+  public layoutMode: LayoutMode = 'dock';
   public isStackpanelDrawerCollapsed: boolean = false;
   private onFullscreenChangeHandler: (() => void) | null = null;
+  private tooltipManager: TooltipManager | null = null;
 
   // Compress Model Tool State
   public compressLoadedFile: File | null = null;
@@ -500,9 +506,12 @@ export class MeshEditorApp {
     );
   }
 
-  // Stackpanel Tool Drag & Drop Reordering State
+  // Stackpanel & Dock Tool Drag & Drop Reordering State
   private currentDraggedStackpanelDialog: HTMLElement | null = null;
   private justFinishedStackpanelDrag: boolean = false;
+  private currentDraggedDockDialogId: string | null = null;
+  private justFinishedDockDrag: boolean = false;
+  private isTogglingToolFromMenu: boolean = false;
 
   // AI Agent UI State
   private aiPendingImages: string[] = [];
@@ -883,13 +892,21 @@ export class MeshEditorApp {
       console.warn('[MeshEditor] Failed to initialize platform adapter:', err);
     }
 
-    // Set initial layout mode
-    const savedLayoutMode =
+    // Set initial layout mode (defaults to Dock)
+    const rawSavedLayout = localStorage.getItem('mesheditor_layout_mode');
+    const savedLayoutMode: LayoutMode =
       options.layoutMode ||
-      (localStorage.getItem('mesheditor_layout_mode') as 'floating' | 'stackpanel') ||
-      'stackpanel';
+      (rawSavedLayout === 'floating' || rawSavedLayout === 'stackpanel' || rawSavedLayout === 'dock'
+        ? rawSavedLayout
+        : 'dock');
     this.setLayoutMode(savedLayoutMode, false);
     this.refreshIcons();
+
+    // Initialize global Tippy.js tooltips across the editor root container
+    const tooltipRoot = this.rootContainer || document.body;
+    if (tooltipRoot) {
+      this.tooltipManager = new TooltipManager(tooltipRoot);
+    }
 
     this.runInitialLoadingSequence(options.autoLoadUrl);
 
@@ -1007,6 +1024,8 @@ export class MeshEditorApp {
     this.clearToolsHoverPreviewTimer();
     this.submenuBridgeCleanup?.();
     this.submenuBridgeCleanup = null;
+    this.tooltipManager?.dispose();
+    this.tooltipManager = null;
     this.stopSpeechRecognition();
     for (const cleanup of this.globalListenerCleanups) {
       cleanup();
@@ -1371,7 +1390,7 @@ export class MeshEditorApp {
       this.openScreenshotDialog();
     });
 
-    // Layout Mode (Floating vs Stack)
+    // Layout Mode (Float vs Stack vs Dock)
     this.getElement('btnLayoutFloating')?.addEventListener('click', () => {
       this.closeAllDropdowns();
       this.setLayoutMode('floating');
@@ -1379,6 +1398,10 @@ export class MeshEditorApp {
     this.getElement('btnLayoutStack')?.addEventListener('click', () => {
       this.closeAllDropdowns();
       this.setLayoutMode('stackpanel');
+    });
+    this.getElement('btnLayoutDock')?.addEventListener('click', () => {
+      this.closeAllDropdowns();
+      this.setLayoutMode('dock');
     });
 
     // Stackpanel Drawer Toggle
@@ -1505,8 +1528,9 @@ export class MeshEditorApp {
       if (dialog) this.setupFloatingDialog(dialog);
     }
 
-    // Initialize stackpanel tool drag & drop and restore tool order
+    // Initialize stackpanel & dock tool drag & drop and restore tool order
     this.initStackpanelDragAndDrop();
+    this.initDockDragAndDrop();
     this.restoreStackpanelOrder();
 
     // Initialize AI Agent Panel UI
@@ -1721,29 +1745,54 @@ export class MeshEditorApp {
     this.refreshIcons();
   }
 
-  public setLayoutMode(mode: 'floating' | 'stackpanel', save: boolean = true): void {
+  private isSidebarLayoutMode(): boolean {
+    return (
+      this.layoutMode === 'stackpanel' ||
+      this.layoutMode === 'dock' ||
+      document.body.classList.contains('layout-stackpanel') ||
+      document.body.classList.contains('layout-dock')
+    );
+  }
+
+  public setLayoutMode(mode: LayoutMode, save: boolean = true): void {
     this.layoutMode = mode;
+    this.tooltipManager?.hideAll(0);
     if (save) {
       localStorage.setItem('mesheditor_layout_mode', mode);
     }
     const btnFloating = this.getElement('btnLayoutFloating');
     const btnStack = this.getElement('btnLayoutStack');
+    const btnDock = this.getElement('btnLayoutDock');
     if (btnFloating) btnFloating.classList.toggle('active', mode === 'floating');
     if (btnStack) btnStack.classList.toggle('active', mode === 'stackpanel');
+    if (btnDock) btnDock.classList.toggle('active', mode === 'dock');
 
-    if (mode === 'stackpanel') {
-      document.body.classList.add('layout-stackpanel');
-      this.rootContainer?.classList.add('layout-stackpanel');
+    const isSidebar = mode === 'stackpanel' || mode === 'dock';
+    document.body.classList.toggle('layout-stackpanel', mode === 'stackpanel');
+    this.rootContainer?.classList.toggle('layout-stackpanel', mode === 'stackpanel');
+    document.body.classList.toggle('layout-dock', mode === 'dock');
+    this.rootContainer?.classList.toggle('layout-dock', mode === 'dock');
+
+    const sidebarPanels = Array.from(
+      (this.rootContainer || document).querySelectorAll('.stackpanel-sidebar .floating-dialog')
+    ) as HTMLElement[];
+
+    if (isSidebar) {
       this.restoreStackpanelOrder();
-      const sidebarPanels = Array.from(
-        (this.rootContainer || document).querySelectorAll('.stackpanel-sidebar .floating-dialog')
-      ) as HTMLElement[];
       sidebarPanels.forEach((p) => {
         const h = p.querySelector('.dialog-header');
-        h?.setAttribute('draggable', 'true');
+        if (mode === 'stackpanel') {
+          h?.setAttribute('draggable', 'true');
+        } else {
+          h?.removeAttribute('draggable');
+        }
       });
       const openPanels = sidebarPanels.filter((d) => d.style.display !== 'none');
       if (openPanels.length > 0) {
+        // Ensure every open panel has explicit inline display so Dock CSS hiding never confuses layout state
+        openPanels.forEach((d) => {
+          if (!d.style.display) d.style.display = 'flex';
+        });
         // Find if one is already expanded, or take the first open one
         const expanded = openPanels.find((d) => !d.classList.contains('minimized')) || openPanels[0];
         expanded.classList.remove('minimized');
@@ -1755,7 +1804,10 @@ export class MeshEditorApp {
         this.accordionMinimizeOthers(expanded);
       }
       if (save) {
-        this.showToast('Switched to Stackpanel sidebar layout', 'info');
+        this.showToast(
+          mode === 'dock' ? 'Switched to Dock layout' : 'Switched to Stackpanel sidebar layout',
+          'info'
+        );
       }
       const outliner = this.getElement('dialog-outliner');
       if (outliner) {
@@ -1768,11 +1820,6 @@ export class MeshEditorApp {
         }
       }
     } else {
-      document.body.classList.remove('layout-stackpanel');
-      this.rootContainer?.classList.remove('layout-stackpanel');
-      const sidebarPanels = Array.from(
-        (this.rootContainer || document).querySelectorAll('.stackpanel-sidebar .floating-dialog')
-      ) as HTMLElement[];
       sidebarPanels.forEach((p) => {
         const h = p.querySelector('.dialog-header');
         h?.removeAttribute('draggable');
@@ -1782,8 +1829,240 @@ export class MeshEditorApp {
         this.showToast('Switched to Floating windows layout', 'info');
       }
     }
+    this.renderDockToolbar();
     this.updateStackpanelDrawerUI();
     this.updatePanelButtonStates();
+  }
+
+  /**
+   * Renders or updates the round icon Dock bar above the right sidebar for all currently open sidebar tools.
+   */
+  public renderDockToolbar(): void {
+    const dockSlot = this.getElement('dockToolBarSlot') || document.getElementById('dockToolBarSlot');
+    const dockBar = this.getElement('dockToolBar') || document.getElementById('dockToolBar');
+    const sidebar = this.getElement('stackpanelRightSidebar') || document.getElementById('stackpanelRightSidebar');
+    if (!dockBar || !sidebar) return;
+
+    const openDialogs = (Array.from(sidebar.querySelectorAll(':scope > .floating-dialog')) as HTMLElement[]).filter(
+      (d) => d.style.display !== 'none'
+    );
+
+    const isEmpty = openDialogs.length === 0;
+    dockBar.classList.toggle('is-empty', isEmpty);
+    dockSlot?.classList.toggle('is-empty', isEmpty);
+
+    if (openDialogs.length === 0) {
+      if (dockBar.dataset.renderedKey !== '') {
+        dockBar.innerHTML = '';
+        dockBar.dataset.renderedKey = '';
+      }
+      return;
+    }
+
+    const activeDialog = openDialogs.find((d) => !d.classList.contains('minimized')) || null;
+    const activeId = activeDialog?.id || '';
+
+    const key = openDialogs.map((d) => d.id).join('|');
+    if (dockBar.dataset.renderedKey === key) {
+      const buttons = dockBar.querySelectorAll<HTMLButtonElement>('.dock-tool-btn');
+      buttons.forEach((btn) => {
+        const isActive = btn.dataset.dialogId === activeId;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+      });
+      return;
+    }
+
+    dockBar.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+
+    for (const dialog of openDialogs) {
+      const tool = this.getToolByDialogId(dialog.id);
+      const label =
+        tool?.menuLabel ||
+        dialog.querySelector('.dialog-title')?.textContent?.trim() ||
+        dialog.id;
+      const iconName =
+        tool?.icon ||
+        dialog.querySelector('.dialog-title [data-lucide]')?.getAttribute('data-lucide') ||
+        'wrench';
+      const isActive = dialog.id === activeId;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = isActive ? 'dock-tool-btn active' : 'dock-tool-btn';
+      btn.dataset.dialogId = dialog.id;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', String(isActive));
+      btn.setAttribute('aria-controls', dialog.id);
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+      btn.setAttribute('data-tippy-placement', 'top');
+      btn.draggable = true;
+      btn.innerHTML = `<i class="app-icon" data-lucide="${iconName}"></i>`;
+
+      btn.addEventListener('click', () => {
+        if (this.justFinishedDockDrag) return;
+        this.activateDockTool(dialog.id);
+      });
+
+      btn.addEventListener('dragstart', (e: DragEvent) => {
+        const isDock = this.layoutMode === 'dock' || document.body.classList.contains('layout-dock');
+        if (!isDock) {
+          e.preventDefault();
+          return;
+        }
+        this.currentDraggedDockDialogId = dialog.id;
+        this.justFinishedDockDrag = true;
+        btn.classList.add('is-dragging');
+        this.tooltipManager?.hideAll(0);
+
+        const dropOverlay = document.getElementById('dropOverlay') || document.getElementById('drop-zone');
+        if (dropOverlay) dropOverlay.classList.remove('active');
+
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', dialog.id);
+        }
+      });
+
+      btn.addEventListener('dragend', () => {
+        this.currentDraggedDockDialogId = null;
+        btn.classList.remove('is-dragging');
+        this.clearDockDragIndicators();
+        const dropOverlay = document.getElementById('dropOverlay') || document.getElementById('drop-zone');
+        if (dropOverlay) dropOverlay.classList.remove('active');
+        setTimeout(() => {
+          this.justFinishedDockDrag = false;
+        }, 150);
+      });
+
+      fragment.appendChild(btn);
+    }
+
+    dockBar.appendChild(fragment);
+    dockBar.dataset.renderedKey = key;
+    this.refreshIcons();
+  }
+
+  /**
+   * Clears drag position indicators from all round icon buttons in the Dock bar.
+   */
+  public clearDockDragIndicators(): void {
+    const dockBar = this.getElement('dockToolBar') || document.getElementById('dockToolBar');
+    if (!dockBar) return;
+    dockBar.querySelectorAll('.dock-tool-btn').forEach((b) => {
+      b.classList.remove('drag-target-before', 'drag-target-after');
+    });
+  }
+
+  /**
+   * Initializes drag & drop reordering handlers on the Dock icon bar, keeping
+   * tool order synchronized with the stackpanel sidebar, Tools menu, and localStorage.
+   */
+  public initDockDragAndDrop(): void {
+    const dockBar = this.getElement('dockToolBar') || document.getElementById('dockToolBar');
+    if (!dockBar) return;
+
+    dockBar.addEventListener('dragover', (e: DragEvent) => {
+      const isDock = this.layoutMode === 'dock' || document.body.classList.contains('layout-dock');
+      if (!isDock || !this.currentDraggedDockDialogId) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+
+      const targetBtn = (e.target as HTMLElement).closest('.dock-tool-btn') as HTMLElement | null;
+      if (targetBtn && targetBtn.dataset.dialogId !== this.currentDraggedDockDialogId) {
+        const rect = targetBtn.getBoundingClientRect();
+        const isAfter = e.clientX - rect.left > rect.width / 2;
+        this.clearDockDragIndicators();
+        targetBtn.classList.add(isAfter ? 'drag-target-after' : 'drag-target-before');
+      } else {
+        this.clearDockDragIndicators();
+      }
+    });
+
+    dockBar.addEventListener('dragenter', (e: DragEvent) => {
+      if (this.currentDraggedDockDialogId) {
+        e.stopPropagation();
+      }
+    });
+
+    dockBar.addEventListener('dragleave', (e: DragEvent) => {
+      e.stopPropagation();
+      if (!e.relatedTarget || !dockBar.contains(e.relatedTarget as globalThis.Node)) {
+        this.clearDockDragIndicators();
+      }
+    });
+
+    dockBar.addEventListener('drop', (e: DragEvent) => {
+      const isDock = this.layoutMode === 'dock' || document.body.classList.contains('layout-dock');
+      if (!isDock) return;
+
+      const draggedId = this.currentDraggedDockDialogId || e.dataTransfer?.getData('text/plain');
+      if (!draggedId) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      this.clearDockDragIndicators();
+
+      const sidebar = this.getElement('stackpanelRightSidebar') || document.getElementById('stackpanelRightSidebar');
+      if (!sidebar) return;
+
+      const draggedDialog = Array.from(sidebar.querySelectorAll(':scope > .floating-dialog')).find(
+        (d) => d.id === draggedId
+      ) as HTMLElement | undefined;
+      if (!draggedDialog) return;
+
+      const targetBtn = (e.target as HTMLElement).closest('.dock-tool-btn') as HTMLElement | null;
+      const targetDialogId = targetBtn?.dataset.dialogId;
+      const targetDialog = targetDialogId
+        ? (Array.from(sidebar.querySelectorAll(':scope > .floating-dialog')).find(
+            (d) => d.id === targetDialogId
+          ) as HTMLElement | undefined)
+        : undefined;
+
+      if (targetBtn && targetDialog && targetDialog !== draggedDialog) {
+        const rect = targetBtn.getBoundingClientRect();
+        const isAfter = e.clientX - rect.left > rect.width / 2;
+        if (isAfter) {
+          sidebar.insertBefore(draggedDialog, targetDialog.nextSibling);
+        } else {
+          sidebar.insertBefore(draggedDialog, targetDialog);
+        }
+      } else if (!targetBtn) {
+        sidebar.appendChild(draggedDialog);
+      }
+
+      this.currentDraggedDockDialogId = null;
+      this.updateStackpanelOrderFromDOM();
+      this.justFinishedDockDrag = true;
+      setTimeout(() => {
+        this.justFinishedDockDrag = false;
+      }, 150);
+    });
+  }
+
+  /**
+   * Activates a single tool panel in Dock mode, collapsing all other open sidebar panels.
+   */
+  public activateDockTool(dialogId: string): void {
+    const dialog = this.getElement(dialogId);
+    if (!dialog) return;
+
+    this.tooltipManager?.hideAll(0);
+    dialog.style.display = 'flex';
+
+    if (this.isStackpanelDrawerCollapsed && dialog.closest('.stackpanel-sidebar')) {
+      this.setStackpanelDrawerCollapsed(false);
+    }
+
+    this.toggleDialogMinimize(dialog, false);
+    this.bringDialogToFront(dialog);
+    this.renderDockToolbar();
   }
 
   /**
@@ -1811,7 +2090,8 @@ export class MeshEditorApp {
   }
 
   private updateStackpanelDrawerUI(): void {
-    const isStack = this.layoutMode === 'stackpanel' || document.body.classList.contains('layout-stackpanel');
+    const isSidebar = this.isSidebarLayoutMode();
+    const sidebarHost = this.getElement('rightSidebarHost') || document.getElementById('rightSidebarHost');
     const sidebar = this.getElement('stackpanelRightSidebar') || document.getElementById('stackpanelRightSidebar');
     const toggleBtn = this.getElement('btnStackpanelDrawerToggle') || document.getElementById('btnStackpanelDrawerToggle');
 
@@ -1821,25 +2101,35 @@ export class MeshEditorApp {
         )
       : false;
 
-    const effectiveCollapsed = isStack && this.isStackpanelDrawerCollapsed && hasVisibleDialogs;
+    const effectiveCollapsed = isSidebar && this.isStackpanelDrawerCollapsed && hasVisibleDialogs;
 
     document.body.classList.toggle('stackpanel-drawer-collapsed', effectiveCollapsed);
     this.rootContainer?.classList.toggle('stackpanel-drawer-collapsed', effectiveCollapsed);
 
-    if (sidebar) {
+    const drawerTarget = this.layoutMode === 'dock' && sidebarHost ? sidebarHost : sidebar;
+    if (drawerTarget) {
       if (effectiveCollapsed) {
-        sidebar.setAttribute('aria-hidden', 'true');
-        sidebar.setAttribute('inert', '');
+        drawerTarget.setAttribute('aria-hidden', 'true');
+        drawerTarget.setAttribute('inert', '');
       } else {
-        sidebar.removeAttribute('aria-hidden');
-        sidebar.removeAttribute('inert');
+        drawerTarget.removeAttribute('aria-hidden');
+        drawerTarget.removeAttribute('inert');
       }
+    }
+    if (sidebar && sidebar !== drawerTarget) {
+      sidebar.removeAttribute('aria-hidden');
+      sidebar.removeAttribute('inert');
+    }
+    if (sidebarHost && sidebarHost !== drawerTarget) {
+      sidebarHost.removeAttribute('aria-hidden');
+      sidebarHost.removeAttribute('inert');
     }
 
     if (toggleBtn) {
-      toggleBtn.classList.toggle('is-empty', !isStack || !hasVisibleDialogs);
+      toggleBtn.classList.toggle('is-empty', !isSidebar || !hasVisibleDialogs);
       toggleBtn.setAttribute('aria-expanded', String(!effectiveCollapsed));
-      const label = effectiveCollapsed ? 'Expand stackpanel drawer' : 'Minimize stackpanel to drawer';
+      const modeName = this.layoutMode === 'dock' ? 'dock' : 'stackpanel';
+      const label = effectiveCollapsed ? `Expand ${modeName} drawer` : `Minimize ${modeName} to drawer`;
       toggleBtn.title = label;
       toggleBtn.setAttribute('aria-label', label);
       const iconName = effectiveCollapsed ? 'chevron-left' : 'chevron-right';
@@ -1918,6 +2208,7 @@ export class MeshEditorApp {
     title?.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this.justFinishedStackpanelDrag) return;
+      if (this.layoutMode === 'dock' && dialog.closest('.stackpanel-sidebar')) return;
       this.toggleDialogMinimize(dialog);
     });
 
@@ -1997,7 +2288,7 @@ export class MeshEditorApp {
       let initialTop = 0;
 
       header.addEventListener('pointerdown', (e: PointerEvent) => {
-        if (this.layoutMode === 'stackpanel' || document.body.classList.contains('layout-stackpanel')) return;
+        if (this.isSidebarLayoutMode()) return;
         if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).closest('.dialog-btn')) return;
 
         isDragging = true;
@@ -2152,6 +2443,7 @@ export class MeshEditorApp {
 
     this.saveStackpanelOrder();
     this.renderToolsMenu();
+    this.renderDockToolbar();
   }
 
   /**
@@ -2215,6 +2507,7 @@ export class MeshEditorApp {
           }
 
           this.renderToolsMenu();
+          this.renderDockToolbar();
           return;
         }
       }
@@ -4098,7 +4391,7 @@ export class MeshEditorApp {
     if (willBeMin) {
       tool?.onMinimize?.(this);
     } else {
-      if (this.layoutMode === 'stackpanel') {
+      if (this.layoutMode === 'stackpanel' || this.layoutMode === 'dock') {
         this.accordionMinimizeOthers(dialog);
         if (this.isStackpanelDrawerCollapsed && dialog.closest('.stackpanel-sidebar')) {
           this.setStackpanelDrawerCollapsed(false);
@@ -4180,7 +4473,7 @@ export class MeshEditorApp {
         btnMin.innerHTML = '<i class="app-icon" data-lucide="minus"></i>';
         btnMin.title = 'Minimize';
       }
-      if (this.layoutMode === 'stackpanel') {
+      if (this.layoutMode === 'stackpanel' || this.layoutMode === 'dock') {
         this.accordionMinimizeOthers(dialog);
         if (this.isStackpanelDrawerCollapsed && dialog.closest('.stackpanel-sidebar')) {
           this.setStackpanelDrawerCollapsed(false);
@@ -4198,6 +4491,18 @@ export class MeshEditorApp {
       }
     } else {
       tool?.onClose?.(this);
+      if (this.layoutMode === 'dock' && dialog.closest('.stackpanel-sidebar')) {
+        const sidebar = this.getElement('stackpanelRightSidebar') || document.getElementById('stackpanelRightSidebar');
+        const remainingOpen = sidebar
+          ? (Array.from(sidebar.querySelectorAll(':scope > .floating-dialog')) as HTMLElement[]).filter(
+              (d) => d !== dialog && d.style.display !== 'none'
+            )
+          : [];
+        const hasExpanded = remainingOpen.some((d) => !d.classList.contains('minimized'));
+        if (remainingOpen.length > 0 && !hasExpanded) {
+          this.toggleDialogMinimize(remainingOpen[0], false);
+        }
+      }
     }
 
     this.refreshIcons();
@@ -5697,6 +6002,7 @@ export class MeshEditorApp {
 
     if (typeof document !== 'undefined') {
       this.onDocumentFocusInHandler = (e: FocusEvent) => {
+        if (this.isTogglingToolFromMenu) return;
         if (!this.isMenuPopoverOpen(menu)) return;
         const target = e.target as HTMLElement | null;
         if (!target) return;
@@ -5720,7 +6026,7 @@ export class MeshEditorApp {
     }
   }
 
-  private createToolMenuButton(tool: ToolInterface, rootBtn: HTMLElement | null): HTMLButtonElement {
+  private createToolMenuButton(tool: ToolInterface, _rootBtn: HTMLElement | null): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'dropdown-item';
@@ -5739,15 +6045,17 @@ export class MeshEditorApp {
 
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const fromKeyboard = (e as MouseEvent).detail === 0;
-      this.closeAllDropdowns({
-        restoreFocusTarget: rootBtn,
-        fromPointer: !fromKeyboard,
-      });
       if (tool.dialogId) {
-        this.toggleDialog(tool.dialogId);
-        if (tool.dialogId === 'dialog-csg') {
-          this.updateCSGGUI();
+        this.isTogglingToolFromMenu = true;
+        try {
+          this.toggleDialog(tool.dialogId);
+          if (tool.dialogId === 'dialog-csg') {
+            this.updateCSGGUI();
+          }
+        } finally {
+          setTimeout(() => {
+            this.isTogglingToolFromMenu = false;
+          }, 0);
         }
       }
     });
@@ -6049,6 +6357,7 @@ export class MeshEditorApp {
       btnGrid.classList.toggle('active', !!this.service.sceneParams?.grid);
     }
 
+    this.renderDockToolbar();
     this.updateStackpanelDrawerUI();
     this.updateFullscreenButtonState();
   }
@@ -6508,9 +6817,9 @@ export class MeshEditorApp {
 
   public bringDialogToFront(activeDialog: HTMLElement): void {
     const scope = this.rootContainer || document;
-    const isStack = this.layoutMode === 'stackpanel' || document.body.classList.contains('layout-stackpanel');
+    const isSidebar = this.isSidebarLayoutMode();
 
-    if (isStack && activeDialog.closest('.stackpanel-sidebar')) {
+    if (isSidebar && activeDialog.closest('.stackpanel-sidebar')) {
       const sidebarDialogs = Array.from(scope.querySelectorAll('.stackpanel-sidebar .floating-dialog')) as HTMLElement[];
       sidebarDialogs.forEach((d) => d.classList.remove('active-focus'));
       if (!activeDialog.classList.contains('minimized')) {
@@ -7162,7 +7471,7 @@ export class MeshEditorApp {
 
     this.addGlobalListener(window, 'dragover', (e) => {
       // Do not activate file drop overlay if an internal tool is being reordered or AI is generating
-      if (this.currentDraggedStackpanelDialog || this.isAIGenerating) {
+      if (this.currentDraggedStackpanelDialog || this.currentDraggedDockDialogId || this.isAIGenerating) {
         if (dropZone) dropZone.classList.remove('active');
         return;
       }
@@ -7225,7 +7534,7 @@ export class MeshEditorApp {
 
     this.addGlobalListener(window, 'drop', async (e) => {
       if (dropZone) dropZone.classList.remove('active');
-      if (this.currentDraggedStackpanelDialog || this.isAIGenerating) return;
+      if (this.currentDraggedStackpanelDialog || this.currentDraggedDockDialogId || this.isAIGenerating) return;
       const types = e.dataTransfer?.types;
       const isFileDrag = types ? Array.from(types).includes('Files') : false;
       if (!isFileDrag) return;

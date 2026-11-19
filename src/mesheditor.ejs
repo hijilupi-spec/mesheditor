@@ -7,8 +7,8 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/%3E%3Cpolyline points='3.27 6.96 12 12.01 20.73 6.96'/%3E%3Cline x1='12' y1='22.08' x2='12' y2='12'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./mesheditor.css" />
   </head>
-  <body class="layout-stackpanel">
-    <div id="app-container" class="layout-stackpanel">
+  <body class="layout-dock">
+    <div id="app-container" class="layout-dock">
       <!-- Hidden file inputs -->
       <input type="file" id="modelFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx,.dae,.babylon,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tga" multiple />
       <input type="file" id="importFileInput" class="hidden-input" accept=".glb,.gltf,.obj,.stl,.ply,.fbx,.dae,.babylon,.bin,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tga" multiple />
@@ -181,9 +181,13 @@
               <span class="btn-icon"><i class="app-icon" data-lucide="app-window"></i></span>
               <span class="btn-label">Float</span>
             </button>
-            <button class="dropdown-item active" id="btnLayoutStack" title="Stackpanel layout: neatly docked vertical sidebar">
+            <button class="dropdown-item" id="btnLayoutStack" title="Stackpanel layout: neatly docked vertical sidebar">
               <span class="btn-icon"><i class="app-icon" data-lucide="panel-right"></i></span>
               <span class="btn-label">Stack</span>
+            </button>
+            <button class="dropdown-item active" id="btnLayoutDock" title="Dock layout: compact round icon bar above a single active tool panel">
+              <span class="btn-icon"><i class="app-icon" data-lucide="dock"></i></span>
+              <span class="btn-label">Dock</span>
             </button>
             <div class="dropdown-divider"></div>
             <button class="dropdown-item" id="btnToggleFullscreen" title="Enter fullscreen mode">
@@ -394,8 +398,13 @@
         <i class="app-icon" data-lucide="chevron-right"></i>
       </button>
 
-      <!-- Floating HTML Dialog Containers for dat.GUI (wrapped for Stackpanel mode) -->
-      <div id="stackpanelRightSidebar" class="stackpanel-sidebar">
+      <!-- Right Sidebar Host (wraps Dock icon bar + Stackpanel dialog container) -->
+      <div id="rightSidebarHost" class="right-sidebar-host">
+        <div id="dockToolBarSlot" class="dock-toolbar-slot">
+          <div id="dockToolBar" class="dock-toolbar" role="tablist" aria-label="Active Tools Dock"></div>
+        </div>
+        <!-- Floating HTML Dialog Containers for dat.GUI (wrapped for Stackpanel & Dock modes) -->
+        <div id="stackpanelRightSidebar" class="stackpanel-sidebar">
         <%- include('./tools/editor/AIAgentEditorTool.ejs') %>
         <%- include('./tools/editor/CreatePrimitiveEditorTool.ejs') %>
         <%- include('./tools/editor/FacetEditorTool.ejs') %>
@@ -417,6 +426,7 @@
         <%- include('./tools/editor/DecalEditorTool.ejs') %>
         <%- include('./tools/editor/TexturePaintEditorTool.ejs') %>
         <%- include('./tools/editor/HeightmapEditorTool.ejs') %>
+        </div>
       </div>
 
       <!-- Touch & Compact Viewport Controls (shown automatically on touch / <= 1024px viewports) -->

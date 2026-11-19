@@ -640,7 +640,9 @@ body.is-electron-mac #top-toolbar .toolbar-brand {
   padding-bottom: 0 !important;
 }
 
-/* Stackpanel Mode Styling */
+/* Stackpanel & Dock Mode Styling */
+.right-sidebar-host,
+#rightSidebarHost,
 .toolstackpanel,
 #toolstackpanel,
 .stackpanel-sidebar,
@@ -682,13 +684,73 @@ body.layout-stackpanel .toolstackpanel,
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
 }
 
+body.layout-dock .right-sidebar-host,
+#app-container.layout-dock .right-sidebar-host,
+body.layout-dock #rightSidebarHost,
+#app-container.layout-dock #rightSidebarHost {
+  --scrollbar-thumb: rgba(255, 255, 255, 0.42);
+  --scrollbar-track: transparent;
+  display: flex !important;
+  flex-direction: column !important;
+  position: absolute !important;
+  right: var(--stackpanel-right) !important;
+  top: var(--stackpanel-top) !important;
+  bottom: var(--stackpanel-bottom) !important;
+  width: var(--stackpanel-width) !important;
+  overflow: hidden !important;
+  gap: 8px !important;
+  z-index: 100 !important;
+  pointer-events: none !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+}
+
+body.layout-dock .stackpanel-sidebar,
+#app-container.layout-dock .stackpanel-sidebar,
+body.layout-dock #stackpanelRightSidebar,
+#app-container.layout-dock #stackpanelRightSidebar {
+  --scrollbar-thumb: rgba(255, 255, 255, 0.42);
+  --scrollbar-track: transparent;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+  inset: auto !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  overscroll-behavior: contain;
+  gap: 8px !important;
+  pointer-events: none !important;
+  padding-right: 2px;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
 @supports not (scrollbar-color: auto) {
   body.layout-stackpanel .stackpanel-sidebar,
   #app-container.layout-stackpanel .stackpanel-sidebar,
   body.layout-stackpanel #stackpanelRightSidebar,
   #app-container.layout-stackpanel #stackpanelRightSidebar,
   body.layout-stackpanel .toolstackpanel,
-  #app-container.layout-stackpanel .toolstackpanel {
+  #app-container.layout-stackpanel .toolstackpanel,
+  body.layout-dock .stackpanel-sidebar,
+  #app-container.layout-dock .stackpanel-sidebar,
+  body.layout-dock #stackpanelRightSidebar,
+  #app-container.layout-dock #stackpanelRightSidebar,
+  body.layout-dock .dock-toolbar-slot,
+  #app-container.layout-dock .dock-toolbar-slot {
     scrollbar-width: auto;
   }
 
@@ -697,7 +759,13 @@ body.layout-stackpanel .toolstackpanel,
   body.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar,
   #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar,
   body.layout-stackpanel .toolstackpanel::-webkit-scrollbar,
-  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar {
+  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar,
+  body.layout-dock .stackpanel-sidebar::-webkit-scrollbar,
+  #app-container.layout-dock .stackpanel-sidebar::-webkit-scrollbar,
+  body.layout-dock #stackpanelRightSidebar::-webkit-scrollbar,
+  #app-container.layout-dock #stackpanelRightSidebar::-webkit-scrollbar,
+  body.layout-dock .dock-toolbar-slot::-webkit-scrollbar,
+  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar {
     width: 6px;
   }
 
@@ -706,7 +774,13 @@ body.layout-stackpanel .toolstackpanel,
   body.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-track,
   #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-track,
   body.layout-stackpanel .toolstackpanel::-webkit-scrollbar-track,
-  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-track {
+  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-track,
+  body.layout-dock .stackpanel-sidebar::-webkit-scrollbar-track,
+  #app-container.layout-dock .stackpanel-sidebar::-webkit-scrollbar-track,
+  body.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-track,
+  #app-container.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-track,
+  body.layout-dock .dock-toolbar-slot::-webkit-scrollbar-track,
+  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
   }
 
@@ -715,13 +789,19 @@ body.layout-stackpanel .toolstackpanel,
   body.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-thumb,
   #app-container.layout-stackpanel #stackpanelRightSidebar::-webkit-scrollbar-thumb,
   body.layout-stackpanel .toolstackpanel::-webkit-scrollbar-thumb,
-  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-thumb {
+  #app-container.layout-stackpanel .toolstackpanel::-webkit-scrollbar-thumb,
+  body.layout-dock .stackpanel-sidebar::-webkit-scrollbar-thumb,
+  #app-container.layout-dock .stackpanel-sidebar::-webkit-scrollbar-thumb,
+  body.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-thumb,
+  #app-container.layout-dock #stackpanelRightSidebar::-webkit-scrollbar-thumb,
+  body.layout-dock .dock-toolbar-slot::-webkit-scrollbar-thumb,
+  #app-container.layout-dock .dock-toolbar-slot::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 3px;
   }
 }
 
-/* Stackpanel Drawer Toggle & Collapsed Drawer State */
+/* Stackpanel & Dock Drawer Toggle & Collapsed Drawer State */
 .stackpanel-drawer-toggle {
   display: none;
   position: absolute;
@@ -755,12 +835,16 @@ body.layout-stackpanel .toolstackpanel,
 }
 
 body.layout-stackpanel .stackpanel-drawer-toggle,
-#app-container.layout-stackpanel .stackpanel-drawer-toggle {
+#app-container.layout-stackpanel .stackpanel-drawer-toggle,
+body.layout-dock .stackpanel-drawer-toggle,
+#app-container.layout-dock .stackpanel-drawer-toggle {
   display: flex;
 }
 
 body.layout-stackpanel .stackpanel-drawer-toggle.is-empty,
-#app-container.layout-stackpanel .stackpanel-drawer-toggle.is-empty {
+#app-container.layout-stackpanel .stackpanel-drawer-toggle.is-empty,
+body.layout-dock .stackpanel-drawer-toggle.is-empty,
+#app-container.layout-dock .stackpanel-drawer-toggle.is-empty {
   display: none;
 }
 
@@ -789,19 +873,29 @@ body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar,
 body.layout-stackpanel.stackpanel-drawer-collapsed #stackpanelRightSidebar,
 #app-container.layout-stackpanel.stackpanel-drawer-collapsed #stackpanelRightSidebar,
 body.layout-stackpanel.stackpanel-drawer-collapsed .toolstackpanel,
-#app-container.layout-stackpanel.stackpanel-drawer-collapsed .toolstackpanel {
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .toolstackpanel,
+body.layout-dock.stackpanel-drawer-collapsed .right-sidebar-host,
+#app-container.layout-dock.stackpanel-drawer-collapsed .right-sidebar-host,
+body.layout-dock.stackpanel-drawer-collapsed #rightSidebarHost,
+#app-container.layout-dock.stackpanel-drawer-collapsed #rightSidebarHost {
   transform: translateX(calc(100% + var(--stackpanel-right) + 12px)) !important;
   opacity: 0 !important;
   pointer-events: none !important;
 }
 
 body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar .floating-dialog,
-#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar .floating-dialog {
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-sidebar .floating-dialog,
+body.layout-dock.stackpanel-drawer-collapsed .stackpanel-sidebar .floating-dialog,
+#app-container.layout-dock.stackpanel-drawer-collapsed .stackpanel-sidebar .floating-dialog,
+body.layout-dock.stackpanel-drawer-collapsed .dock-toolbar,
+#app-container.layout-dock.stackpanel-drawer-collapsed .dock-toolbar {
   pointer-events: none !important;
 }
 
 body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
-#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle {
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
+body.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
+#app-container.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle {
   right: 0;
   width: 20px;
   height: 46px;
@@ -813,7 +907,11 @@ body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
 body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:hover,
 #app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:hover,
 body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:focus-visible,
-#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:focus-visible {
+#app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:focus-visible,
+body.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:hover,
+#app-container.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:hover,
+body.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:focus-visible,
+#app-container.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:focus-visible {
   width: 24px;
   opacity: 1;
   background: rgba(22, 27, 34, 0.94);
@@ -828,14 +926,21 @@ body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle:foc
   #app-container.layout-stackpanel #stackpanelRightSidebar,
   body.layout-stackpanel .toolstackpanel,
   #app-container.layout-stackpanel .toolstackpanel,
+  body.layout-dock .right-sidebar-host,
+  #app-container.layout-dock .right-sidebar-host,
+  body.layout-dock #rightSidebarHost,
+  #app-container.layout-dock #rightSidebarHost,
   .stackpanel-drawer-toggle,
-  .stackpanel-drawer-toggle .app-icon {
+  .stackpanel-drawer-toggle .app-icon,
+  .dock-tool-btn {
     transition: none;
   }
 }
 
 body.layout-stackpanel .stackpanel-sidebar .floating-dialog,
-#app-container.layout-stackpanel .stackpanel-sidebar .floating-dialog {
+#app-container.layout-stackpanel .stackpanel-sidebar .floating-dialog,
+body.layout-dock .stackpanel-sidebar .floating-dialog,
+#app-container.layout-dock .stackpanel-sidebar .floating-dialog {
   position: relative !important;
   width: 100% !important;
   max-width: 100% !important;
@@ -858,10 +963,191 @@ body.layout-stackpanel .stackpanel-sidebar .floating-dialog,
 }
 
 body.layout-stackpanel .stackpanel-sidebar .floating-dialog.active-focus,
-#app-container.layout-stackpanel .stackpanel-sidebar .floating-dialog.active-focus {
+#app-container.layout-stackpanel .stackpanel-sidebar .floating-dialog.active-focus,
+body.layout-dock .stackpanel-sidebar .floating-dialog.active-focus,
+#app-container.layout-dock .stackpanel-sidebar .floating-dialog.active-focus {
   border-color: var(--border-color) !important;
   box-shadow: none !important;
   outline: none !important;
+}
+
+/* Dock Mode: Round Icon Bar & Single Active Panel */
+.dock-toolbar-slot {
+  display: none;
+  flex-shrink: 0;
+  width: 100%;
+  max-height: 164px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, rgba(255, 255, 255, 0.42)) var(--scrollbar-track, transparent);
+  padding-right: 2px;
+  pointer-events: none;
+}
+
+body.layout-dock .dock-toolbar-slot,
+#app-container.layout-dock .dock-toolbar-slot {
+  display: block;
+}
+
+body.layout-dock .dock-toolbar-slot.is-empty,
+#app-container.layout-dock .dock-toolbar-slot.is-empty {
+  display: none;
+}
+
+.dock-toolbar {
+  display: none;
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  pointer-events: auto;
+  background: rgba(22, 27, 34, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+body.layout-dock .dock-toolbar,
+#app-container.layout-dock .dock-toolbar {
+  display: flex;
+}
+
+body.layout-dock .dock-toolbar.is-empty,
+#app-container.layout-dock .dock-toolbar.is-empty {
+  display: none;
+}
+
+.dock-tool-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  outline: none;
+  touch-action: manipulation;
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.14), rgba(33, 38, 45, 0.92) 72%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+    0 3px 8px rgba(0, 0, 0, 0.32);
+  transition:
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease;
+}
+
+.dock-tool-btn .app-icon {
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dock-tool-btn:hover,
+.dock-tool-btn:focus-visible {
+  color: #ffffff;
+  border-color: rgba(88, 166, 255, 0.6);
+  background: radial-gradient(circle at 30% 24%, rgba(88, 166, 255, 0.32), rgba(33, 38, 45, 0.95) 75%);
+  transform: translateY(-2px) scale(1.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 6px 14px rgba(0, 0, 0, 0.42),
+    0 0 12px rgba(88, 166, 255, 0.24);
+}
+
+.dock-tool-btn:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(88, 166, 255, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.42);
+}
+
+.dock-tool-btn:active {
+  transform: scale(0.94);
+}
+
+.dock-tool-btn.active {
+  color: #ffffff;
+  border-color: rgba(147, 197, 253, 0.85);
+  background: radial-gradient(circle at 30% 24%, #6cb6ff 0%, #1f6feb 68%, #154fa8 100%);
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    0 0 0 2px rgba(88, 166, 255, 0.28),
+    0 5px 15px rgba(31, 111, 235, 0.55);
+}
+
+.dock-tool-btn.active:hover {
+  transform: translateY(-2px) scale(1.08);
+}
+
+.dock-tool-btn[draggable='true'] {
+  cursor: grab;
+}
+
+.dock-tool-btn[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.dock-tool-btn.is-dragging {
+  opacity: 0.38;
+  transform: scale(0.92);
+  border-style: dashed;
+  border-color: var(--accent-color);
+  filter: grayscale(20%);
+}
+
+.dock-tool-btn.drag-target-before::before,
+.dock-tool-btn.drag-target-after::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-color);
+  box-shadow: 0 0 10px var(--accent-color);
+  pointer-events: none;
+  z-index: 20;
+}
+
+.dock-tool-btn.drag-target-before::before {
+  left: -6px;
+}
+
+.dock-tool-btn.drag-target-after::before {
+  right: -6px;
+}
+
+body.layout-dock .stackpanel-sidebar .floating-dialog.minimized,
+#app-container.layout-dock .stackpanel-sidebar .floating-dialog.minimized {
+  display: none !important;
+}
+
+body.layout-dock .stackpanel-sidebar .floating-dialog .dialog-header,
+#app-container.layout-dock .stackpanel-sidebar .floating-dialog .dialog-header {
+  border-radius: var(--radius-md) var(--radius-md) 0 0 !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  cursor: default !important;
+  touch-action: pan-y !important;
 }
 
 body.layout-stackpanel .stackpanel-sidebar .floating-dialog.minimized,
@@ -1009,7 +1295,9 @@ body.layout-stackpanel .floating-dialog .dialog-header,
 }
 
 body.layout-stackpanel #dialog-outliner,
-#app-container.layout-stackpanel #dialog-outliner {
+#app-container.layout-stackpanel #dialog-outliner,
+body.layout-dock #dialog-outliner,
+#app-container.layout-dock #dialog-outliner {
   position: absolute !important;
   left: 12px !important;
   top: 66px !important;
@@ -1023,7 +1311,9 @@ body.layout-stackpanel #dialog-outliner,
 
 #dialog-outliner.minimized,
 body.layout-stackpanel #dialog-outliner.minimized,
-#app-container.layout-stackpanel #dialog-outliner.minimized {
+#app-container.layout-stackpanel #dialog-outliner.minimized,
+body.layout-dock #dialog-outliner.minimized,
+#app-container.layout-dock #dialog-outliner.minimized {
   bottom: auto !important;
   height: auto !important;
   min-height: 0 !important;
@@ -1032,7 +1322,9 @@ body.layout-stackpanel #dialog-outliner.minimized,
 }
 
 body.layout-stackpanel #dialog-outliner .dialog-body,
-#app-container.layout-stackpanel #dialog-outliner .dialog-body {
+#app-container.layout-stackpanel #dialog-outliner .dialog-body,
+body.layout-dock #dialog-outliner .dialog-body,
+#app-container.layout-dock #dialog-outliner .dialog-body {
   max-height: calc(100% - 86px) !important;
 }
 
@@ -1717,7 +2009,9 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
   }
 
   body.layout-stackpanel #dialog-outliner,
-  #app-container.layout-stackpanel #dialog-outliner {
+  #app-container.layout-stackpanel #dialog-outliner,
+  body.layout-dock #dialog-outliner,
+  #app-container.layout-dock #dialog-outliner {
     width: min(280px, calc(100vw - 24px)) !important;
   }
 }
@@ -1732,7 +2026,9 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
   }
 
   body.layout-stackpanel #dialog-outliner,
-  #app-container.layout-stackpanel #dialog-outliner {
+  #app-container.layout-stackpanel #dialog-outliner,
+  body.layout-dock #dialog-outliner,
+  #app-container.layout-dock #dialog-outliner {
     left: 6px !important;
     top: 58px !important;
     width: min(250px, calc(100vw - 12px)) !important;
@@ -1858,7 +2154,9 @@ body.layout-stackpanel #dialog-outliner .dialog-body,
   }
 
   body.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
-  #app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle {
+  #app-container.layout-stackpanel.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
+  body.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle,
+  #app-container.layout-dock.stackpanel-drawer-collapsed .stackpanel-drawer-toggle {
     width: 26px;
     height: 52px;
   }
@@ -8323,4 +8621,139 @@ dialog#screenshotModal::backdrop {
   max-height: none;
   border: 1px dashed rgba(88, 166, 255, 0.6);
   box-shadow: 0 0 18px rgba(0, 0, 0, 0.35);
+}
+
+/* =========================================================================
+   TIPPY.JS GLOBAL TOOLTIPS (CORE + MESH EDITOR DARK GLASS THEME)
+   ========================================================================= */
+[data-tippy-root] {
+  max-width: calc(100vw - 10px);
+  pointer-events: none;
+}
+
+.tippy-box {
+  position: relative;
+  background-color: #161b22;
+  color: #e6edf3;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  outline: 0;
+  transition-property: transform, visibility, opacity;
+}
+
+.tippy-box[data-animation='fade'][data-state='hidden'] {
+  opacity: 0;
+}
+
+.tippy-box[data-animation='shift-away-subtle'][data-state='hidden'] {
+  opacity: 0;
+}
+
+.tippy-box[data-animation='shift-away-subtle'][data-state='hidden'][data-placement^='top'] {
+  transform: translateY(5px);
+}
+
+.tippy-box[data-animation='shift-away-subtle'][data-state='hidden'][data-placement^='bottom'] {
+  transform: translateY(-5px);
+}
+
+.tippy-box[data-animation='shift-away-subtle'][data-state='hidden'][data-placement^='left'] {
+  transform: translateX(5px);
+}
+
+.tippy-box[data-animation='shift-away-subtle'][data-state='hidden'][data-placement^='right'] {
+  transform: translateX(-5px);
+}
+
+.tippy-box[data-placement^='top'] > .tippy-arrow {
+  bottom: 0;
+}
+
+.tippy-box[data-placement^='top'] > .tippy-arrow::before {
+  bottom: -7px;
+  left: 0;
+  border-width: 7px 7px 0;
+  border-top-color: initial;
+  transform-origin: center top;
+}
+
+.tippy-box[data-placement^='bottom'] > .tippy-arrow {
+  top: 0;
+}
+
+.tippy-box[data-placement^='bottom'] > .tippy-arrow::before {
+  top: -7px;
+  left: 0;
+  border-width: 0 7px 7px;
+  border-bottom-color: initial;
+  transform-origin: center bottom;
+}
+
+.tippy-box[data-placement^='left'] > .tippy-arrow {
+  right: 0;
+}
+
+.tippy-box[data-placement^='left'] > .tippy-arrow::before {
+  right: -7px;
+  border-width: 7px 0 7px 7px;
+  border-left-color: initial;
+  transform-origin: center left;
+}
+
+.tippy-box[data-placement^='right'] > .tippy-arrow {
+  left: 0;
+}
+
+.tippy-box[data-placement^='right'] > .tippy-arrow::before {
+  left: -7px;
+  border-width: 7px 7px 7px 0;
+  border-right-color: initial;
+  transform-origin: center right;
+}
+
+.tippy-arrow {
+  width: 14px;
+  height: 14px;
+  color: rgba(13, 17, 23, 0.96);
+}
+
+.tippy-arrow::before {
+  content: '';
+  position: absolute;
+  border-color: transparent;
+  border-style: solid;
+}
+
+.tippy-content {
+  position: relative;
+  padding: 5px 10px;
+  z-index: 1;
+}
+
+.tippy-box[data-theme~='mesheditor'] {
+  background: rgba(13, 17, 23, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #e6edf3;
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 7px;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.tippy-box[data-theme~='mesheditor'] > .tippy-arrow {
+  color: rgba(13, 17, 23, 0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tippy-box {
+    transition: none !important;
+  }
 }

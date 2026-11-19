@@ -368,6 +368,10 @@ function createApplicationMenu() {
           label: 'Docked Stackpanel Layout',
           click: () => sendMenuCommand('view:layout-stack'),
         },
+        {
+          label: 'Dock Layout',
+          click: () => sendMenuCommand('view:layout-dock'),
+        },
         { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },

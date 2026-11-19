@@ -277,13 +277,19 @@ test.describe('Mesh Editor E2E Tests', () => {
     await expect(menuTools).toBeVisible();
     await expect(materialsTrigger).toBeFocused();
 
-    // Clicking a tool inside Creation submenu toggles its dialog and closes menus
+    // Clicking a tool inside Creation submenu toggles its dialog while keeping Tools menu open
     await page.locator('#btnToolCategory-Creation').click();
     const creationSubmenu = page.locator('#menuToolsSubmenu-Creation');
     await expect(creationSubmenu).toBeVisible();
     await page.locator('#btnToggleHeightmapTool').click();
-    await expect(menuTools).not.toBeVisible();
+    await expect(menuTools).toBeVisible();
+    await expect(creationSubmenu).toBeVisible();
     await expect(page.locator('#dialog-heightmap')).toBeVisible();
+
+    // Close menu before narrow viewport layout assertion
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(menuTools).not.toBeVisible();
 
     // Narrow 375px viewport: submenu must never cover its trigger button
     await page.setViewportSize({ width: 375, height: 700 });

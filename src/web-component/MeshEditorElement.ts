@@ -96,14 +96,15 @@ export class MeshEditorElement extends HTMLElement {
 
     this.hostAdapter = new HostAppAdapter(adapterOptions);
 
-    const layoutAttr = this.getAttribute('layout') as 'floating' | 'stackpanel' | null;
+    const layoutAttr = this.getAttribute('layout') as 'floating' | 'stackpanel' | 'dock' | null;
     const initialModelUrl = this.getAttribute('src') || this.getAttribute('model-url') || undefined;
 
     this.app = new MeshEditorApp({
       container: appContainer,
       engine: this.customEngine || undefined,
       adapter: this.hostAdapter,
-      layoutMode: layoutAttr === 'stackpanel' || layoutAttr === 'floating' ? layoutAttr : undefined,
+      layoutMode:
+        layoutAttr === 'stackpanel' || layoutAttr === 'floating' || layoutAttr === 'dock' ? layoutAttr : undefined,
       autoLoadUrl: initialModelUrl,
       events: {
         onSceneModified: () => {
@@ -164,7 +165,7 @@ export class MeshEditorElement extends HTMLElement {
         }
         break;
       case 'layout':
-        if (newValue === 'floating' || newValue === 'stackpanel') {
+        if (newValue === 'floating' || newValue === 'stackpanel' || newValue === 'dock') {
           this.app.setLayoutMode(newValue, false);
         }
         break;
@@ -209,6 +210,11 @@ export class MeshEditorElement extends HTMLElement {
    * Toggles visibility of the right inspector/stackpanel sidebar.
    */
   public setInspectorVisible(visible: boolean): void {
+    const hostEl = this.querySelector('#rightSidebarHost') as HTMLElement | null;
+    if (hostEl) {
+      if (visible) hostEl.style.removeProperty('display');
+      else hostEl.style.setProperty('display', 'none', 'important');
+    }
     const el = (this.querySelector('#stackpanelRightSidebar') || this.querySelector('.stackpanel-sidebar')) as HTMLElement | null;
     if (el) {
       if (visible) el.style.removeProperty('display');

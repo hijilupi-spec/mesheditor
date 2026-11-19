@@ -317,9 +317,9 @@ describe('MeshEditorApp, PluginManager & HostAppAdapter Integration Tests', () =
     app = new MeshEditorApp({
       container,
       engine,
+      layoutMode: 'stackpanel',
     });
 
-    // Default layout on fresh startup is stackpanel
     expect(app.layoutMode).toBe('stackpanel');
     expect(document.body.classList.contains('layout-stackpanel')).toBe(true);
 
