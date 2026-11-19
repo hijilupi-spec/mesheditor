@@ -97,7 +97,7 @@
     "@babylonjs/serializers": ">=9.29.0",
     "dat.gui": "^0.7.9",
     "earcut": "2.2.4",
-    "lucide": "^1.62.0",
+    "lucide": "^1.76.0",
     "marked": "^18.1.2",
     "three": "^0.187.0"
   },
