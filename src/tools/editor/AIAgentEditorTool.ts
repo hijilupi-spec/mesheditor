@@ -28,7 +28,7 @@ export class AIAgentEditorTool extends AbstractEditorTool {
   <li><strong>Mesh Update:</strong> Select an existing mesh in the viewport and ask the AI to modify it (e.g. <em>"Scale this mesh by 1.5 and change material to gold"</em>).</li>
   <li><strong>Speech-to-Text:</strong> Click the microphone icon to speak your modeling instructions hands-free.</li>
   <li><strong>Viewport Capture:</strong> Click the camera icon to send a screenshot of your active 3D view to the AI for visual feedback and adjustments.</li>
-  <li><strong>OpenAI-Compatible:</strong> Connects to Ollama (local), OpenAI (GPT-4o), OpenRouter, LM Studio, or any OpenAI-compatible API endpoint.</li>
+  <li><strong>Multi-Protocol LLM Support:</strong> Connects natively to Anthropic Claude (Messages API with Prompt Caching &amp; direct browser CORS), Google Gemini Native API, OpenAI Chat &amp; Responses APIs, Ollama Native (with custom context window), Azure OpenAI, OpenRouter, DeepSeek, Mistral, Groq, xAI, LM Studio, oMLX, llama.cpp, vLLM, and local CLI bridges.</li>
 </ul>
 
 <h4><i class="app-icon" data-lucide="book-open"></i> Prompting Guide &amp; AI Tools Directory</h4>

@@ -2,7 +2,17 @@ import { Color3, Engine, Mesh, Node, PBRMaterial, StandardMaterial, Texture, Tra
 import * as dat from 'dat.gui';
 import { marked } from 'marked';
 import { createDefaultPlatformAdapter, MeshEditorPlatformAdapter } from './adapters';
-import { AI_ENDPOINT_PRESETS, DEFAULT_AI_AGENT_CONFIG, NEURAL_3D_PROTOCOL_DEFAULTS } from './AIAgentService';
+import {
+  AI_ENDPOINT_PRESETS,
+  AI_PROTOCOL_INFO,
+  DEFAULT_AI_AGENT_CONFIG,
+  DEFAULT_ANTHROPIC_MAX_TOKENS,
+  DEFAULT_AZURE_API_VERSION,
+  DEFAULT_OLLAMA_NUM_CTX,
+  findMatchingPreset,
+  NEURAL_3D_PROTOCOL_DEFAULTS,
+  resolveProtocol,
+} from './AIAgentService';
 import { createDefaultNeural3DProviders } from './Neural3DGeneratorService';
 import { createDefaultImageGeneratorProviders } from './textures/ExternalImageGeneratorService';
 import { MeshEditorService } from './MeshEditorService';
@@ -11,6 +21,8 @@ import { ensureMeshEditorStyles } from './styles';
 import { AI_CHAT_EMPTY_HTML, getMeshEditorTemplate } from './template';
 import {
   ActiveTextureSlotInfo,
+  AIAgentProtocol,
+  AIAgentReasoningEffort,
   AIAgentToolExecutionStep,
   ExportOptions,
   MeshEditorServiceEvents,
@@ -3150,11 +3162,24 @@ export class MeshEditorApp {
    * and persists every change directly to localStorage.
    */
   private initAISettingsUI(): void {
+    const providerPresetSelect = this.getElement<HTMLSelectElement>('aiProviderPresetSelect');
+    const protocolSelect = this.getElement<HTMLSelectElement>('aiProtocolSelect');
+    const protocolAuthBadge = this.getElement<HTMLElement>('aiProtocolAuthBadge');
+    const protocolHintText = this.getElement<HTMLElement>('aiProtocolHintText');
+    const apiKeyReqBadge = this.getElement<HTMLElement>('aiApiKeyRequirementBadge');
+    const protocolOptionsContainer = this.getElement<HTMLElement>('aiProtocolOptionsContainer');
+    const anthropicCachingCheck = this.getElement<HTMLInputElement>('aiAnthropicCachingCheck');
+    const anthropicMaxTokensInput = this.getElement<HTMLInputElement>('aiAnthropicMaxTokensInput');
+    const ollamaNumCtxSelect = this.getElement<HTMLSelectElement>('aiOllamaNumCtxSelect');
+    const azureApiVersionInput = this.getElement<HTMLInputElement>('aiAzureApiVersionInput');
+    const reasoningEffortSelect = this.getElement<HTMLSelectElement>('aiReasoningEffortSelect');
+    const responsesMaxTokensInput = this.getElement<HTMLInputElement>('aiResponsesMaxTokensInput');
     const endpointInput = this.getElement<HTMLInputElement>('aiEndpointUrlInput');
     const apiKeyInput = this.getElement<HTMLInputElement>('aiApiKeyInput');
     const modelInput = this.getElement<HTMLInputElement>('aiModelInput');
     const modelSelect = this.getElement<HTMLSelectElement>('aiModelSelect');
     const btnToggleCustomModel = this.getElement<HTMLButtonElement>('btnToggleCustomModel');
+    const btnFetchModels = this.getElement<HTMLButtonElement>('btnFetchAIModels');
     const modelDatalist = this.getElement<HTMLDataListElement>('aiModelDatalist');
     const settingsStatus = this.getElement<HTMLElement>('aiSettingsStatus');
     const minPolyInput = this.getElement<HTMLInputElement>('aiMinPolyInput');
@@ -3284,12 +3309,138 @@ export class MeshEditorApp {
       });
     };
 
+    const readProtocolOverridesFromDOM = () => {
+      const protocol = (protocolSelect?.value || resolveProtocol(this.service.aiAgent.getConfig())) as AIAgentProtocol;
+      const baseUrl = endpointInput?.value.trim() || '';
+      const apiKey = apiKeyInput?.value.trim() || '';
+      const isCustomVisible = !!modelInput && modelInput.style.display !== 'none';
+      const model =
+        (isCustomVisible ? modelInput?.value.trim() : modelSelect?.value.trim()) ||
+        modelInput?.value.trim() ||
+        '';
+      const maxTokensRaw =
+        protocol === 'anthropic'
+          ? Number(anthropicMaxTokensInput?.value)
+          : protocol === 'openai_responses'
+            ? Number(responsesMaxTokensInput?.value)
+            : NaN;
+      return {
+        protocol,
+        baseUrl,
+        apiKey,
+        model,
+        promptCaching: anthropicCachingCheck ? !!anthropicCachingCheck.checked : undefined,
+        maxTokens: Number.isFinite(maxTokensRaw) && maxTokensRaw > 0 ? maxTokensRaw : undefined,
+        ollamaNumCtx: ollamaNumCtxSelect ? Number(ollamaNumCtxSelect.value) || DEFAULT_OLLAMA_NUM_CTX : undefined,
+        azureApiVersion: azureApiVersionInput ? azureApiVersionInput.value.trim() : undefined,
+        reasoningEffort: (reasoningEffortSelect?.value || '') as AIAgentReasoningEffort,
+      };
+    };
+
+    const syncProtocolAndPresetUI = () => {
+      const cfg = this.service.aiAgent.getConfig();
+      const protocol = resolveProtocol(cfg);
+      const info = AI_PROTOCOL_INFO[protocol];
+      const matchedPreset = findMatchingPreset(cfg);
+
+      if (protocolSelect) protocolSelect.value = protocol;
+      if (providerPresetSelect) {
+        providerPresetSelect.value = matchedPreset?.id || '';
+      }
+
+      // Highlight matching quick-pick chip
+      this.getElement('aiPresetChips')
+        ?.querySelectorAll<HTMLElement>('[data-preset]')
+        .forEach((chip) => {
+          const id = chip.getAttribute('data-preset');
+          chip.classList.toggle('active', !!matchedPreset && id === matchedPreset.id);
+        });
+
+      // Dynamic protocol guide callout & auth badge
+      if (protocolAuthBadge) {
+        protocolAuthBadge.textContent = info.authSummary;
+      }
+      if (protocolHintText) {
+        protocolHintText.textContent = matchedPreset?.description || info.description;
+      }
+
+      // Dynamic placeholders & key requirement badge
+      if (endpointInput) endpointInput.placeholder = info.urlPlaceholder;
+      if (apiKeyInput) apiKeyInput.placeholder = info.keyPlaceholder;
+      if (modelInput) modelInput.placeholder = info.modelPlaceholder;
+      if (btnFetchModels) {
+        btnFetchModels.title = `Load available models from endpoint (${info.modelsPathLabel})`;
+      }
+
+      const lowerUrl = (cfg.baseUrl || '').toLowerCase();
+      const isLocalEndpoint =
+        lowerUrl.includes('/api/antigravity') ||
+        lowerUrl.includes('localhost') ||
+        lowerUrl.includes('127.0.0.1') ||
+        protocol === 'ollama_native';
+      const keyRequired = matchedPreset ? matchedPreset.requiresKey : !isLocalEndpoint;
+      if (apiKeyReqBadge) {
+        apiKeyReqBadge.textContent = keyRequired ? 'Required' : 'Optional (local / bridge)';
+        apiKeyReqBadge.classList.toggle('is-required', keyRequired);
+      }
+
+      // Contextual protocol-specific options panel
+      const protocolPanels: AIAgentProtocol[] = [
+        'anthropic',
+        'ollama_native',
+        'azure_openai',
+        'openai_responses',
+      ];
+      let hasVisiblePanel = false;
+      for (const pId of protocolPanels) {
+        const panel = this.getElement<HTMLElement>(`aiProtocolOpts_${pId}`);
+        const isVisible = pId === protocol;
+        if (panel) {
+          panel.style.display = isVisible ? 'flex' : 'none';
+        }
+        if (isVisible) hasVisiblePanel = true;
+      }
+      if (protocolOptionsContainer) {
+        protocolOptionsContainer.style.display = hasVisiblePanel ? 'block' : 'none';
+      }
+
+      if (anthropicCachingCheck) {
+        anthropicCachingCheck.checked = cfg.promptCaching !== false;
+      }
+      if (anthropicMaxTokensInput) {
+        anthropicMaxTokensInput.value = String(cfg.maxTokens || DEFAULT_ANTHROPIC_MAX_TOKENS);
+      }
+      if (ollamaNumCtxSelect) {
+        const ctxVal = String(cfg.ollamaNumCtx || DEFAULT_OLLAMA_NUM_CTX);
+        if (!Array.from(ollamaNumCtxSelect.options).some((o) => o.value === ctxVal)) {
+          const opt = document.createElement('option');
+          opt.value = ctxVal;
+          opt.textContent = `${Number(ctxVal).toLocaleString()} tokens`;
+          ollamaNumCtxSelect.appendChild(opt);
+        }
+        ollamaNumCtxSelect.value = ctxVal;
+      }
+      if (azureApiVersionInput) {
+        azureApiVersionInput.value = cfg.azureApiVersion ?? DEFAULT_AZURE_API_VERSION;
+      }
+      if (reasoningEffortSelect) {
+        reasoningEffortSelect.value = cfg.reasoningEffort || '';
+      }
+      if (responsesMaxTokensInput) {
+        responsesMaxTokensInput.value =
+          protocol === 'openai_responses' && cfg.maxTokens && cfg.maxTokens !== DEFAULT_ANTHROPIC_MAX_TOKENS
+            ? String(cfg.maxTokens)
+            : '';
+      }
+    };
+
     const syncAllAIControls = () => {
       const cfg = this.service.aiAgent.getConfig();
       if (endpointInput) endpointInput.value = cfg.baseUrl;
       if (apiKeyInput) apiKeyInput.value = cfg.apiKey;
       if (modelInput) modelInput.value = cfg.model;
       populateModelSelect([], cfg.model);
+      syncProtocolAndPresetUI();
 
       const minPolys = cfg.minPolygons ?? 200;
       const maxPolys = cfg.maxPolygons ?? 5000;
@@ -3327,17 +3478,73 @@ export class MeshEditorApp {
     };
     this.syncAISettingsControlsUI = syncAllAIControls;
 
+    // Protocol selector & contextual protocol options
+    protocolSelect?.addEventListener('change', () => {
+      const nextProto = (protocolSelect.value || 'openai') as AIAgentProtocol;
+      this.service.aiAgent.saveConfig({ protocol: nextProto });
+      syncProtocolAndPresetUI();
+      this.refreshAIEndpointBadge();
+      const info = AI_PROTOCOL_INFO[nextProto];
+      if (settingsStatus) settingsStatus.textContent = `Protocol: ${info.shortBadge}`;
+      this.setSettingsInlineFeedback(
+        'aiEndpointFeedback',
+        `Switched API protocol to ${info.label}.`,
+        'info'
+      );
+    });
+
+    anthropicCachingCheck?.addEventListener('change', () => {
+      this.service.aiAgent.saveConfig({ promptCaching: !!anthropicCachingCheck.checked });
+    });
+
+    anthropicMaxTokensInput?.addEventListener('change', () => {
+      const parsed = Math.max(256, Math.min(64000, Number(anthropicMaxTokensInput.value) || DEFAULT_ANTHROPIC_MAX_TOKENS));
+      anthropicMaxTokensInput.value = String(parsed);
+      this.service.aiAgent.saveConfig({ maxTokens: parsed });
+    });
+
+    ollamaNumCtxSelect?.addEventListener('change', () => {
+      const parsed = Math.max(2048, Number(ollamaNumCtxSelect.value) || DEFAULT_OLLAMA_NUM_CTX);
+      this.service.aiAgent.saveConfig({ ollamaNumCtx: parsed });
+    });
+
+    azureApiVersionInput?.addEventListener('input', () => {
+      this.service.aiAgent.saveConfig({ azureApiVersion: azureApiVersionInput.value.trim() });
+    });
+    azureApiVersionInput?.addEventListener('change', () => {
+      this.service.aiAgent.saveConfig({ azureApiVersion: azureApiVersionInput.value.trim() });
+    });
+
+    reasoningEffortSelect?.addEventListener('change', () => {
+      this.service.aiAgent.saveConfig({
+        reasoningEffort: (reasoningEffortSelect.value || '') as AIAgentReasoningEffort,
+      });
+    });
+
+    responsesMaxTokensInput?.addEventListener('change', () => {
+      const raw = responsesMaxTokensInput.value.trim();
+      if (!raw) {
+        this.service.aiAgent.saveConfig({ maxTokens: undefined });
+      } else {
+        const parsed = Math.max(256, Math.min(64000, Number(raw) || DEFAULT_ANTHROPIC_MAX_TOKENS));
+        responsesMaxTokensInput.value = String(parsed);
+        this.service.aiAgent.saveConfig({ maxTokens: parsed });
+      }
+    });
+
     // Endpoint inputs (persist immediately to localStorage)
     endpointInput?.addEventListener('input', () => {
       const val = endpointInput.value.trim();
       if (!val) return;
       this.service.aiAgent.saveConfig({ baseUrl: val });
+      syncProtocolAndPresetUI();
       this.refreshAIEndpointBadge();
     });
     endpointInput?.addEventListener('change', () => {
       const val = endpointInput.value.trim() || DEFAULT_AI_AGENT_CONFIG.baseUrl;
       endpointInput.value = val;
       this.service.aiAgent.saveConfig({ baseUrl: val });
+      syncProtocolAndPresetUI();
       this.refreshAIEndpointBadge();
     });
 
@@ -3575,42 +3782,74 @@ export class MeshEditorApp {
       }
     });
 
-    // Endpoint presets
+    // Shared preset applier for Quick Preset chips & All Provider Presets select
+    const applyEndpointPreset = (presetId: string) => {
+      const preset = AI_ENDPOINT_PRESETS.find((p) => p.id === presetId);
+      if (!preset) return;
+
+      if (endpointInput) endpointInput.value = preset.baseUrl;
+      if (modelInput) modelInput.value = preset.defaultModel;
+      const suggested = Array.from(
+        new Set([preset.defaultModel, ...(preset.suggestedModels || [])].filter(Boolean))
+      );
+      populateModelSelect(suggested, preset.defaultModel);
+
+      this.service.aiAgent.saveConfig({
+        protocol: preset.protocol,
+        baseUrl: preset.baseUrl,
+        model: preset.defaultModel,
+        ...(preset.maxTokens !== undefined ? { maxTokens: preset.maxTokens } : {}),
+        ...(preset.promptCaching !== undefined ? { promptCaching: preset.promptCaching } : {}),
+        ...(preset.ollamaNumCtx !== undefined ? { ollamaNumCtx: preset.ollamaNumCtx } : {}),
+        ...(preset.azureApiVersion !== undefined ? { azureApiVersion: preset.azureApiVersion } : {}),
+        ...(preset.reasoningEffort !== undefined ? { reasoningEffort: preset.reasoningEffort } : {}),
+      });
+
+      syncProtocolAndPresetUI();
+      this.refreshAIEndpointBadge();
+      const protoBadge = AI_PROTOCOL_INFO[preset.protocol]?.shortBadge || preset.protocol;
+      if (settingsStatus) settingsStatus.textContent = `Preset: ${preset.shortLabel || preset.label}`;
+      this.setSettingsInlineFeedback(
+        'aiEndpointFeedback',
+        `Switched to ${preset.label} [${protoBadge}] (${preset.defaultModel}).`,
+        'info'
+      );
+
+      // Auto-discover models for local bridges & local Ollama
+      if (
+        preset.baseUrl.includes('antigravity') ||
+        preset.baseUrl.includes('localhost:8787') ||
+        preset.baseUrl.includes('localhost:8788') ||
+        preset.protocol === 'ollama_native'
+      ) {
+        this.service.aiAgent
+          .fetchAvailableModels({ protocol: preset.protocol, baseUrl: preset.baseUrl })
+          .then((models) => {
+            if (models.length > 0) {
+              populateModelSelect(models, preset.defaultModel);
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    // Quick preset chips
     this.getElement('aiPresetChips')
       ?.querySelectorAll('[data-preset]')
       .forEach((btn) => {
         btn.addEventListener('click', () => {
           const presetId = (btn as HTMLElement).getAttribute('data-preset');
-          const preset = AI_ENDPOINT_PRESETS.find((p) => p.id === presetId);
-          if (preset) {
-            if (endpointInput) endpointInput.value = preset.baseUrl;
-            if (modelInput) modelInput.value = preset.defaultModel;
-            populateModelSelect([preset.defaultModel], preset.defaultModel);
-            this.service.aiAgent.saveConfig({
-              baseUrl: preset.baseUrl,
-              model: preset.defaultModel,
-            });
-            this.refreshAIEndpointBadge();
-            if (settingsStatus) settingsStatus.textContent = `Preset: ${preset.label}`;
-            this.setSettingsInlineFeedback(
-              'aiEndpointFeedback',
-              `Switched to ${preset.label} (${preset.defaultModel}).`,
-              'info'
-            );
-
-            if (preset.baseUrl.includes('antigravity') || preset.baseUrl.includes('8787')) {
-              this.service.aiAgent
-                .fetchAvailableModels({ baseUrl: preset.baseUrl })
-                .then((models) => {
-                  if (models.length > 0) {
-                    populateModelSelect(models, preset.defaultModel);
-                  }
-                })
-                .catch(() => {});
-            }
-          }
+          if (presetId) applyEndpointPreset(presetId);
         });
       });
+
+    // Categorized "All Provider Presets" dropdown
+    providerPresetSelect?.addEventListener('change', () => {
+      const presetId = providerPresetSelect.value;
+      if (presetId) {
+        applyEndpointPreset(presetId);
+      }
+    });
 
     // Toggle API key visibility
     const btnToggleApiKeyVis = this.getElement<HTMLButtonElement>('btnToggleApiKeyVis');
@@ -3618,17 +3857,19 @@ export class MeshEditorApp {
       this.toggleApiKeyVisibility(apiKeyInput, btnToggleApiKeyVis);
     });
 
-    // Fetch available models from OpenAI-compatible /models endpoint
-    const btnFetchModels = this.getElement<HTMLButtonElement>('btnFetchAIModels');
+    // Fetch available models from protocol-specific discovery endpoint (/models, /v1/models, /v1beta/models, /api/tags)
     btnFetchModels?.addEventListener('click', async () => {
+      const overrides = readProtocolOverridesFromDOM();
+      const info = AI_PROTOCOL_INFO[overrides.protocol];
       if (btnFetchModels) btnFetchModels.disabled = true;
       if (settingsStatus) settingsStatus.textContent = 'Fetching models...';
-      this.setSettingsInlineFeedback('aiEndpointFeedback', 'Fetching available models from /models...', 'info');
+      this.setSettingsInlineFeedback(
+        'aiEndpointFeedback',
+        `Fetching available models from ${info.modelsPathLabel}...`,
+        'info'
+      );
       try {
-        const models = await this.service.aiAgent.fetchAvailableModels({
-          baseUrl: endpointInput?.value.trim(),
-          apiKey: apiKeyInput?.value.trim(),
-        });
+        const models = await this.service.aiAgent.fetchAvailableModels(overrides);
         populateModelSelect(models);
         if (modelDatalist) {
           modelDatalist.innerHTML = models.map((m) => `<option value="${m}"></option>`).join('');
@@ -3647,26 +3888,21 @@ export class MeshEditorApp {
       }
     });
 
-    // Test OpenAI-compatible endpoint connection & model
+    // Test endpoint connection & model across any active protocol
     const btnTestEndpoint = this.getElement<HTMLButtonElement>('btnTestAIEndpoint');
     btnTestEndpoint?.addEventListener('click', async () => {
-      const baseUrl = endpointInput?.value.trim() || '';
-      const apiKey = apiKeyInput?.value.trim() || '';
-      const isCustomVisible = !!modelInput && modelInput.style.display !== 'none';
-      const model =
-        (isCustomVisible ? modelInput?.value.trim() : modelSelect?.value.trim()) ||
-        modelInput?.value.trim() ||
-        '';
+      const overrides = readProtocolOverridesFromDOM();
+      const info = AI_PROTOCOL_INFO[overrides.protocol];
 
       if (btnTestEndpoint) btnTestEndpoint.disabled = true;
       if (settingsStatus) settingsStatus.textContent = 'Testing...';
-      this.setSettingsInlineFeedback('aiEndpointFeedback', 'Testing endpoint connection...', 'info');
+      this.setSettingsInlineFeedback(
+        'aiEndpointFeedback',
+        `Testing ${info.shortBadge} endpoint connection...`,
+        'info'
+      );
       try {
-        const res = await this.service.aiAgent.testEndpointConnection({
-          baseUrl,
-          apiKey,
-          model,
-        });
+        const res = await this.service.aiAgent.testEndpointConnection(overrides);
         if (settingsStatus) {
           settingsStatus.textContent = res.ok ? 'Connected' : 'Test failed';
         }
@@ -8568,12 +8804,17 @@ export class MeshEditorApp {
       this.getElement<HTMLElement>('aiEndpointSummaryText') || this.getElement<HTMLElement>('aiEndpointBadge');
     const endpointDot = this.getElement<HTMLElement>('aiEndpointStatusDot');
     const cfg = this.service.aiAgent.getConfig();
+    const protocol = resolveProtocol(cfg);
+    const protoBadge =
+      protocol !== 'openai' ? `${AI_PROTOCOL_INFO[protocol]?.shortBadge || protocol} • ` : '';
     const isAgy =
       cfg.baseUrl.includes('/api/antigravity') ||
       cfg.baseUrl.includes('localhost:8787') ||
       cfg.baseUrl.includes('127.0.0.1:8787');
-    let host = isAgy ? 'Antigravity' : cfg.baseUrl;
-    if (!isAgy) {
+    const isCliBridge =
+      cfg.baseUrl.includes('localhost:8788') || cfg.baseUrl.includes('127.0.0.1:8788');
+    let host = isAgy ? 'Antigravity' : isCliBridge ? 'CLI Bridge' : cfg.baseUrl;
+    if (!isAgy && !isCliBridge) {
       try {
         const u = new URL(cfg.baseUrl);
         host = u.host;
@@ -8581,9 +8822,17 @@ export class MeshEditorApp {
         // Keep raw string if not a valid URL
       }
     }
-    const isLocal = isAgy || host.includes('localhost') || host.includes('127.0.0.1');
+    const isLocal = isAgy || isCliBridge || host.includes('localhost') || host.includes('127.0.0.1');
     const hasKey = !!cfg.apiKey || isLocal;
-    const keyStatus = isAgy ? 'Account ✓' : cfg.apiKey ? 'Key ✓' : isLocal ? 'Local' : 'No Key';
+    const keyStatus = isAgy
+      ? 'Account ✓'
+      : isCliBridge
+        ? 'Local CLI'
+        : cfg.apiKey
+          ? 'Key ✓'
+          : isLocal
+            ? 'Local'
+            : 'No Key';
     const minP = cfg.minPolygons ?? 200;
     const maxP = cfg.maxPolygons ?? 5000;
     const formatPoly = (n: number) => {
@@ -8598,7 +8847,7 @@ export class MeshEditorApp {
         ? ` • 3D: ${enabledNeural.map((p) => (p.id === 'trellis' ? 'TRELLIS' : p.id === 'hunyuan3d' ? 'Hunyuan3D' : 'Hi3D')).join('+')}`
         : '';
     if (endpointBadge) {
-      endpointBadge.textContent = `${cfg.model} • ${polySummary} • ${host} (${keyStatus})${neuralSuffix}`;
+      endpointBadge.textContent = `${cfg.model} • ${protoBadge}${polySummary} • ${host} (${keyStatus})${neuralSuffix}`;
     }
     if (endpointDot) {
       endpointDot.classList.toggle('is-ready', hasKey);
@@ -9175,8 +9424,10 @@ export class MeshEditorApp {
     }
 
     // Sync any edits in the settings inputs before calling the endpoint
+    const protocolSelect = this.getElement<HTMLSelectElement>('aiProtocolSelect');
     if (endpointInput?.value.trim() || modelInput?.value.trim() || apiKeyInput?.value !== undefined) {
       const updatedCfg = this.service.aiAgent.saveConfig({
+        protocol: (protocolSelect?.value || this.service.aiAgent.getConfig().protocol) as AIAgentProtocol,
         baseUrl: endpointInput?.value.trim() || this.service.aiAgent.getConfig().baseUrl,
         apiKey: apiKeyInput ? apiKeyInput.value.trim() : this.service.aiAgent.getConfig().apiKey,
         model: modelInput?.value.trim() || this.service.aiAgent.getConfig().model,

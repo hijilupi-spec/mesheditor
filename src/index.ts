@@ -21,6 +21,7 @@ export * from './ImageUtils';
 export * from './heightmap';
 export * from './tools';
 export * from './Neural3DGeneratorService';
+export * from './ai/LLMProviderAdapter';
 export * from './AIAgentService';
 export * from './MeshEditorService';
 export * from './MeshEditorApp';

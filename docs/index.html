@@ -65,6 +65,7 @@
           <li><a href="#overview" class="nav-link">Overview</a></li>
           <li><a href="#formats" class="nav-link">Formats</a></li>
           <li><a href="#ai-copilot" class="nav-link">Human + AI</a></li>
+          <li><a href="#llm-integrations" class="nav-link">LLM APIs</a></li>
           <li><a href="#neural-3d" class="nav-link">Neural 3D</a></li>
           <li><a href="#ai-textures" class="nav-link">AI Textures</a></li>
           <li><a href="#game-pipeline" class="nav-link">Game Pipeline</a></li>
@@ -232,7 +233,7 @@
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span><strong>Co-create with your own AI (BYO-AI):</strong> Connect local LLMs (oMLX, Ollama, LM Studio) or cloud models (Gemini, Claude, GPT), plus optional Neural 3D generators (TRELLIS 2, Hunyuan3D, Hi3D) and AI PBR texture synthesis.</span>
+              <span><strong>Co-create with your own AI (BYO-AI):</strong> Connect across 6 native LLM protocols &amp; 26 presets — cloud (Claude, Gemini, OpenAI, Azure, OpenRouter, DeepSeek) or local (Ollama Native, oMLX, LM Studio, llama.cpp, CLI bridges) — plus optional Neural 3D generators (TRELLIS 2, Hunyuan3D, Hi3D) and AI PBR texture synthesis.</span>
             </li>
             <li class="overview-bullet-item">
               <svg class="overview-bullet-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -275,8 +276,8 @@
           <div class="stat-label">In-Browser &amp; Zero File Uploads</div>
         </div>
         <div class="stat-item">
-          <div class="stat-val text-gradient-cyan">BYO-AI + 3D</div>
-          <div class="stat-label">oMLX, Ollama, Gemini + TRELLIS 2, Hunyuan3D, Hi3D</div>
+          <div class="stat-val text-gradient-cyan">6 LLM APIs + 3D</div>
+          <div class="stat-label">Claude, Gemini, OpenAI, Azure, Ollama + TRELLIS 2, Hunyuan3D, Hi3D</div>
         </div>
         <div class="stat-item">
           <div class="stat-val text-gradient-cyan">Desktop &amp; Touch</div>
@@ -517,15 +518,15 @@
             </div>
             <h3 class="card-title">Bring Your Own AI (BYO-AI)</h3>
             <p class="card-desc">
-              Connect to any OpenAI-compatible API endpoint with zero vendor lock-in. Use cloud models like <strong>Gemini 3.8 Flash &amp; Pro</strong>, <strong>Claude Sonnet</strong>, or <strong>GPT-4o</strong>, or run 100% private and offline on your own Apple Silicon Mac or GPU via <strong>oMLX</strong>, <strong>Ollama</strong>, and <strong>LM Studio</strong>.
+              Connect natively across <strong>6 API protocols</strong> and <strong>26 built-in presets</strong> with zero vendor lock-in. Use native <strong>Anthropic Claude</strong>, <strong>Google Gemini</strong>, <strong>OpenAI Chat &amp; Responses</strong>, or <strong>Azure OpenAI</strong>, or run 100% private and offline via <strong>Ollama Native</strong>, <strong>oMLX</strong>, <strong>LM Studio</strong>, <strong>llama.cpp</strong>, <strong>vLLM</strong>, and local CLI bridges.
             </p>
             <div class="card-tags">
-              <span class="card-tag">oMLX (Apple Silicon)</span>
-              <span class="card-tag">Antigravity Bridge</span>
-              <span class="card-tag">Gemini Flash</span>
-              <span class="card-tag">OpenAI</span>
-              <span class="card-tag">Ollama Local</span>
-              <span class="card-tag">LM Studio</span>
+              <span class="card-tag">Claude Native</span>
+              <span class="card-tag">Gemini Native</span>
+              <span class="card-tag">OpenAI &amp; Responses</span>
+              <span class="card-tag">Ollama Native</span>
+              <span class="card-tag">Azure OpenAI</span>
+              <span class="card-tag">Local CLI Bridges</span>
             </div>
           </div>
 
@@ -829,6 +830,185 @@
               <strong>How Collaborative Editing Works:</strong> Every prompt merges your live 3D scene selection, polygon budget, and optional viewport snapshot with modular skills. After the AI executes procedural, neural, PBR, or game-pipeline tools (and optionally self-critiques via a 4-view wireframe sheet), all edits commit as a single atomic Undo/Redo record so you can sculpt directly with 3D gizmos and pass the updated scene straight into the next turn.
             </figcaption>
           </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================================
+         MULTI-PROTOCOL LLM INTEGRATIONS
+         ========================================================================= -->
+    <section id="llm-integrations" class="section">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-tag">Multi-Protocol LLM Integrations</span>
+          <h2 class="section-title">Connect Any Cloud, Local, or Enterprise LLM &mdash; Natively.</h2>
+          <p class="section-desc">
+            Mesh Editor goes far beyond basic OpenAI-compatible endpoints. Choose from <strong>6 native API protocols</strong> and <strong>26 categorized provider presets</strong> in <strong>Settings &rarr; AI &rarr; LLM Provider &amp; API Endpoint</strong> &mdash; complete with protocol-aware model discovery, inline connection testing, tool calling, and Vision support.
+          </p>
+        </div>
+
+        <div class="ai-feature-card-grid" style="margin-bottom: 36px;">
+          <!-- Protocol 1: Anthropic / Claude Messages API -->
+          <div class="feature-card">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <h3 class="card-title">Anthropic / Claude Messages API</h3>
+            <p class="card-desc">
+              Native <code>/v1/messages</code> support with direct browser CORS (<code>anthropic-dangerous-direct-browser-access</code> + <code>x-api-key</code>), <strong>Prompt Caching</strong> (<code>cache_control</code>) on the system prompt &amp; 40+ tool schemas to slash latency and token costs, native <code>tool_use</code>/<code>tool_result</code>, and base64 Vision. Also works with Anthropic-compatible gateways like DeepSeek Anthropic, MiniMax, and LiteLLM.
+            </p>
+            <div class="card-tags">
+              <span class="card-tag">/v1/messages</span>
+              <span class="card-tag">Prompt Caching</span>
+              <span class="card-tag">Direct Browser CORS</span>
+              <span class="card-tag">Auto Cache Fallback</span>
+            </div>
+          </div>
+
+          <!-- Protocol 2: Google Gemini Native API -->
+          <div class="feature-card">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            </div>
+            <h3 class="card-title">Google Gemini Native API</h3>
+            <p class="card-desc">
+              Direct integration with <code>/v1beta/models/{model}:generateContent</code> via <code>x-goog-api-key</code> &mdash; bypassing OpenAI compatibility limits. Includes automatic JSON schema sanitization for <code>functionDeclarations</code>, <strong><code>thoughtSignature</code> preservation</strong> across multi-turn thinking tool calls, inline Vision (<code>inlineData</code>), and filtered <code>/v1beta/models</code> discovery.
+            </p>
+            <div class="card-tags">
+              <span class="card-tag">:generateContent</span>
+              <span class="card-tag">thoughtSignature</span>
+              <span class="card-tag">x-goog-api-key</span>
+              <span class="card-tag">Native Vision</span>
+            </div>
+          </div>
+
+          <!-- Protocol 3: OpenAI Chat Completions & Responses API -->
+          <div class="feature-card">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line></svg>
+            </div>
+            <h3 class="card-title">OpenAI Chat &amp; Responses APIs</h3>
+            <p class="card-desc">
+              Supports both universal <code>/v1/chat/completions</code> and OpenAI&rsquo;s next-generation <strong>Responses API</strong> (<code>/v1/responses</code>) featuring <code>instructions</code>, <code>input_image</code>, <code>function_call</code> / <code>function_call_output</code> loops, and configurable <strong>Reasoning Effort</strong> (<code>low</code> / <code>medium</code> / <code>high</code>) for reasoning models like o3, o4-mini, and GPT-4.1+.
+            </p>
+            <div class="card-tags">
+              <span class="card-tag">/v1/chat/completions</span>
+              <span class="card-tag">/v1/responses</span>
+              <span class="card-tag">Reasoning Effort</span>
+            </div>
+          </div>
+
+          <!-- Protocol 4: Ollama Native API -->
+          <div class="feature-card">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </div>
+            <h3 class="card-title">Ollama Native API (<code>/api/chat</code>)</h3>
+            <p class="card-desc">
+              Built specifically for reliable local 3D modeling with Ollama: lets you explicitly set the <strong>Context Window (<code>num_ctx</code> from 8K up to 128K, default 32K)</strong> so local models like <code>qwen2.5-coder</code> or <code>llama3.3</code> never truncate the 40+ modeling tool schemas, with native raw-base64 Vision and <code>/api/tags</code> model discovery.
+            </p>
+            <div class="card-tags">
+              <span class="card-tag">/api/chat &amp; /api/tags</span>
+              <span class="card-tag">Custom num_ctx</span>
+              <span class="card-tag">100% Offline</span>
+            </div>
+          </div>
+
+          <!-- Protocol 5: Azure OpenAI / AI Foundry -->
+          <div class="feature-card">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+            </div>
+            <h3 class="card-title">Azure OpenAI &amp; AI Foundry</h3>
+            <p class="card-desc">
+              Enterprise-ready authentication using the native <code>api-key</code> header and configurable <code>?api-version=</code> query parameter. Supports full deployment URLs (<code>/openai/deployments/{deployment}</code>), automatic deployment expansion from resource URLs, and modern Azure AI Foundry <code>/openai/v1</code> endpoints.
+            </p>
+            <div class="card-tags">
+              <span class="card-tag">api-key Header</span>
+              <span class="card-tag">api-version Config</span>
+              <span class="card-tag">Enterprise Ready</span>
+            </div>
+          </div>
+
+          <!-- Protocol 6: Cloud Gateways, Local Servers & CLI Bridges -->
+          <div class="feature-card">
+            <div class="card-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            </div>
+            <h3 class="card-title">Cloud Gateways, Local Servers &amp; CLI Bridges</h3>
+            <p class="card-desc">
+              Includes 1-click presets for <strong>OpenRouter</strong>, <strong>DeepSeek</strong>, <strong>Mistral</strong>, <strong>Groq</strong>, <strong>xAI (Grok)</strong>, <strong>Together AI</strong>, <strong>Fireworks AI</strong>, and <strong>GitHub Models</strong>, local servers (<strong>oMLX</strong>, <strong>LM Studio</strong>, <strong>llama.cpp</strong>, <strong>vLLM</strong>), plus zero-API-key <strong>Local CLI Bridges</strong> for Antigravity, Claude Code, Codex, and Gemini CLIs.
+            </p>
+            <div class="card-tags">
+              <span class="card-tag">OpenRouter / DeepSeek / Groq</span>
+              <span class="card-tag">oMLX / LM Studio / vLLM</span>
+              <span class="card-tag">CLI Bridges (No Key)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="plugin-section-grid">
+          <div>
+            <span class="section-tag">Guided Settings UX &amp; Local Bridges</span>
+            <h3 class="section-title" style="font-size: 28px;">Clear Configuration With Zero Guesswork.</h3>
+            <p class="section-desc" style="margin-bottom: 18px;">
+              Open <strong>Settings &rarr; AI</strong> to switch providers in one click. The dialog dynamically adapts hints, placeholders, authentication badges, and protocol-specific options to your selection.
+            </p>
+            <ul class="adapter-list" style="margin-bottom: 20px;">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><strong>Quick Presets + Categorized Provider Directory:</strong> Pick from 8 quick-access chips or browse all 26 presets grouped into <em>Native APIs</em>, <em>Cloud Providers</em>, and <em>Local Servers &amp; CLI Bridges</em>.</span>
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><strong>Live Auth &amp; Protocol Guidance:</strong> Displays the active auth header (e.g. <code>x-api-key</code>, <code>x-goog-api-key</code>, <code>api-key</code>, or <code>Bearer</code>) and clearly indicates whether an API key is required or optional.</span>
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><strong>Contextual Protocol Controls:</strong> Extra controls appear only when relevant &mdash; <em>Prompt Caching &amp; Max Output Tokens</em> for Claude, <em>Context Window (<code>num_ctx</code>)</em> for Ollama Native, <em>API Version</em> for Azure, and <em>Reasoning Effort</em> for OpenAI Responses.</span>
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span><strong>Local CLI Account Bridges:</strong> Run <code>npm run ai:bridge</code> (Antigravity CLI on <code>:8787</code>) or <code>npm run ai:cli-bridge</code> (Claude Code, Codex &amp; Gemini CLIs on <code>:8788</code>) to reuse existing authenticated CLI subscriptions without managing API keys.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="code-window">
+            <div class="code-header">
+              <div class="code-dots">
+                <span class="dot dot-red"></span>
+                <span class="dot dot-yellow"></span>
+                <span class="dot dot-green"></span>
+              </div>
+              <span class="code-title">LLM Protocols &amp; Programmatic Setup</span>
+              <span style="font-size: 11px; color: var(--accent-hover);">AIAgentEndpointConfig</span>
+            </div>
+            <pre class="code-body"><code><span class="code-cm">// Supported protocol values in Settings or Web Component API:</span>
+<span class="code-cm">// 'openai' | 'anthropic' | 'gemini' | 'openai_responses' | 'ollama_native' | 'azure_openai'</span>
+
+<span class="code-cm">// Example 1: Native Anthropic Claude with Prompt Caching (Browser CORS ready)</span>
+editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
+  protocol: <span class="code-str">'anthropic'</span>,
+  baseUrl: <span class="code-str">'https://api.anthropic.com/v1'</span>,
+  apiKey: <span class="code-str">'sk-ant-...'</span>,
+  model: <span class="code-str">'claude-sonnet-4-5'</span>,
+  promptCaching: <span class="code-kw">true</span>,
+  maxTokens: <span class="code-num">8192</span>
+});
+
+<span class="code-cm">// Example 2: Local Ollama Native with 32K context window for 40+ tools</span>
+editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
+  protocol: <span class="code-str">'ollama_native'</span>,
+  baseUrl: <span class="code-str">'http://localhost:11434'</span>,
+  model: <span class="code-str">'qwen2.5-coder:14b'</span>,
+  ollamaNumCtx: <span class="code-num">32768</span>
+});
+
+<span class="code-cm">// Example 3: Optional local CLI bridges (zero API keys)</span>
+<span class="code-cm">// $ npm run ai:bridge      -&gt; Antigravity CLI  (http://localhost:8787/v1)</span>
+<span class="code-cm">// $ npm run ai:cli-bridge  -&gt; Claude/Codex/Gemini CLI (http://localhost:8788/v1)</span></code></pre>
+          </div>
         </div>
       </div>
     </section>

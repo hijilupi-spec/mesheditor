@@ -4594,14 +4594,44 @@ progress.loading-spinner:indeterminate {
   letter-spacing: 0.5px;
 }
 
+.ai-preset-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.ai-field-sublabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.ai-field-hint {
+  font-size: 10.5px;
+  color: var(--text-muted, #8b949e);
+  line-height: 1.35;
+}
+
+.ai-field-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c9d1d9;
+}
+
 .ai-preset-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 5px;
 }
 
 .ai-chip-btn {
-  padding: 3px 7px;
+  padding: 3px 8px;
   font-size: 10.5px;
   border-radius: 4px;
   border: 1px solid var(--border-color);
@@ -4615,6 +4645,87 @@ progress.loading-spinner:indeterminate {
   background: rgba(88, 166, 255, 0.2);
   color: #fff;
   border-color: var(--accent-color);
+}
+
+.ai-chip-btn.active {
+  background: rgba(88, 166, 255, 0.24);
+  color: #ffffff;
+  border-color: var(--accent-color, #58a6ff);
+  font-weight: 600;
+}
+
+.ai-protocol-hint-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(88, 166, 255, 0.28);
+  background: rgba(88, 166, 255, 0.07);
+}
+
+.ai-protocol-hint-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-protocol-auth-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: rgba(88, 166, 255, 0.18);
+  color: #a5d6ff;
+  border: 1px solid rgba(88, 166, 255, 0.35);
+}
+
+.ai-protocol-hint-text {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #c9d1d9;
+}
+
+.ai-key-req-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted, #8b949e);
+}
+
+.ai-key-req-badge.is-required {
+  color: #f2cc60;
+}
+
+.ai-protocol-options-box {
+  padding: 9px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ai-protocol-opts-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-inline-check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.ai-inline-check-label input[type='checkbox'] {
+  accent-color: var(--accent-color, #58a6ff);
+  cursor: pointer;
 }
 
 .ai-form-group {

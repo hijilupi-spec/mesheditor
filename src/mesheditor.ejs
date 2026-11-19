@@ -1051,26 +1051,93 @@
             hidden="until-found"
           >
             <div class="settings-tab-panel-inner">
-              <!-- Section 1: OpenAI-Compatible Endpoint -->
+              <!-- Section 1: LLM Provider & API Endpoint -->
               <div class="settings-section">
                 <div class="settings-section-header-row">
-                  <h4 class="settings-section-title"><i class="app-icon" data-lucide="cpu"></i> OpenAI-Compatible Endpoint</h4>
+                  <h4 class="settings-section-title"><i class="app-icon" data-lucide="cpu"></i> LLM Provider &amp; API Endpoint</h4>
                   <div class="settings-section-header-actions">
                     <span id="aiSettingsStatus" class="ai-settings-status"></span>
-                    <button type="button" class="ai-chip-btn" id="btnTestAIEndpoint" title="Test OpenAI-Compatible Endpoint &amp; Model">Test</button>
+                    <button type="button" class="ai-chip-btn" id="btnTestAIEndpoint" title="Test configured AI endpoint, authentication &amp; model">Test Connection</button>
                   </div>
                 </div>
 
                 <div class="setting-item">
+                  <div class="ai-preset-header-row">
+                    <span class="ai-field-sublabel">Quick Presets</span>
+                    <span class="ai-field-hint">Select a provider to auto-fill protocol, endpoint URL, and default model.</span>
+                  </div>
                   <div class="ai-preset-chips" id="aiPresetChips">
-                    <button type="button" class="ai-chip-btn" data-preset="antigravity">Antigravity</button>
-                    <button type="button" class="ai-chip-btn" data-preset="gemini">Gemini Flash</button>
-                    <button type="button" class="ai-chip-btn" data-preset="gemini-pro">Gemini Pro</button>
-                    <button type="button" class="ai-chip-btn" data-preset="openai">OpenAI</button>
-                    <button type="button" class="ai-chip-btn" data-preset="openrouter">OpenRouter</button>
-                    <button type="button" class="ai-chip-btn" data-preset="omlx">oMLX</button>
-                    <button type="button" class="ai-chip-btn" data-preset="ollama">Ollama</button>
-                    <button type="button" class="ai-chip-btn" data-preset="lmstudio">LM Studio</button>
+                    <button type="button" class="ai-chip-btn" data-preset="antigravity" title="Local Antigravity Account Bridge (no API key required)">Antigravity</button>
+                    <button type="button" class="ai-chip-btn" data-preset="anthropic" title="Native Anthropic Claude Messages API with Prompt Caching &amp; direct browser CORS">Claude</button>
+                    <button type="button" class="ai-chip-btn" data-preset="gemini-native" title="Native Google Gemini REST API (:generateContent)">Gemini Native</button>
+                    <button type="button" class="ai-chip-btn" data-preset="openai" title="OpenAI Chat Completions API">OpenAI</button>
+                    <button type="button" class="ai-chip-btn" data-preset="openai-responses" title="OpenAI Responses API (/v1/responses) with reasoning effort">Responses API</button>
+                    <button type="button" class="ai-chip-btn" data-preset="openrouter" title="OpenRouter multi-provider gateway">OpenRouter</button>
+                    <button type="button" class="ai-chip-btn" data-preset="ollama-native" title="Local Ollama Native API (/api/chat) with custom context window">Ollama Native</button>
+                    <button type="button" class="ai-chip-btn" data-preset="lmstudio" title="Local LM Studio server">LM Studio</button>
+                  </div>
+
+                  <div class="settings-ai-grid">
+                    <div class="ai-form-group">
+                      <label for="aiProviderPresetSelect">All Provider Presets</label>
+                      <select id="aiProviderPresetSelect" class="ai-select tool-select" title="Choose from all supported Cloud, Native, and Local LLM providers">
+                        <option value="">Custom Endpoint...</option>
+                        <optgroup label="Native APIs (Recommended)">
+                          <option value="antigravity">Antigravity (Local Account Bridge)</option>
+                          <option value="anthropic">Anthropic Claude (Native Messages API)</option>
+                          <option value="gemini-native">Google Gemini Flash (Native API)</option>
+                          <option value="gemini-native-pro">Google Gemini Pro (Native API)</option>
+                          <option value="openai">OpenAI (Chat Completions)</option>
+                          <option value="openai-responses">OpenAI (Responses API)</option>
+                          <option value="azure-openai">Azure OpenAI / AI Foundry</option>
+                        </optgroup>
+                        <optgroup label="Cloud Providers (OpenAI &amp; Anthropic Compatible)">
+                          <option value="openrouter">OpenRouter (Multi-Provider)</option>
+                          <option value="deepseek">DeepSeek (OpenAI API)</option>
+                          <option value="deepseek-anthropic">DeepSeek (Anthropic-Compatible API)</option>
+                          <option value="mistral">Mistral AI</option>
+                          <option value="groq">Groq (Fast Inference)</option>
+                          <option value="xai">xAI (Grok)</option>
+                          <option value="together">Together AI</option>
+                          <option value="fireworks">Fireworks AI</option>
+                          <option value="github-models">GitHub Models</option>
+                          <option value="gemini">Gemini 3 Flash (OpenAI Compat)</option>
+                          <option value="gemini-pro">Gemini 3.1 Pro (OpenAI Compat)</option>
+                        </optgroup>
+                        <optgroup label="Local Servers &amp; CLI Bridges">
+                          <option value="ollama-native">Ollama (Native API — Custom Context)</option>
+                          <option value="ollama">Ollama (OpenAI Compat)</option>
+                          <option value="omlx">oMLX (Local Apple Silicon)</option>
+                          <option value="lmstudio">LM Studio (Local)</option>
+                          <option value="llamacpp">llama.cpp Server (Local)</option>
+                          <option value="vllm">vLLM Server (Self-Hosted)</option>
+                          <option value="cli-bridge-claude">Claude Code CLI Bridge (Local)</option>
+                          <option value="cli-bridge-codex">Codex CLI Bridge (Local)</option>
+                          <option value="cli-bridge-gemini">Gemini CLI Bridge (Local)</option>
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    <div class="ai-form-group">
+                      <label for="aiProtocolSelect">API Protocol</label>
+                      <select id="aiProtocolSelect" class="ai-select tool-select" title="Wire protocol used to communicate with the LLM endpoint">
+                        <option value="openai">OpenAI Chat Completions (/v1/chat/completions)</option>
+                        <option value="anthropic">Anthropic / Claude Messages (/v1/messages)</option>
+                        <option value="gemini">Google Gemini Native (:generateContent)</option>
+                        <option value="openai_responses">OpenAI Responses API (/v1/responses)</option>
+                        <option value="ollama_native">Ollama Native (/api/chat)</option>
+                        <option value="azure_openai">Azure OpenAI / AI Foundry (api-key)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div id="aiProtocolHintBox" class="ai-protocol-hint-box" role="note">
+                    <div class="ai-protocol-hint-header">
+                      <span id="aiProtocolAuthBadge" class="ai-protocol-auth-badge">Authorization: Bearer</span>
+                    </div>
+                    <div id="aiProtocolHintText" class="ai-protocol-hint-text">
+                      Universal standard used by OpenAI, OpenRouter, DeepSeek, Mistral, Groq, xAI, Antigravity Bridge, LM Studio, oMLX, vLLM, and llama.cpp.
+                    </div>
                   </div>
 
                   <div class="settings-ai-grid">
@@ -1086,7 +1153,10 @@
                     </div>
 
                     <div class="ai-form-group">
-                      <label for="aiApiKeyInput">API Key</label>
+                      <div class="ai-slider-header" style="margin-bottom: 2px;">
+                        <label for="aiApiKeyInput">API Key</label>
+                        <span id="aiApiKeyRequirementBadge" class="ai-key-req-badge">Optional for local</span>
+                      </div>
                       <div class="ai-input-row">
                         <input
                           type="text"
@@ -1122,14 +1192,12 @@
                         <option value="gemini-4-argon-medium">gemini-4-argon-medium</option>
                         <option value="gemini-4-argon-high">gemini-4-argon-high</option>
                         <option value="gemini-4-argon-low">gemini-4-argon-low</option>
+                        <option value="claude-sonnet-4-5">claude-sonnet-4-5</option>
+                        <option value="claude-opus-4-1">claude-opus-4-1</option>
                         <option value="claude-sonnet-5-5-medium">claude-sonnet-5-5-medium</option>
-                        <option value="claude-sonnet-5-5-high">claude-sonnet-5-5-high</option>
-                        <option value="claude-sonnet-5-5-low">claude-sonnet-5-5-low</option>
                         <option value="claude-opus-5-5-medium">claude-opus-5-5-medium</option>
-                        <option value="claude-opus-5-5-high">claude-opus-5-5-high</option>
-                        <option value="claude-opus-5-5-low">claude-opus-5-5-low</option>
-                        <option value="gpt-oss-120b-medium">gpt-oss-120b-medium</option>
                         <option value="gpt-4o">gpt-4o</option>
+                        <option value="gpt-4.1">gpt-4.1</option>
                         <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
                         <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
                         <option value="qwen2.5-coder:14b">qwen2.5-coder:14b</option>
@@ -1147,6 +1215,96 @@
                       </button>
                     </div>
                   </div>
+
+                  <!-- Contextual Protocol-Specific Options (shown only when relevant to active protocol) -->
+                  <div id="aiProtocolOptionsContainer" class="ai-protocol-options-box" style="display: none;">
+                    <!-- Anthropic Options -->
+                    <div id="aiProtocolOpts_anthropic" class="ai-protocol-opts-group" style="display: none;">
+                      <div class="settings-ai-grid">
+                        <div class="ai-form-group">
+                          <label class="ai-inline-check-label" for="aiAnthropicCachingCheck">
+                            <input type="checkbox" id="aiAnthropicCachingCheck" checked />
+                            <span>Enable Prompt Caching</span>
+                          </label>
+                          <span class="ai-field-hint">Caches system prompt &amp; 40+ tool schemas to cut latency and token costs.</span>
+                        </div>
+                        <div class="ai-form-group">
+                          <label for="aiAnthropicMaxTokensInput">Max Output Tokens</label>
+                          <input
+                            type="number"
+                            id="aiAnthropicMaxTokensInput"
+                            class="ai-input"
+                            min="256"
+                            max="64000"
+                            step="256"
+                            value="8192"
+                          />
+                          <span class="ai-field-hint">Required by Anthropic Messages API (default: 8192).</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Ollama Native Options -->
+                    <div id="aiProtocolOpts_ollama_native" class="ai-protocol-opts-group" style="display: none;">
+                      <div class="ai-form-group">
+                        <label for="aiOllamaNumCtxSelect">Context Window (num_ctx)</label>
+                        <select id="aiOllamaNumCtxSelect" class="ai-select tool-select">
+                          <option value="8192">8,192 tokens (Low VRAM)</option>
+                          <option value="16384">16,384 tokens (Standard)</option>
+                          <option value="32768" selected>32,768 tokens (Recommended for 40+ tools)</option>
+                          <option value="65536">65,536 tokens (Large Multi-Step Scenes)</option>
+                          <option value="131072">131,072 tokens (Max Context)</option>
+                        </select>
+                        <span class="ai-field-hint">Prevents local Ollama models from truncating the 3D modeling tool definitions.</span>
+                      </div>
+                    </div>
+
+                    <!-- Azure OpenAI Options -->
+                    <div id="aiProtocolOpts_azure_openai" class="ai-protocol-opts-group" style="display: none;">
+                      <div class="ai-form-group">
+                        <label for="aiAzureApiVersionInput">Azure API Version</label>
+                        <input
+                          type="text"
+                          id="aiAzureApiVersionInput"
+                          class="ai-input"
+                          value="2024-10-21"
+                          placeholder="2024-10-21"
+                          autocomplete="off"
+                        />
+                        <span class="ai-field-hint">Appended as <code>?api-version=...</code> to deployment requests (leave blank for Azure AI Foundry <code>/openai/v1</code>).</span>
+                      </div>
+                    </div>
+
+                    <!-- OpenAI Responses API Options -->
+                    <div id="aiProtocolOpts_openai_responses" class="ai-protocol-opts-group" style="display: none;">
+                      <div class="settings-ai-grid">
+                        <div class="ai-form-group">
+                          <label for="aiReasoningEffortSelect">Reasoning Effort</label>
+                          <select id="aiReasoningEffortSelect" class="ai-select tool-select">
+                            <option value="">Auto (Model Default)</option>
+                            <option value="low">Low (Fastest)</option>
+                            <option value="medium">Medium (Balanced)</option>
+                            <option value="high">High (Deep Spatial Reasoning)</option>
+                          </select>
+                          <span class="ai-field-hint">Used by OpenAI reasoning models (o3, o4-mini, GPT-5).</span>
+                        </div>
+                        <div class="ai-form-group">
+                          <label for="aiResponsesMaxTokensInput">Max Output Tokens (Optional)</label>
+                          <input
+                            type="number"
+                            id="aiResponsesMaxTokensInput"
+                            class="ai-input"
+                            min="256"
+                            max="64000"
+                            step="256"
+                            placeholder="Default"
+                          />
+                          <span class="ai-field-hint">Optional upper limit for <code>max_output_tokens</code>.</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div id="aiEndpointFeedback" class="settings-inline-feedback" role="status" aria-live="polite" style="display: none;"></div>
                 </div>
               </div>

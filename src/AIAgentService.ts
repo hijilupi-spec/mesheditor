@@ -26,6 +26,7 @@ import { MeshEditorService } from './MeshEditorService';
 import {
   AIAgentChatMessage,
   AIAgentEndpointConfig,
+  AIAgentProtocol,
   AIAgentRequestOptions,
   AIAgentSkillDefinition,
   AIAgentToolExecutionStep,
@@ -35,6 +36,37 @@ import {
   Neural3DProviderConfig,
   Neural3DProvidersMap,
 } from './types';
+import {
+  AI_ENDPOINT_PRESETS,
+  AI_PROTOCOL_INFO,
+  AIProtocolInfo,
+  buildProtocolChatPayload,
+  buildProtocolHeaders,
+  buildProtocolTestPayload,
+  DEFAULT_ANTHROPIC_MAX_TOKENS,
+  DEFAULT_AZURE_API_VERSION,
+  DEFAULT_OLLAMA_NUM_CTX,
+  EndpointPreset,
+  extractProtocolErrorMessage,
+  findMatchingPreset,
+  normalizeProtocolResponse,
+  parseModelsResponse,
+  resolveChatEndpointUrl,
+  resolveModelsEndpointUrl,
+  resolveProtocol,
+} from './ai/LLMProviderAdapter';
+export {
+  AI_ENDPOINT_PRESETS,
+  AI_PROTOCOL_INFO,
+  DEFAULT_ANTHROPIC_MAX_TOKENS,
+  DEFAULT_AZURE_API_VERSION,
+  DEFAULT_OLLAMA_NUM_CTX,
+  findMatchingPreset,
+  resolveProtocol,
+  resolveChatEndpointUrl,
+  resolveModelsEndpointUrl,
+} from './ai/LLMProviderAdapter';
+export type { AIProtocolInfo, EndpointPreset } from './ai/LLMProviderAdapter';
 import {
   createDefaultNeural3DProviders,
   NEURAL_3D_PROTOCOL_DEFAULTS,
@@ -87,10 +119,16 @@ if (typeof globalThis !== 'undefined') {
 export const AI_AGENT_STORAGE_KEY = 'mesheditor_ai_agent_config';
 
 export const DEFAULT_AI_AGENT_CONFIG: AIAgentEndpointConfig = {
+  protocol: 'openai',
   baseUrl: '/api/antigravity/v1',
   apiKey: '',
   model: 'gemini-3.8-flash-medium',
   temperature: 0.2,
+  maxTokens: DEFAULT_ANTHROPIC_MAX_TOKENS,
+  promptCaching: true,
+  ollamaNumCtx: DEFAULT_OLLAMA_NUM_CTX,
+  azureApiVersion: DEFAULT_AZURE_API_VERSION,
+  reasoningEffort: '',
   maxIterations: 12,
   minPolygons: 200,
   maxPolygons: 5000,
@@ -105,73 +143,6 @@ export const DEFAULT_AI_AGENT_CONFIG: AIAgentEndpointConfig = {
   imageGeneratorProviders: createDefaultImageGeneratorProviders(),
   skillStates: {},
 };
-
-export interface EndpointPreset {
-  id: string;
-  label: string;
-  baseUrl: string;
-  defaultModel: string;
-  requiresKey: boolean;
-}
-
-export const AI_ENDPOINT_PRESETS: EndpointPreset[] = [
-  {
-    id: 'antigravity',
-    label: 'Antigravity (Local Account)',
-    baseUrl: '/api/antigravity/v1',
-    defaultModel: 'gemini-3.8-flash-medium',
-    requiresKey: false,
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    baseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4o',
-    requiresKey: true,
-  },
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    defaultModel: 'openai/gpt-4o',
-    requiresKey: true,
-  },
-  {
-    id: 'gemini',
-    label: 'Gemini 3 Flash (OpenAI API)',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModel: 'gemini-3-flash-preview',
-    requiresKey: true,
-  },
-  {
-    id: 'gemini-pro',
-    label: 'Gemini 3.1 Pro (OpenAI API)',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModel: 'gemini-3.1-pro-preview',
-    requiresKey: true,
-  },
-  {
-    id: 'omlx',
-    label: 'oMLX (Local Apple Silicon)',
-    baseUrl: 'http://localhost:8000/v1',
-    defaultModel: 'mlx-community/Qwen2.5-Coder-32B-Instruct-4bit',
-    requiresKey: false,
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama (Local)',
-    baseUrl: 'http://localhost:11434/v1',
-    defaultModel: 'qwen2.5-coder:14b',
-    requiresKey: false,
-  },
-  {
-    id: 'lmstudio',
-    label: 'LM Studio (Local)',
-    baseUrl: 'http://localhost:1234/v1',
-    defaultModel: 'local-model',
-    requiresKey: false,
-  },
-];
 
 /* =========================================================================
    BUILT-IN BABYLON.JS MODELING SKILLS (Loaded from /skills directory)
@@ -351,12 +322,36 @@ export class AIAgentService {
       }
       const baseUrl = typeof parsed.baseUrl === 'string' ? parsed.baseUrl : DEFAULT_AI_AGENT_CONFIG.baseUrl;
       const rawModel = typeof parsed.model === 'string' ? parsed.model : DEFAULT_AI_AGENT_CONFIG.model;
+      const protocol = resolveProtocol(parsed);
       return {
+        protocol,
         baseUrl,
         apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : DEFAULT_AI_AGENT_CONFIG.apiKey,
         model: this.normalizeModelName(rawModel, baseUrl),
         temperature:
           typeof parsed.temperature === 'number' ? parsed.temperature : DEFAULT_AI_AGENT_CONFIG.temperature,
+        maxTokens:
+          typeof parsed.maxTokens === 'number' && parsed.maxTokens > 0
+            ? parsed.maxTokens
+            : DEFAULT_AI_AGENT_CONFIG.maxTokens,
+        promptCaching:
+          typeof parsed.promptCaching === 'boolean'
+            ? parsed.promptCaching
+            : DEFAULT_AI_AGENT_CONFIG.promptCaching,
+        ollamaNumCtx:
+          typeof parsed.ollamaNumCtx === 'number' && parsed.ollamaNumCtx >= 2048
+            ? parsed.ollamaNumCtx
+            : DEFAULT_AI_AGENT_CONFIG.ollamaNumCtx,
+        azureApiVersion:
+          typeof parsed.azureApiVersion === 'string' && parsed.azureApiVersion.trim()
+            ? parsed.azureApiVersion.trim()
+            : DEFAULT_AI_AGENT_CONFIG.azureApiVersion,
+        reasoningEffort:
+          parsed.reasoningEffort === 'low' ||
+          parsed.reasoningEffort === 'medium' ||
+          parsed.reasoningEffort === 'high'
+            ? parsed.reasoningEffort
+            : '',
         maxIterations:
           typeof parsed.maxIterations === 'number' ? parsed.maxIterations : DEFAULT_AI_AGENT_CONFIG.maxIterations,
         minPolygons:
@@ -399,6 +394,9 @@ export class AIAgentService {
     }
 
     const mergedBaseUrl = newConfig.baseUrl !== undefined ? newConfig.baseUrl : this.config.baseUrl;
+    const mergedProtocol = resolveProtocol(
+      newConfig.protocol !== undefined ? newConfig : this.config
+    );
     const mergedModel =
       newConfig.model !== undefined
         ? this.normalizeModelName(newConfig.model, mergedBaseUrl)
@@ -426,6 +424,7 @@ export class AIAgentService {
     this.config = {
       ...this.config,
       ...newConfig,
+      protocol: mergedProtocol,
       baseUrl: mergedBaseUrl,
       model: mergedModel,
       neural3DProviders: mergedProviders,
@@ -638,42 +637,47 @@ export class AIAgentService {
   }
 
   /**
-   * Resolves the OpenAI-compatible chat completions URL from a user-provided baseUrl.
+   * Resolves the protocol-specific chat/generation endpoint URL from the active or provided configuration.
    */
-  public getChatCompletionsUrl(baseUrl?: string): string {
-    const raw = (baseUrl ?? this.config.baseUrl ?? DEFAULT_AI_AGENT_CONFIG.baseUrl).trim().replace(/\/+$/, '');
-    if (raw.endsWith('/chat/completions')) {
-      return raw;
-    }
-    return `${raw}/chat/completions`;
+  public getChatCompletionsUrl(
+    baseUrl?: string,
+    overrideConfig?: Partial<AIAgentEndpointConfig>
+  ): string {
+    const cfg: Partial<AIAgentEndpointConfig> = {
+      ...this.config,
+      ...overrideConfig,
+      baseUrl: baseUrl ?? overrideConfig?.baseUrl ?? this.config.baseUrl ?? DEFAULT_AI_AGENT_CONFIG.baseUrl,
+    };
+    const activeModel = this.normalizeModelName(
+      cfg.model || DEFAULT_AI_AGENT_CONFIG.model,
+      cfg.baseUrl
+    );
+    return resolveChatEndpointUrl(cfg, activeModel);
   }
 
   /**
-   * Resolves the OpenAI-compatible models list URL from a user-provided baseUrl.
+   * Resolves the protocol-specific models discovery URL from the active or provided configuration.
    */
-  public getModelsUrl(baseUrl?: string): string {
-    const raw = (baseUrl ?? this.config.baseUrl ?? DEFAULT_AI_AGENT_CONFIG.baseUrl).trim().replace(/\/+$/, '');
-    if (raw.endsWith('/chat/completions')) {
-      return raw.replace(/\/chat\/completions$/, '/models');
-    }
-    if (raw.endsWith('/models')) {
-      return raw;
-    }
-    return `${raw}/models`;
+  public getModelsUrl(
+    baseUrl?: string,
+    overrideConfig?: Partial<AIAgentEndpointConfig>
+  ): string {
+    const cfg: Partial<AIAgentEndpointConfig> = {
+      ...this.config,
+      ...overrideConfig,
+      baseUrl: baseUrl ?? overrideConfig?.baseUrl ?? this.config.baseUrl ?? DEFAULT_AI_AGENT_CONFIG.baseUrl,
+    };
+    return resolveModelsEndpointUrl(cfg);
   }
 
   /**
-   * Queries GET {baseUrl}/models to discover available models on the OpenAI-compatible endpoint.
+   * Queries the configured provider's model discovery endpoint (/models, /v1/models, /v1beta/models, or /api/tags).
    */
   public async fetchAvailableModels(overrideConfig?: Partial<AIAgentEndpointConfig>): Promise<string[]> {
     const cfg = { ...this.config, ...overrideConfig };
-    const url = this.getModelsUrl(cfg.baseUrl);
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-    };
-    if (cfg.apiKey && cfg.apiKey.trim()) {
-      headers['Authorization'] = `Bearer ${cfg.apiKey.trim()}`;
-    }
+    const protocol = resolveProtocol(cfg);
+    const url = this.getModelsUrl(cfg.baseUrl, cfg);
+    const headers = buildProtocolHeaders(cfg, true);
 
     const fetchFn = this.customFetch || globalThis.fetch.bind(globalThis);
     let res: Response;
@@ -701,53 +705,37 @@ export class AIAgentService {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      throw new Error(`HTTP ${res.status}: ${errText || res.statusText}`);
+      throw new Error(`HTTP ${res.status}: ${extractProtocolErrorMessage(errText, res.statusText)}`);
     }
 
     const json = await res.json();
-    const list: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : [];
-    const isGeminiEndpoint = url.toLowerCase().includes('generativelanguage.googleapis.com');
-    const ids = list
-      .map((item) => {
-        const rawId = typeof item === 'string' ? item : item?.id || item?.name || '';
-        return isGeminiEndpoint ? String(rawId).replace(/^models\//i, '') : String(rawId);
-      })
-      .filter((id): id is string => typeof id === 'string' && id.length > 0);
-    return Array.from(new Set(ids));
+    return parseModelsResponse(protocol, json, url);
   }
 
   /**
    * Tests connectivity, authentication, and model availability against the configured
-   * OpenAI-compatible chat completions endpoint using a minimal prompt.
+   * LLM endpoint across all supported protocols using a minimal prompt.
    */
   public async testEndpointConnection(
     overrideConfig?: Partial<AIAgentEndpointConfig>
   ): Promise<{ ok: boolean; message: string; status?: number; latencyMs?: number; model?: string }> {
     const cfg = { ...this.config, ...overrideConfig };
+    const protocol = resolveProtocol(cfg);
     const rawBaseUrl = (cfg.baseUrl ?? '').trim();
     if (!rawBaseUrl) {
       return { ok: false, message: 'Base URL is required.' };
     }
 
-    const url = this.getChatCompletionsUrl(rawBaseUrl);
-    const activeModel = this.normalizeModelName(cfg.model || DEFAULT_AI_AGENT_CONFIG.model, url).trim();
+    const activeModel = this.normalizeModelName(
+      cfg.model || DEFAULT_AI_AGENT_CONFIG.model,
+      rawBaseUrl
+    ).trim();
     if (!activeModel) {
       return { ok: false, message: 'Model ID is required.' };
     }
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
-    if (cfg.apiKey && cfg.apiKey.trim()) {
-      headers['Authorization'] = `Bearer ${cfg.apiKey.trim()}`;
-    }
-
-    const baseMessages = [{ role: 'user', content: 'Reply with OK.' }];
-    const buildPayload = (minimal: boolean) =>
-      minimal
-        ? { model: activeModel, messages: baseMessages }
-        : { model: activeModel, messages: baseMessages, max_tokens: 8, temperature: 0 };
+    const url = resolveChatEndpointUrl({ ...cfg, baseUrl: rawBaseUrl }, activeModel);
+    const headers = buildProtocolHeaders(cfg, false);
 
     const fetchFn = this.customFetch || globalThis.fetch.bind(globalThis);
     const timeoutMs = 20000;
@@ -790,14 +778,14 @@ export class AIAgentService {
     };
 
     try {
-      let res = await postRequest(buildPayload(false));
+      let res = await postRequest(buildProtocolTestPayload(cfg, activeModel, false));
       let errText = '';
 
       if (!res.ok) {
         errText = await res.text().catch(() => '');
-        // Some reasoning models reject max_tokens or temperature: 0 — retry once with minimal payload
-        if (res.status === 400 && /max_tokens|temperature/i.test(errText)) {
-          res = await postRequest(buildPayload(true));
+        // Some reasoning models reject max_tokens / max_output_tokens / temperature: 0 — retry once with minimal payload
+        if (res.status === 400 && /max_tokens|max_output_tokens|temperature|reasoning/i.test(errText)) {
+          res = await postRequest(buildProtocolTestPayload(cfg, activeModel, true));
           if (!res.ok) {
             errText = await res.text().catch(() => '');
           }
@@ -807,16 +795,7 @@ export class AIAgentService {
       const latencyMs = Date.now() - startTime;
 
       if (!res.ok) {
-        let friendlyError = errText || res.statusText || 'Unknown error';
-        try {
-          const parsedErr = JSON.parse(errText);
-          const errObj = Array.isArray(parsedErr) ? parsedErr[0]?.error : parsedErr?.error;
-          if (errObj?.message) {
-            friendlyError = errObj.message;
-          }
-        } catch {
-          // Keep raw text
-        }
+        const friendlyError = extractProtocolErrorMessage(errText, res.statusText || 'Unknown error');
         return {
           ok: false,
           status: res.status,
@@ -826,9 +805,9 @@ export class AIAgentService {
         };
       }
 
-      let data: any;
+      let rawData: any;
       try {
-        data = await res.json();
+        rawData = await res.json();
       } catch {
         return {
           ok: false,
@@ -839,24 +818,28 @@ export class AIAgentService {
         };
       }
 
-      if (data?.error?.message) {
+      if (rawData?.error?.message || (typeof rawData?.error === 'string' && rawData.error)) {
         return {
           ok: false,
           status: res.status,
           latencyMs,
           model: activeModel,
-          message: `Endpoint error: ${data.error.message}`,
+          message: `Endpoint error: ${rawData?.error?.message || rawData.error}`,
         };
       }
 
+      const normalized = normalizeProtocolResponse(protocol, rawData, activeModel);
       const resolvedModel =
-        typeof data?.model === 'string' && data.model.trim() ? data.model.trim() : activeModel;
+        typeof normalized?.model === 'string' && normalized.model.trim()
+          ? normalized.model.trim()
+          : activeModel;
+      const protoLabel = AI_PROTOCOL_INFO[protocol]?.shortBadge || protocol;
       return {
         ok: true,
         status: res.status,
         latencyMs,
         model: resolvedModel,
-        message: `Connected to ${resolvedModel} (${latencyMs} ms).`,
+        message: `Connected to ${resolvedModel} via ${protoLabel} (${latencyMs} ms).`,
       };
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
@@ -1752,7 +1735,7 @@ ${textureRule}
         const choice = responseData?.choices?.[0];
         const message = choice?.message;
         if (!message) {
-          throw new Error('Invalid response from OpenAI-compatible endpoint (no message in choices[0]).');
+          throw new Error('Invalid response from AI endpoint (no message returned).');
         }
 
         const assistantContent =
@@ -2104,27 +2087,21 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
   }
 
   private async callChatCompletions(messages: any[], includeTools: boolean, signal?: AbortSignal): Promise<any> {
-    const url = this.getChatCompletionsUrl();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
-
-    if (this.config.apiKey && this.config.apiKey.trim()) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey.trim()}`;
-    }
-
-    const activeModel = this.normalizeModelName(this.config.model || DEFAULT_AI_AGENT_CONFIG.model, url);
-    const body: Record<string, any> = {
-      model: activeModel,
+    const protocol = resolveProtocol(this.config);
+    const activeModel = this.normalizeModelName(
+      this.config.model || DEFAULT_AI_AGENT_CONFIG.model,
+      this.config.baseUrl
+    );
+    const url = resolveChatEndpointUrl(this.config, activeModel);
+    const headers = buildProtocolHeaders(this.config, false);
+    const openAITools = includeTools ? this.getOpenAITools() : [];
+    const body = buildProtocolChatPayload(
+      this.config,
       messages,
-      temperature: this.config.temperature ?? 0.2,
-    };
-
-    if (includeTools) {
-      body.tools = this.getOpenAITools();
-      body.tool_choice = 'auto';
-    }
+      openAITools,
+      includeTools,
+      activeModel
+    );
 
     const fetchFn = this.customFetch || globalThis.fetch.bind(globalThis);
     let res: Response;
@@ -2135,7 +2112,7 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
     }, timeoutMs);
 
     // Combine caller signal with timeout controller
-    let effectiveSignal = timeoutController.signal;
+    const effectiveSignal = timeoutController.signal;
     if (signal) {
       if (signal.aborted) {
         clearTimeout(timer);
@@ -2186,6 +2163,34 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
     if (!res.ok) {
       let errText = await res.text().catch(() => '');
 
+      // Retry Anthropic-compatible endpoints without cache_control if rejected with HTTP 400
+      if (
+        protocol === 'anthropic' &&
+        res.status === 400 &&
+        /cache_control|ephemeral/i.test(errText) &&
+        !signal?.aborted
+      ) {
+        const retryBody = buildProtocolChatPayload(
+          this.config,
+          messages,
+          openAITools,
+          includeTools,
+          activeModel,
+          { disableCacheControl: true }
+        );
+        const retryRes = await fetchFn(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(retryBody),
+          signal,
+        });
+        if (retryRes.ok) {
+          return normalizeProtocolResponse(protocol, await retryRes.json(), activeModel);
+        }
+        res = retryRes;
+        errText = await retryRes.text().catch(() => '');
+      }
+
       // Retry transient Antigravity CLI conversation-initialization races (e.g. empty conversation id)
       const isAgyBridge =
         url.toLowerCase().includes('/api/antigravity') ||
@@ -2209,7 +2214,7 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
               signal,
             });
             if (retryRes.ok) {
-              return await retryRes.json();
+              return normalizeProtocolResponse(protocol, await retryRes.json(), activeModel);
             }
             res = retryRes;
             errText = await retryRes.text().catch(() => '');
@@ -2229,25 +2234,31 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       // Auto-switch to local Antigravity Bridge if Google AI Studio returns 402 (depleted prepayment credits)
       if (res.status === 402 && url.toLowerCase().includes('generativelanguage.googleapis.com')) {
         const agyModel = 'gemini-3.8-flash-medium';
-        this.saveConfig({ baseUrl: '/api/antigravity/v1', model: agyModel });
-        body.model = agyModel;
+        this.saveConfig({ protocol: 'openai', baseUrl: '/api/antigravity/v1', model: agyModel });
+        const fallbackBody = buildProtocolChatPayload(
+          { ...this.config, protocol: 'openai' },
+          messages,
+          openAITools,
+          includeTools,
+          agyModel
+        );
         try {
           res = await fetchFn('/api/antigravity/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify(body),
+            body: JSON.stringify(fallbackBody),
             signal,
           });
           if (!res.ok) {
             res = await fetchFn('http://localhost:8787/v1/chat/completions', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-              body: JSON.stringify(body),
+              body: JSON.stringify(fallbackBody),
               signal,
             });
           }
           if (res.ok) {
-            return await res.json();
+            return normalizeProtocolResponse('openai', await res.json(), agyModel);
           }
         } catch {
           // Fall through to error reporting if local bridge is unreachable
@@ -2258,17 +2269,24 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       if (res.status === 404 && url.toLowerCase().includes('generativelanguage.googleapis.com')) {
         const suggestedMatch = errText.match(/use\s+models\/([a-zA-Z0-9._-]+)/i);
         const fallbackModel = suggestedMatch ? suggestedMatch[1] : 'gemini-3-flash-preview';
-        if (fallbackModel && fallbackModel !== body.model) {
+        if (fallbackModel && fallbackModel !== activeModel) {
           this.saveConfig({ model: fallbackModel });
-          body.model = fallbackModel;
-          res = await fetchFn(url, {
+          const retryUrl = resolveChatEndpointUrl(this.config, fallbackModel);
+          const retryBody = buildProtocolChatPayload(
+            this.config,
+            messages,
+            openAITools,
+            includeTools,
+            fallbackModel
+          );
+          res = await fetchFn(retryUrl, {
             method: 'POST',
             headers,
-            body: JSON.stringify(body),
+            body: JSON.stringify(retryBody),
             signal,
           });
           if (res.ok) {
-            return await res.json();
+            return normalizeProtocolResponse(protocol, await res.json(), fallbackModel);
           }
         }
       }
@@ -2281,19 +2299,12 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       ) {
         return { __retryWithoutTools: true };
       }
-      let friendlyError = errText || res.statusText;
-      try {
-        const parsedErr = JSON.parse(errText);
-        const errObj = Array.isArray(parsedErr) ? parsedErr[0]?.error : parsedErr?.error;
-        if (errObj?.message) {
-          friendlyError = errObj.message;
-        }
-      } catch {
-        // Keep raw text
-      }
+
+      const friendlyError = extractProtocolErrorMessage(errText, res.statusText);
       throw new Error(`Endpoint error (${res.status}): ${friendlyError}`);
     }
 
-    return await res.json();
+    const rawJson = await res.json();
+    return normalizeProtocolResponse(protocol, rawJson, activeModel);
   }
 }

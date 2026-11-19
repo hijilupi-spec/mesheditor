@@ -158,11 +158,27 @@ export interface ImageGenerationResult {
   height: number;
 }
 
+export type AIAgentProtocol =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'openai_responses'
+  | 'ollama_native'
+  | 'azure_openai';
+
+export type AIAgentReasoningEffort = '' | 'low' | 'medium' | 'high';
+
 export interface AIAgentEndpointConfig {
+  protocol?: AIAgentProtocol;
   baseUrl: string;
   apiKey: string;
   model: string;
   temperature?: number;
+  maxTokens?: number;
+  promptCaching?: boolean;
+  ollamaNumCtx?: number;
+  azureApiVersion?: string;
+  reasoningEffort?: AIAgentReasoningEffort;
   maxIterations?: number;
   minPolygons?: number;
   maxPolygons?: number;
