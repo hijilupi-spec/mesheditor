@@ -949,8 +949,25 @@ export class MeshEditorApp {
 
   public getElement<T extends HTMLElement = HTMLElement>(id: string): T | null {
     if (this.rootContainer) {
-      const scoped = this.rootContainer.querySelector(`#${id}`) as T | null;
-      if (scoped) return scoped;
+      const rootNode = this.rootContainer.getRootNode?.();
+      if (typeof document !== 'undefined' && rootNode === document) {
+        const docEl = document.getElementById(id);
+        if (!docEl) return null;
+        if (this.rootContainer.contains(docEl)) return docEl as T;
+        const scoped = this.rootContainer.querySelector(`#${id}`) as T | null;
+        return (scoped || docEl) as T;
+      }
+      if (rootNode && 'getElementById' in rootNode && typeof (rootNode as ShadowRoot).getElementById === 'function') {
+        const shadowEl = (rootNode as ShadowRoot).getElementById(id);
+        if (shadowEl) {
+          if (this.rootContainer.contains(shadowEl)) return shadowEl as T;
+          const scoped = this.rootContainer.querySelector(`#${id}`) as T | null;
+          if (scoped) return scoped;
+        }
+      } else {
+        const scoped = this.rootContainer.querySelector(`#${id}`) as T | null;
+        if (scoped) return scoped;
+      }
     }
     if (typeof document !== 'undefined') {
       return document.getElementById(id) as T | null;

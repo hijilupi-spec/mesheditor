@@ -130,7 +130,7 @@ export class DecalController {
     normalOffset: 0.0012,
   };
 
-  private proceduralTextures: Map<ProceduralDecalKind, string> = new Map();
+  private static proceduralTextures: Map<ProceduralDecalKind, string> = new Map();
   private decalMaterialCache: Map<string, PBRMaterial> = new Map();
   private projectorBox: Nullable<Mesh> = null;
   private previewDecal: Nullable<Mesh> = null;
@@ -1067,11 +1067,11 @@ export class DecalController {
    * Generates a crisp 256x256 transparent PNG decal data URL for built-in procedural decal types.
    */
   public getOrCreateProceduralDecalUrl(kind: ProceduralDecalKind): string {
-    const cached = this.proceduralTextures.get(kind);
+    const cached = DecalController.proceduralTextures.get(kind);
     if (cached) return cached;
 
     if (typeof document === 'undefined') {
-      this.proceduralTextures.set(kind, FALLBACK_PNG_DATA_URL);
+      DecalController.proceduralTextures.set(kind, FALLBACK_PNG_DATA_URL);
       return FALLBACK_PNG_DATA_URL;
     }
 
@@ -1081,7 +1081,7 @@ export class DecalController {
     canvas.height = size;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      this.proceduralTextures.set(kind, FALLBACK_PNG_DATA_URL);
+      DecalController.proceduralTextures.set(kind, FALLBACK_PNG_DATA_URL);
       return FALLBACK_PNG_DATA_URL;
     }
 
@@ -1277,7 +1277,7 @@ export class DecalController {
     }
 
     const url = canvas.toDataURL('image/png');
-    this.proceduralTextures.set(kind, url);
+    DecalController.proceduralTextures.set(kind, url);
     return url;
   }
 }

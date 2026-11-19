@@ -303,7 +303,7 @@ export class HeightmapController {
   public brushCustomRgb: [number, number, number] = [0, 255, 0];
 
   // Cached procedural and custom textures
-  private builtinTexturesCache: HeightmapTextureOption[] | null = null;
+  private static builtinTexturesCache: HeightmapTextureOption[] | null = null;
   private customTextures: HeightmapTextureOption[] = [];
   private decodedRgbaCache: Map<string, { rgba: Uint8ClampedArray; width: number; height: number }> = new Map();
   private activeTerrainMesh: GroundMesh | null = null;
@@ -414,8 +414,8 @@ export class HeightmapController {
    * Returns all available textures for the 3 terrain splat channels (built-in, custom uploaded, AI, and scene textures).
    */
   public getAvailableTextures(): HeightmapTextureOption[] {
-    if (!this.builtinTexturesCache) {
-      this.builtinTexturesCache = BUILTIN_TERRAIN_TEXTURES.map((recipe) => {
+    if (!HeightmapController.builtinTexturesCache) {
+      HeightmapController.builtinTexturesCache = BUILTIN_TERRAIN_TEXTURES.map((recipe) => {
         const buffers = synthesizePbrTextureBuffers({
           type: recipe.type,
           primaryColor: recipe.primaryColor,
@@ -439,7 +439,7 @@ export class HeightmapController {
       });
     }
 
-    const list: HeightmapTextureOption[] = [...this.builtinTexturesCache, ...this.customTextures];
+    const list: HeightmapTextureOption[] = [...HeightmapController.builtinTexturesCache, ...this.customTextures];
     const seenUrls = new Set(list.map((t) => t.url).filter(Boolean));
     const usedIds = new Set(list.map((t) => t.id));
 
