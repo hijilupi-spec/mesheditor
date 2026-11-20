@@ -249,6 +249,14 @@ export class InputAndFileService {
         return;
       }
 
+      const aiImagePreviewModal = this.app.getElement<HTMLDialogElement>('aiImagePreviewModal');
+      const isAIImagePreviewOpen = Boolean(
+        aiImagePreviewModal && (aiImagePreviewModal.open || aiImagePreviewModal.hasAttribute('open'))
+      );
+      if (isAIImagePreviewOpen) {
+        return;
+      }
+
       const heightmapPaintModal = this.app.getElement<HTMLElement>('heightmapPaintModal');
       if (heightmapPaintModal && heightmapPaintModal.style.display !== 'none' && heightmapPaintModal.style.display !== '') {
         const lowerKey = e.key.toLowerCase();

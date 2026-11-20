@@ -874,6 +874,15 @@ export class MeshEditorApp {
     // Close on Escape key
     this.addGlobalListener(document, 'keydown', (e) => {
       if (e.key === 'Escape') {
+        const aiImagePreviewModal = this.getElement<HTMLDialogElement>('aiImagePreviewModal');
+        const hadAIImagePreviewModal = Boolean(
+          aiImagePreviewModal && (aiImagePreviewModal.open || aiImagePreviewModal.hasAttribute('open'))
+        );
+        if (hadAIImagePreviewModal) {
+          this.lastEscapeClosedOverlayEvent = e;
+          return;
+        }
+
         const hadOpenDropdown =
           this.isMenuPopoverOpen(this.getElement('menuTools')) ||
           Boolean(this.rootContainer?.querySelector('.dropdown-wrapper.open')) ||

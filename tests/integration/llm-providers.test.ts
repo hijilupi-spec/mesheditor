@@ -521,6 +521,16 @@ describe('Multi-Protocol LLM Integrations & Settings UI Clarity', () => {
       expect(toolCalls.length).toBe(1);
       expect(toolCalls[0].function.name).toBe('modeler_create_primitive');
       expect(JSON.parse(toolCalls[0].function.arguments)).toEqual({ shape: 'Box' });
+
+      const concatenated = bridge.extractToolCalls(
+        '{"tool_calls":[{"name":"modeler_create_rounded_box","arguments":{"name":"qblock_1"}}]}\n' +
+          '{"tool_calls":[{"name":"modeler_paint_texture","arguments":{"action":"init","targetMesh":"qblock_1"}}]}'
+      );
+      expect(concatenated.length).toBe(2);
+      expect(concatenated.map((c: any) => c.function.name)).toEqual([
+        'modeler_create_rounded_box',
+        'modeler_paint_texture',
+      ]);
     });
   });
 

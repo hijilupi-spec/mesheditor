@@ -5471,6 +5471,40 @@ progress.loading-spinner:indeterminate {
   border: 1px solid var(--border-color);
 }
 
+.ai-msg-image-btn {
+  display: inline-flex;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: transparent;
+  cursor: zoom-in;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.ai-msg-image-btn:hover {
+  border-color: var(--accent-color);
+}
+
+.ai-msg-image-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.ai-msg-image-btn img {
+  display: block;
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border: none;
+  border-radius: 0;
+  transition: transform 0.15s ease;
+}
+
+.ai-msg-image-btn:hover img {
+  transform: scale(1.06);
+}
+
 .ai-tool-steps {
   display: flex;
   flex-direction: column;
@@ -5515,12 +5549,39 @@ progress.loading-spinner:indeterminate {
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid var(--border-color);
+  transition: border-color 0.15s ease;
+}
+
+.ai-attachment-thumb:hover {
+  border-color: var(--accent-color);
+}
+
+.ai-attachment-preview-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.ai-attachment-preview-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
 }
 
 .ai-attachment-thumb img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.15s ease;
+}
+
+.ai-attachment-preview-btn:hover img {
+  transform: scale(1.06);
 }
 
 .ai-attachment-remove {
@@ -8488,6 +8549,155 @@ dialog#screenshotModal::backdrop {
   -webkit-backdrop-filter: blur(8px);
   overflow: hidden;
   overscroll-behavior: contain;
+}
+
+/* =========================================================================
+   AI Chat Image Preview Lightbox Dialog
+   ========================================================================= */
+dialog#aiImagePreviewModal {
+  width: fit-content;
+  min-width: min(280px, 90vw);
+  max-width: min(90vw, 1100px);
+  max-height: 90vh;
+  margin: auto;
+  padding: 0;
+  background: var(--bg-header);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  opacity: 0;
+  transition-property: opacity, transform, display, overlay;
+  transition-duration: 0.2s;
+  transition-timing-function: ease-out;
+  transition-behavior: allow-discrete;
+}
+
+dialog#aiImagePreviewModal[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+dialog#aiImagePreviewModal[open]:where(:not([data-closing])) {
+  opacity: 1;
+}
+
+@starting-style {
+  dialog#aiImagePreviewModal[open]:where(:not([data-closing])) {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog#aiImagePreviewModal {
+    transform: scale(0.94);
+  }
+
+  dialog#aiImagePreviewModal[open]:where(:not([data-closing])) {
+    transform: scale(1);
+  }
+
+  @starting-style {
+    dialog#aiImagePreviewModal[open]:where(:not([data-closing])) {
+      transform: scale(0.94);
+    }
+  }
+}
+
+dialog#aiImagePreviewModal:modal {
+  overscroll-behavior: contain;
+}
+
+dialog#aiImagePreviewModal::backdrop {
+  background-color: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  transition-property: background-color, backdrop-filter, display, overlay;
+  transition-duration: 0.2s;
+  transition-timing-function: ease-out;
+  transition-behavior: allow-discrete;
+}
+
+dialog#aiImagePreviewModal[open]:where(:not([data-closing]))::backdrop {
+  background-color: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+@starting-style {
+  dialog#aiImagePreviewModal[open]:where(:not([data-closing]))::backdrop {
+    background-color: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog#aiImagePreviewModal,
+  dialog#aiImagePreviewModal::backdrop {
+    transition-duration: 0.1s;
+  }
+}
+
+.ai-image-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-panel);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.ai-image-preview-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ai-image-preview-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-image-preview-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.ai-image-preview-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(9, 12, 16, 0.72);
+  overflow: auto;
+}
+
+.ai-image-preview-img {
+  display: block;
+  max-width: calc(min(90vw, 1100px) - 32px);
+  max-height: calc(90vh - 84px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.05) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
 }
 
 .screenshot-modal-header {

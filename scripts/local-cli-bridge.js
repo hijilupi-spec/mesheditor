@@ -171,29 +171,129 @@ function runCli(provider, modelId, prompt) {
   });
 }
 
+function scanTopLevelJsonSlices(text) {
+  const slices = [];
+  if (!text) return slices;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch !== '{' && ch !== '[') {
+      i++;
+      continue;
+    }
+    const openChar = ch;
+    const closeChar = openChar === '{' ? '}' : ']';
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let endIdx = -1;
+
+    for (let j = i; j < text.length; j++) {
+      const c = text[j];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (c === '\\') {
+          escaped = true;
+        } else if (c === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (c === '"') {
+        inString = true;
+      } else if (c === openChar) {
+        depth++;
+      } else if (c === closeChar) {
+        depth--;
+        if (depth === 0) {
+          endIdx = j;
+          break;
+        }
+      }
+    }
+
+    if (endIdx !== -1) {
+      slices.push(text.slice(i, endIdx + 1));
+      i = endIdx + 1;
+    } else {
+      i++;
+    }
+  }
+  return slices;
+}
+
 function extractToolCalls(text) {
   const trimmed = String(text || '').trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1].trim() : trimmed;
-  try {
-    const parsed = JSON.parse(candidate);
-    if (parsed && Array.isArray(parsed.tool_calls) && parsed.tool_calls.length > 0) {
-      return parsed.tool_calls.map((tc, idx) => ({
-        id: tc.id || `call_cli_${Date.now()}_${idx}`,
+  if (!trimmed) return [];
+
+  const collected = [];
+  const collectFromParsed = (parsed) => {
+    if (!parsed) return;
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        collectFromParsed(item);
+      }
+      return;
+    }
+    if (typeof parsed !== 'object') return;
+    const rawList = Array.isArray(parsed.tool_calls)
+      ? parsed.tool_calls
+      : Array.isArray(parsed.toolCalls)
+        ? parsed.toolCalls
+        : null;
+    if (rawList) {
+      for (const tc of rawList) {
+        if (!tc || typeof tc !== 'object') continue;
+        const fnName = tc.name || tc.tool || tc.function?.name || '';
+        if (typeof fnName !== 'string' || !fnName.trim()) continue;
+        const rawArgs = tc.arguments ?? tc.args ?? tc.parameters ?? tc.function?.arguments ?? {};
+        collected.push({
+          id: tc.id || `call_cli_${Date.now()}_${collected.length}`,
+          type: 'function',
+          function: {
+            name: fnName.trim(),
+            arguments: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs),
+          },
+        });
+      }
+      return;
+    }
+    const directName = parsed.name || parsed.tool || parsed.function?.name;
+    if (typeof directName === 'string' && directName.trim().startsWith('modeler_')) {
+      const rawArgs = parsed.arguments ?? parsed.args ?? parsed.parameters ?? parsed.function?.arguments ?? {};
+      collected.push({
+        id: parsed.id || `call_cli_${Date.now()}_${collected.length}`,
         type: 'function',
         function: {
-          name: tc.name || tc.function?.name || '',
-          arguments:
-            typeof (tc.arguments ?? tc.function?.arguments) === 'string'
-              ? (tc.arguments ?? tc.function?.arguments)
-              : JSON.stringify(tc.arguments ?? tc.function?.arguments ?? {}),
+          name: directName.trim(),
+          arguments: typeof rawArgs === 'string' ? rawArgs : JSON.stringify(rawArgs),
         },
-      }));
+      });
     }
-  } catch {
-    // Not structured JSON tool_calls; return plain text response
+  };
+
+  const scanAndCollect = (source) => {
+    for (const slice of scanTopLevelJsonSlices(source)) {
+      try {
+        collectFromParsed(JSON.parse(slice));
+      } catch {
+        // Ignore malformed JSON candidate
+      }
+    }
+  };
+
+  // 1. Check all ```json ... ``` fenced blocks (supporting concatenated objects inside each block)
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let match;
+  while ((match = fenceRegex.exec(trimmed)) !== null) {
+    scanAndCollect(match[1].trim());
   }
-  return [];
+  if (collected.length > 0) return collected;
+
+  // 2. Check unfenced JSON objects/arrays (including concatenated {"tool_calls": [...]}\n{"tool_calls": [...]})
+  scanAndCollect(trimmed);
+  return collected;
 }
 
 function setCorsHeaders(res) {

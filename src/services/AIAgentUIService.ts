@@ -19,12 +19,15 @@ export class AIAgentUIService {
   private speechRecognition: any = null;
   private isRecordingSpeech: boolean = false;
   private speechInitialPrompt: string = '';
+  private hasInitializedImagePreviewModal: boolean = false;
+  private supportsDisplayTransitionCache: boolean | undefined;
   public syncAIAgentImageGenUI: (() => void) | null = null;
 
   constructor(private readonly app: MeshEditorAppHost) {}
 
   public dispose(): void {
     this.stopSpeechRecognition();
+    void this.closeAIImagePreview(true);
   }
 
   public renderAISkills(): void {
@@ -209,6 +212,9 @@ export class AIAgentUIService {
     // Initialize AI Quick Prompts select-like dropdown from JS array
     this.initAIQuickPrompts();
 
+    // Initialize AI Image Preview Lightbox modal
+    this.ensureAIImagePreviewModal();
+
     // Image attachments (Upload File, Capture 3D Viewport, Paste)
     this.app.getElement('btnAIAttachImage')?.addEventListener('click', () => {
       imageFileInput?.click();
@@ -308,6 +314,198 @@ export class AIAgentUIService {
     });
   }
 
+  private canTransitionDisplay(): boolean {
+    if (this.supportsDisplayTransitionCache !== undefined) {
+      return this.supportsDisplayTransitionCache;
+    }
+    if (
+      typeof window === 'undefined' ||
+      !window.CSS?.supports?.('transition-behavior', 'allow-discrete') ||
+      !document.body
+    ) {
+      return false;
+    }
+    const probe = document.createElement('div');
+    probe.style.cssText = 'transition: display 1s allow-discrete !important; display: block;';
+    document.body.appendChild(probe);
+    getComputedStyle(probe).display;
+    probe.style.display = 'none';
+    this.supportsDisplayTransitionCache = getComputedStyle(probe).display === 'block';
+    probe.remove();
+    return this.supportsDisplayTransitionCache;
+  }
+
+  private supportsTopLayerExit(): boolean {
+    return Boolean(
+      typeof window !== 'undefined' &&
+        window.CSS?.supports?.('overlay', 'auto') &&
+        this.canTransitionDisplay()
+    );
+  }
+
+  private ensureAIImagePreviewModal(): HTMLDialogElement | null {
+    let modal = this.app.getElement<HTMLDialogElement>('aiImagePreviewModal');
+    if (!modal && typeof document !== 'undefined') {
+      modal = document.createElement('dialog');
+      modal.id = 'aiImagePreviewModal';
+      modal.className = 'ai-image-preview-dialog';
+      modal.setAttribute('closedby', 'any');
+      modal.setAttribute('aria-labelledby', 'aiImagePreviewTitle');
+      modal.innerHTML = `
+        <div class="modal-header ai-image-preview-header">
+          <div class="ai-image-preview-title-group">
+            <h3 id="aiImagePreviewTitle">
+              <i class="app-icon" data-lucide="image"></i>
+              <span id="aiImagePreviewTitleText">Image Preview</span>
+            </h3>
+            <span id="aiImagePreviewMeta" class="ai-image-preview-meta"></span>
+          </div>
+          <button
+            type="button"
+            class="dialog-btn btn-close"
+            id="btnCloseAIImagePreview"
+            title="Close Preview"
+            aria-label="Close Preview"
+            autofocus
+          >
+            <i class="app-icon" data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="ai-image-preview-body">
+          <img id="aiImagePreviewImg" class="ai-image-preview-img" src="" alt="Attached image preview" />
+        </div>
+      `;
+      (this.app.rootContainer || document.body).appendChild(modal);
+    }
+
+    if (modal && !this.hasInitializedImagePreviewModal) {
+      this.hasInitializedImagePreviewModal = true;
+      const closeBtn = modal.querySelector<HTMLButtonElement>('#btnCloseAIImagePreview');
+      closeBtn?.addEventListener('click', () => {
+        void this.closeAIImagePreview();
+      });
+
+      modal.addEventListener('close', () => {
+        modal!.returnValue = '';
+        modal!.removeAttribute('data-closing');
+      });
+
+      modal.addEventListener('cancel', (event) => {
+        if (!this.supportsTopLayerExit()) {
+          event.preventDefault();
+          void this.closeAIImagePreview();
+        }
+      });
+
+      // Fallback light-dismiss for browsers without native closedby support
+      if (typeof HTMLDialogElement !== 'undefined' && !('closedBy' in HTMLDialogElement.prototype)) {
+        const isOutside = (e: PointerEvent) => {
+          const rect = modal!.getBoundingClientRect();
+          return (
+            e.clientX < rect.left ||
+            e.clientX > rect.right ||
+            e.clientY < rect.top ||
+            e.clientY > rect.bottom
+          );
+        };
+        let pressedOutside = false;
+        modal.addEventListener('pointerdown', (e) => {
+          pressedOutside = isOutside(e);
+        });
+        modal.addEventListener('pointerup', (e) => {
+          if (pressedOutside && isOutside(e)) {
+            void this.closeAIImagePreview();
+          }
+        });
+      }
+    }
+
+    return modal;
+  }
+
+  public openAIImagePreview(src: string, title?: string): void {
+    if (!src) return;
+    const modal = this.ensureAIImagePreviewModal();
+    if (!modal) return;
+
+    modal.removeAttribute('data-closing');
+
+    const titleTextEl = modal.querySelector<HTMLElement>('#aiImagePreviewTitleText');
+    const metaEl = modal.querySelector<HTMLElement>('#aiImagePreviewMeta');
+    const imgEl = modal.querySelector<HTMLImageElement>('#aiImagePreviewImg');
+
+    const resolvedTitle = title?.trim() || 'Image Preview';
+    if (titleTextEl) {
+      titleTextEl.textContent = resolvedTitle;
+    }
+    if (metaEl) {
+      metaEl.textContent = '';
+    }
+    if (imgEl) {
+      const updateDimensions = () => {
+        if (metaEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+          metaEl.textContent = `${imgEl.naturalWidth} × ${imgEl.naturalHeight}`;
+        }
+      };
+      imgEl.onload = updateDimensions;
+      imgEl.alt = resolvedTitle;
+      imgEl.src = src;
+      if (imgEl.complete && imgEl.naturalWidth > 0) {
+        updateDimensions();
+      }
+    }
+
+    if (typeof modal.showModal === 'function') {
+      try {
+        if (!modal.open) {
+          modal.showModal();
+        }
+      } catch {
+        modal.setAttribute('open', '');
+      }
+    } else {
+      modal.setAttribute('open', '');
+    }
+
+    this.app.refreshIcons(modal);
+  }
+
+  public async closeAIImagePreview(immediate = false): Promise<void> {
+    const modal = this.app.getElement<HTMLDialogElement>('aiImagePreviewModal');
+    if (!modal) return;
+    const isOpen = Boolean(modal.open || modal.hasAttribute('open'));
+    if (!isOpen) return;
+
+    if (!immediate && !this.supportsTopLayerExit()) {
+      modal.setAttribute('data-closing', '');
+      const animations = typeof modal.getAnimations === 'function' ? modal.getAnimations({ subtree: true }) : [];
+      if (animations.length > 0) {
+        await Promise.race([
+          Promise.allSettled(animations.map((a) => a.finished)),
+          new Promise((r) => setTimeout(r, 2000)),
+        ]);
+      }
+      if (!modal.hasAttribute('data-closing')) return;
+      modal.removeAttribute('data-closing');
+    } else {
+      modal.removeAttribute('data-closing');
+    }
+
+    if (typeof modal.close === 'function') {
+      try {
+        if (modal.open) {
+          modal.close();
+        } else {
+          modal.removeAttribute('open');
+        }
+      } catch {
+        modal.removeAttribute('open');
+      }
+    } else {
+      modal.removeAttribute('open');
+    }
+  }
+
   public renderAIAttachments(): void {
     const bar = this.app.getElement('aiImageAttachmentsBar');
     if (!bar) return;
@@ -321,16 +519,38 @@ export class AIAgentUIService {
     bar.style.display = 'flex';
     bar.innerHTML = '';
     this.aiPendingImages.forEach((dataUrl, idx) => {
+      const label = `Reference ${idx + 1}`;
       const thumb = document.createElement('div');
       thumb.className = 'ai-attachment-thumb';
-      thumb.innerHTML = `
-        <img src="${dataUrl}" alt="Reference ${idx + 1}" />
-        <button type="button" class="ai-attachment-remove" title="Remove image">&times;</button>
-      `;
-      thumb.querySelector('.ai-attachment-remove')?.addEventListener('click', () => {
+
+      const previewBtn = document.createElement('button');
+      previewBtn.type = 'button';
+      previewBtn.className = 'ai-attachment-preview-btn';
+      previewBtn.title = `Preview ${label}`;
+      previewBtn.setAttribute('aria-label', `Preview ${label}`);
+
+      const img = document.createElement('img');
+      img.src = dataUrl;
+      img.alt = label;
+      previewBtn.appendChild(img);
+      previewBtn.addEventListener('click', () => {
+        this.openAIImagePreview(dataUrl, label);
+      });
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'ai-attachment-remove';
+      removeBtn.title = 'Remove image';
+      removeBtn.setAttribute('aria-label', `Remove ${label}`);
+      removeBtn.innerHTML = '&times;';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         this.aiPendingImages.splice(idx, 1);
         this.renderAIAttachments();
       });
+
+      thumb.appendChild(previewBtn);
+      thumb.appendChild(removeBtn);
       bar.appendChild(thumb);
     });
   }
@@ -717,7 +937,24 @@ export class AIAgentUIService {
       if (images.length > 0) {
         const imgsDiv = document.createElement('div');
         imgsDiv.className = 'ai-msg-images';
-        imgsDiv.innerHTML = images.map((u) => `<img src="${u}" alt="Ref" />`).join('');
+        images.forEach((u, idx) => {
+          const label = `Reference ${idx + 1}`;
+          const previewBtn = document.createElement('button');
+          previewBtn.type = 'button';
+          previewBtn.className = 'ai-msg-image-btn';
+          previewBtn.title = `Preview ${label}`;
+          previewBtn.setAttribute('aria-label', `Preview ${label}`);
+
+          const img = document.createElement('img');
+          img.src = u;
+          img.alt = label;
+          previewBtn.appendChild(img);
+          previewBtn.addEventListener('click', () => {
+            this.openAIImagePreview(u, label);
+          });
+
+          imgsDiv.appendChild(previewBtn);
+        });
         userEl.appendChild(imgsDiv);
       }
 

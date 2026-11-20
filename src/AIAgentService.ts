@@ -1457,8 +1457,19 @@ ${textureRule}
      FALLBACK PARSER FOR ENDPOINTS WITHOUT NATIVE TOOL CALLING
      ========================================================================= */
   private extractFallbackToolCallsFromText(content: string): Array<{ name: string; arguments: any }> {
+    return this.extractFallbackToolCallsDetailed(content).calls;
+  }
+
+  private extractFallbackToolCallsDetailed(content: string): {
+    calls: Array<{ name: string; arguments: any }>;
+    source: 'json' | 'code' | 'none';
+    cleanedText: string;
+    unwrappedContent?: string;
+  } {
     const calls: Array<{ name: string; arguments: any }> = [];
-    if (!content) return calls;
+    if (!content) {
+      return { calls, source: 'none', cleanedText: '' };
+    }
 
     const parseArgs = (raw: any): any => {
       if (typeof raw === 'string') {
@@ -1471,20 +1482,26 @@ ${textureRule}
       return raw && typeof raw === 'object' ? raw : {};
     };
 
-    const collectCallsFromParsed = (parsed: any): void => {
-      if (!parsed) return;
+    const collectCallsFromParsed = (parsed: any): number => {
+      if (!parsed) return 0;
+      const before = calls.length;
       if (Array.isArray(parsed)) {
         for (const item of parsed) {
           collectCallsFromParsed(item);
         }
-        return;
+        return calls.length - before;
       }
-      if (typeof parsed !== 'object') return;
-      if (Array.isArray(parsed.tool_calls)) {
-        for (const tc of parsed.tool_calls) {
+      if (typeof parsed !== 'object') return 0;
+      const toolList = Array.isArray(parsed.tool_calls)
+        ? parsed.tool_calls
+        : Array.isArray(parsed.toolCalls)
+          ? parsed.toolCalls
+          : null;
+      if (toolList) {
+        for (const tc of toolList) {
           collectCallsFromParsed(tc);
         }
-        return;
+        return calls.length - before;
       }
       const fnName = parsed.function?.name;
       if (typeof fnName === 'string' && fnName.startsWith('modeler_')) {
@@ -1503,77 +1520,165 @@ ${textureRule}
           arguments: parseArgs(parsed.arguments ?? parsed.args ?? parsed.parameters),
         });
       }
+      return calls.length - before;
     };
 
-    // 1. Check for ```json ... ``` blocks containing tool calls
+    const scanJsonSlices = (text: string): Array<{ start: number; end: number; raw: string }> => {
+      const slices: Array<{ start: number; end: number; raw: string }> = [];
+      let i = 0;
+      while (i < text.length) {
+        const ch = text[i];
+        if (ch !== '{' && ch !== '[') {
+          i++;
+          continue;
+        }
+        const openChar = ch;
+        const closeChar = openChar === '{' ? '}' : ']';
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        let endIdx = -1;
+
+        for (let j = i; j < text.length; j++) {
+          const c = text[j];
+          if (inString) {
+            if (escaped) {
+              escaped = false;
+            } else if (c === '\\') {
+              escaped = true;
+            } else if (c === '"') {
+              inString = false;
+            }
+            continue;
+          }
+          if (c === '"') {
+            inString = true;
+          } else if (c === openChar) {
+            depth++;
+          } else if (c === closeChar) {
+            depth--;
+            if (depth === 0) {
+              endIdx = j;
+              break;
+            }
+          }
+        }
+
+        if (endIdx !== -1) {
+          slices.push({ start: i, end: endIdx + 1, raw: text.slice(i, endIdx + 1) });
+          i = endIdx + 1;
+        } else {
+          i++;
+        }
+      }
+      return slices;
+    };
+
+    const stripRanges = (text: string, ranges: Array<{ start: number; end: number }>): string => {
+      if (ranges.length === 0) return text.trim();
+      const sorted = [...ranges].sort((a, b) => a.start - b.start);
+      let cursor = 0;
+      let out = '';
+      for (const r of sorted) {
+        if (r.start > cursor) {
+          out += text.slice(cursor, r.start);
+        }
+        cursor = Math.max(cursor, r.end);
+      }
+      if (cursor < text.length) {
+        out += text.slice(cursor);
+      }
+      return out.trim();
+    };
+
+    // 1. Check for ```json ... ``` blocks containing tool calls (including concatenated JSON inside a block)
     const jsonFenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+    const fenceMatchedRanges: Array<{ start: number; end: number }> = [];
+    const fenceEnvelopeContents: string[] = [];
     let match: RegExpExecArray | null;
     while ((match = jsonFenceRegex.exec(content)) !== null) {
       const block = match[1].trim();
-      try {
-        collectCallsFromParsed(JSON.parse(block));
-      } catch {
-        // Not a JSON tool block
+      let blockAdded = 0;
+      for (const slice of scanJsonSlices(block)) {
+        try {
+          const parsed = JSON.parse(slice.raw);
+          const added = collectCallsFromParsed(parsed);
+          blockAdded += added;
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            !Array.isArray(parsed) &&
+            typeof parsed.content === 'string' &&
+            parsed.content.trim()
+          ) {
+            fenceEnvelopeContents.push(parsed.content.trim());
+          }
+        } catch {
+          // Not a JSON tool block
+        }
+      }
+      if (blockAdded > 0) {
+        fenceMatchedRanges.push({ start: match.index, end: match.index + match[0].length });
       }
     }
 
-    if (calls.length > 0) return calls;
+    if (calls.length > 0) {
+      const cleaned = stripRanges(content, fenceMatchedRanges);
+      return {
+        calls,
+        source: 'json',
+        cleanedText: cleaned || fenceEnvelopeContents.join('\n'),
+      };
+    }
 
     // 2. Check for unfenced JSON objects/arrays (including concatenated {"tool_calls": [...]} blocks)
-    let i = 0;
-    while (i < content.length) {
-      const ch = content[i];
-      if (ch !== '{' && ch !== '[') {
-        i++;
-        continue;
-      }
-      const openChar = ch;
-      const closeChar = openChar === '{' ? '}' : ']';
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-      let endIdx = -1;
-
-      for (let j = i; j < content.length; j++) {
-        const c = content[j];
-        if (inString) {
-          if (escaped) {
-            escaped = false;
-          } else if (c === '\\') {
-            escaped = true;
-          } else if (c === '"') {
-            inString = false;
-          }
-          continue;
+    const unfencedMatchedRanges: Array<{ start: number; end: number }> = [];
+    const envelopeContents: string[] = [];
+    let unwrappedContent: string | undefined;
+    const slices = scanJsonSlices(content);
+    for (const slice of slices) {
+      try {
+        const parsed = JSON.parse(slice.raw);
+        const added = collectCallsFromParsed(parsed);
+        if (added > 0) {
+          unfencedMatchedRanges.push({ start: slice.start, end: slice.end });
         }
-        if (c === '"') {
-          inString = true;
-        } else if (c === openChar) {
-          depth++;
-        } else if (c === closeChar) {
-          depth--;
-          if (depth === 0) {
-            endIdx = j;
-            break;
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed) &&
+          (Array.isArray(parsed.tool_calls) || Array.isArray(parsed.toolCalls)) &&
+          typeof parsed.content === 'string'
+        ) {
+          if (parsed.content.trim()) {
+            envelopeContents.push(parsed.content.trim());
+          }
+          if (slices.length === 1 && content.trim() === slice.raw.trim()) {
+            unwrappedContent = parsed.content.trim();
           }
         }
-      }
-
-      if (endIdx !== -1) {
-        const candidate = content.slice(i, endIdx + 1);
-        try {
-          const parsed = JSON.parse(candidate);
-          collectCallsFromParsed(parsed);
-        } catch {
-          // Ignore malformed JSON candidate
-        }
-        i = endIdx + 1;
-      } else {
-        i++;
+      } catch {
+        // Ignore malformed JSON candidate
       }
     }
 
-    if (calls.length > 0) return calls;
+    if (calls.length > 0) {
+      const cleaned = stripRanges(content, unfencedMatchedRanges);
+      return {
+        calls,
+        source: 'json',
+        cleanedText: cleaned || envelopeContents.join('\n'),
+      };
+    }
+
+    if (unwrappedContent !== undefined) {
+      return {
+        calls: [],
+        source: 'none',
+        cleanedText: unwrappedContent,
+        unwrappedContent,
+      };
+    }
 
     // 3. Check for ```javascript / ```js / ```ts / ```babylon code blocks that construct Babylon meshes/materials
     const codeFenceRegex = /```(?:javascript|js|typescript|ts|babylon)\s*([\s\S]*?)```/gi;
@@ -1594,7 +1699,19 @@ ${textureRule}
       }
     }
 
-    return calls;
+    if (calls.length > 0) {
+      return {
+        calls,
+        source: 'code',
+        cleanedText: content.trim(),
+      };
+    }
+
+    return {
+      calls: [],
+      source: 'none',
+      cleanedText: content,
+    };
   }
 
   /* =========================================================================
@@ -1706,6 +1823,7 @@ ${textureRule}
     let zFightingCheckCompleted = false;
     let finalAssistantText = '';
     let toolsSupported = true;
+    const seenFallbackSignatures = new Set<string>();
 
     this.currentRequestImages = images;
     this.currentRequestSignal = options.signal;
@@ -1833,10 +1951,32 @@ ${textureRule}
           continue;
         }
 
-        // Check fallback code/JSON blocks if no native tool_calls were emitted
-        const fallbackCalls = this.extractFallbackToolCallsFromText(assistantContent);
-        if (fallbackCalls.length > 0 && executedSteps.length === 0) {
-          for (const fc of fallbackCalls) {
+        // Check fallback JSON tool_calls or Babylon code blocks if no native tool_calls were emitted
+        const fallback = this.extractFallbackToolCallsDetailed(assistantContent);
+        if (fallback.calls.length === 0 && fallback.unwrappedContent !== undefined) {
+          finalAssistantText = fallback.unwrappedContent;
+        }
+        const canExecuteFallback =
+          fallback.calls.length > 0 && (fallback.source === 'json' || executedSteps.length === 0);
+
+        if (canExecuteFallback) {
+          const fallbackSignature = JSON.stringify(fallback.calls);
+          if (fallback.source === 'json') {
+            // Never leak raw {"tool_calls": [...]} JSON into the final user-facing chat response
+            finalAssistantText = fallback.cleanedText;
+          }
+
+          if (seenFallbackSignatures.has(fallbackSignature)) {
+            break;
+          }
+          seenFallbackSignatures.add(fallbackSignature);
+
+          const fallbackResults: Array<{ name: string; result: string }> = [];
+          for (const fc of fallback.calls) {
+            if (options.signal?.aborted) {
+              throw new Error('Generation cancelled by user.');
+            }
+            options.onStatus?.(`Executing tool: ${fc.name}...`);
             const startTime = Date.now();
             let toolResultStr = '';
             let isError = false;
@@ -1855,12 +1995,31 @@ ${textureRule}
               durationMs: Date.now() - startTime,
             };
             executedSteps.push(step);
+            fallbackResults.push({ name: fc.name, result: toolResultStr });
             options.onStep?.(step);
           }
+
           this.service.updateStats();
           this.service.events.onSceneModified?.();
-          if (/^\s*[\[{]/.test(assistantContent)) {
+
+          if (fallback.source === 'code' && /^\s*[\[{]/.test(assistantContent)) {
             finalAssistantText = '';
+          }
+
+          // For structured JSON tool_calls emitted as plain text, feed execution results back
+          // so multi-turn modeling can continue cleanly on the next iteration.
+          if (fallback.source === 'json' && iteration + 1 < maxIterations) {
+            apiMessages.push({
+              role: 'assistant',
+              content: assistantContent,
+            });
+            apiMessages.push({
+              role: 'user',
+              content: `[TOOL EXECUTION RESULTS]\n${fallbackResults
+                .map((r) => `- ${r.name}: ${r.result}`)
+                .join('\n')}\n\nAll ${fallbackResults.length} tool call(s) above have been executed in the 3D scene. Continue with any remaining modeling steps, or reply with a concise plain-text summary (with no raw JSON tool_calls) if the 3D model is complete.`,
+            });
+            continue;
           }
         }
 
@@ -2222,17 +2381,22 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       }
 
       // Retry transient Antigravity CLI conversation-initialization races (e.g. empty conversation id)
+      // or occasional empty CLI responses from the bridge
       const isAgyBridge =
         url.toLowerCase().includes('/api/antigravity') ||
         url.includes('localhost:8787') ||
         url.includes('127.0.0.1:8787');
+      const isTransientStartupErr =
+        /failed to start conversation|empty conversation id|initialized by another opener/i.test(errText);
+      const isEmptyBridgeResponseErr = /empty response with no tool calls or content/i.test(errText);
       if (
         isAgyBridge &&
         res.status === 500 &&
-        /failed to start conversation|empty conversation id|initialized by another opener/i.test(errText) &&
+        (isTransientStartupErr || isEmptyBridgeResponseErr) &&
         !signal?.aborted
       ) {
-        for (const delayMs of [400, 900]) {
+        const retryDelays = isTransientStartupErr ? [400, 900] : [500];
+        for (const delayMs of retryDelays) {
           if (signal?.aborted) break;
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           if (signal?.aborted) break;
@@ -2250,7 +2414,9 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
             errText = await retryRes.text().catch(() => '');
             if (
               retryRes.status !== 500 ||
-              !/failed to start conversation|empty conversation id|initialized by another opener/i.test(errText)
+              !/failed to start conversation|empty conversation id|initialized by another opener|empty response with no tool calls or content/i.test(
+                errText
+              )
             ) {
               break;
             }

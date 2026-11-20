@@ -1707,6 +1707,37 @@
         </div>
       </dialog>
 
+      <!-- AI Chat Image Preview Modal Dialog -->
+      <dialog
+        id="aiImagePreviewModal"
+        class="ai-image-preview-dialog"
+        closedby="any"
+        aria-labelledby="aiImagePreviewTitle"
+      >
+        <div class="modal-header ai-image-preview-header">
+          <div class="ai-image-preview-title-group">
+            <h3 id="aiImagePreviewTitle">
+              <i class="app-icon" data-lucide="image"></i>
+              <span id="aiImagePreviewTitleText">Image Preview</span>
+            </h3>
+            <span id="aiImagePreviewMeta" class="ai-image-preview-meta"></span>
+          </div>
+          <button
+            type="button"
+            class="dialog-btn btn-close"
+            id="btnCloseAIImagePreview"
+            title="Close Preview"
+            aria-label="Close Preview"
+            autofocus
+          >
+            <i class="app-icon" data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="ai-image-preview-body">
+          <img id="aiImagePreviewImg" class="ai-image-preview-img" src="" alt="Attached image preview" />
+        </div>
+      </dialog>
+
       <!-- Heightmap & Mix Texture 2-Tab Paint Editor Modal Dialog -->
       <div id="heightmapPaintModal">
         <div class="modal-content heightmap-paint-dialog" role="dialog" aria-modal="true" aria-labelledby="heightmapPaintModalTitle">

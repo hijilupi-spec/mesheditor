@@ -128,8 +128,23 @@ function normalizeAgyModel(requestedModel) {
  * Parses the final JSON status object emitted by `agy --output-format json`.
  */
 function parseLastAgyJson(stdout) {
-  const lines = String(stdout || '')
-    .trim()
+  const trimmed = String(stdout || '').trim();
+  if (!trimmed) return null;
+
+  // 1. Direct full-stdout JSON (handles both single-line and pretty-printed multi-line JSON)
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // fall through to line-by-line / slice scanning
+    }
+  }
+
+  // 2. Last single-line JSON object (standard NDJSON / status line output)
+  const lines = trimmed
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
@@ -137,12 +152,35 @@ function parseLastAgyJson(stdout) {
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i].startsWith('{') && lines[i].endsWith('}')) {
       try {
-        return JSON.parse(lines[i]);
+        const parsed = JSON.parse(lines[i]);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed;
+        }
       } catch {
         // continue searching
       }
     }
   }
+
+  // 3. Fallback: last balanced JSON object in stdout (handles multi-line JSON preceded by log lines)
+  const slices = scanTopLevelJsonSlices(trimmed);
+  for (let i = slices.length - 1; i >= 0; i--) {
+    if (!slices[i].startsWith('{')) continue;
+    try {
+      const parsed = JSON.parse(slices[i]);
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        ('status' in parsed || 'response' in parsed || 'conversation_id' in parsed || 'error' in parsed)
+      ) {
+        return parsed;
+      }
+    } catch {
+      // continue searching
+    }
+  }
+
   return null;
 }
 
@@ -227,8 +265,23 @@ function execProcess(bin, args, options = {}) {
       }, timeoutMs);
     }
 
+    let exitCode = 0;
+
+    const scheduleExitFinish = (delayMs) => {
+      if (exitTimer) {
+        clearTimeout(exitTimer);
+      }
+      exitTimer = setTimeout(() => {
+        finish({ code: exitCode, stdout, stderr });
+      }, delayMs);
+    };
+
     child.stdout.on('data', (chunk) => {
       stdout += chunk.toString();
+      if (exited && !settled) {
+        // More stdout data arrived after exit; wait briefly to ensure pipe finishes flushing
+        scheduleExitFinish(80);
+      }
       // When agy outputs its complete JSON result in print mode, wait briefly for agy
       // to finish its own clean shutdown (typically ~200ms) and only force-resolve if
       // persistent grandchild processes (such as stdio MCP servers) keep pipes open.
@@ -237,7 +290,7 @@ function execProcess(bin, args, options = {}) {
         !jsonEarlyTimer &&
         !exited &&
         stdout.includes('"conversation_id"') &&
-        (stdout.includes('"status":"SUCCESS"') || stdout.includes('"status":"ERROR"'))
+        /"status"\s*:\s*"(?:SUCCESS|ERROR)"/.test(stdout)
       ) {
         const parsed = parseLastAgyJson(stdout);
         if (parsed && (parsed.status === 'SUCCESS' || parsed.status === 'ERROR')) {
@@ -259,13 +312,14 @@ function execProcess(bin, args, options = {}) {
 
     child.on('exit', (code) => {
       exited = true;
+      exitCode = code ?? 0;
       if (jsonEarlyTimer) {
         clearTimeout(jsonEarlyTimer);
         jsonEarlyTimer = null;
       }
-      exitTimer = setTimeout(() => {
-        finish({ code: code ?? 0, stdout, stderr });
-      }, 50);
+      const hasParsedJson = Boolean(parseLastAgyJson(stdout));
+      // Allow more time for buffered stdout to flush if no complete JSON has arrived yet
+      scheduleExitFinish(hasParsedJson ? 80 : 250);
     });
 
     child.on('close', (code) => {
@@ -385,6 +439,62 @@ function recoverBabylonScriptFromText(text) {
 }
 
 /**
+ * Scans a string for balanced top-level JSON objects (`{...}`) or arrays (`[...]`),
+ * supporting concatenated JSON blocks such as `{ "tool_calls": [...] }\n{ "tool_calls": [...] }`.
+ */
+function scanTopLevelJsonSlices(text) {
+  const slices = [];
+  if (!text) return slices;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch !== '{' && ch !== '[') {
+      i++;
+      continue;
+    }
+    const openChar = ch;
+    const closeChar = openChar === '{' ? '}' : ']';
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let endIdx = -1;
+
+    for (let j = i; j < text.length; j++) {
+      const c = text[j];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (c === '\\') {
+          escaped = true;
+        } else if (c === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (c === '"') {
+        inString = true;
+      } else if (c === openChar) {
+        depth++;
+      } else if (c === closeChar) {
+        depth--;
+        if (depth === 0) {
+          endIdx = j;
+          break;
+        }
+      }
+    }
+
+    if (endIdx !== -1) {
+      slices.push(text.slice(i, endIdx + 1));
+      i = endIdx + 1;
+    } else {
+      i++;
+    }
+  }
+  return slices;
+}
+
+/**
  * Extracts a structured `{ content, tool_calls }` payload from the model's text response.
  */
 function parseStructuredAgentResponse(rawText, options = {}) {
@@ -394,46 +504,77 @@ function parseStructuredAgentResponse(rawText, options = {}) {
     return { content: '', toolCalls: [] };
   }
 
-  const normalizeCallItem = (item) => {
+  const normalizeCallItem = (item, requireExplicitShape = false) => {
     if (!item || typeof item !== 'object') return null;
-    const name = item.name || item.tool || item.function?.name;
+    const name = item.name || item.tool || item.tool_name || item.function_name || item.function?.name;
     if (typeof name !== 'string' || !name.trim()) return null;
+    const cleanName = name.trim();
+    if (
+      requireExplicitShape &&
+      !cleanName.startsWith('modeler_') &&
+      item.arguments === undefined &&
+      item.args === undefined &&
+      item.parameters === undefined &&
+      item.input === undefined &&
+      item.function === undefined
+    ) {
+      return null;
+    }
     return {
-      name: name.trim(),
-      arguments: item.arguments ?? item.args ?? item.parameters ?? item.function?.arguments ?? {},
+      name: cleanName,
+      arguments: item.arguments ?? item.args ?? item.parameters ?? item.input ?? item.function?.arguments ?? {},
     };
+  };
+
+  const extractStringContent = (obj) => {
+    const keys = ['content', 'message', 'response', 'text', 'summary', 'answer'];
+    let fallbackEmpty = null;
+    for (const key of keys) {
+      if (typeof obj[key] === 'string') {
+        if (obj[key].trim()) {
+          return obj[key];
+        }
+        if (fallbackEmpty === null && (key === 'content' || key === 'message')) {
+          fallbackEmpty = '';
+        }
+      }
+    }
+    return fallbackEmpty;
   };
 
   const tryParseObj = (candidate) => {
     try {
       const obj = JSON.parse(candidate);
       if (Array.isArray(obj)) {
-        const calls = obj.map(normalizeCallItem).filter(Boolean);
+        const calls = obj.map((item) => normalizeCallItem(item, true)).filter(Boolean);
         if (calls.length > 0) {
           return { content: '', toolCalls: calls };
         }
       }
       if (obj && typeof obj === 'object') {
-        const single = normalizeCallItem(obj);
-        if (single) {
-          return {
-            content: typeof obj.content === 'string' ? obj.content : '',
-            toolCalls: [single],
-          };
-        }
-        const toolCalls = Array.isArray(obj.tool_calls)
+        const rawToolCalls = Array.isArray(obj.tool_calls)
           ? obj.tool_calls
           : Array.isArray(obj.toolCalls)
             ? obj.toolCalls
-            : [];
-        const content =
-          typeof obj.content === 'string'
-            ? obj.content
-            : typeof obj.message === 'string'
-              ? obj.message
-              : '';
-        if (Array.isArray(toolCalls) && (toolCalls.length > 0 || typeof obj.content === 'string' || typeof obj.message === 'string')) {
-          return { content, toolCalls };
+            : null;
+        if (rawToolCalls) {
+          const toolCalls = rawToolCalls.map((item) => normalizeCallItem(item, false)).filter(Boolean);
+          const extracted = extractStringContent(obj);
+          const content = extracted ?? '';
+          if (toolCalls.length > 0 || extracted !== null) {
+            return { content, toolCalls };
+          }
+        }
+        const single = normalizeCallItem(obj, true);
+        if (single) {
+          return {
+            content: extractStringContent(obj) ?? '',
+            toolCalls: [single],
+          };
+        }
+        const content = extractStringContent(obj);
+        if (content !== null) {
+          return { content, toolCalls: [] };
         }
       }
     } catch {
@@ -442,31 +583,100 @@ function parseStructuredAgentResponse(rawText, options = {}) {
     return null;
   };
 
+  const parseMultipleJsonBlocks = (text) => {
+    const slices = scanTopLevelJsonSlices(text);
+    const mergedCalls = [];
+    const contentParts = [];
+    let matchedAny = false;
+
+    for (const slice of slices) {
+      const res = tryParseObj(slice);
+      if (!res) continue;
+      matchedAny = true;
+      if (res.toolCalls.length > 0) {
+        mergedCalls.push(...res.toolCalls);
+      }
+      if (res.content && res.content.trim()) {
+        contentParts.push(res.content.trim());
+      }
+    }
+
+    if (!matchedAny) return null;
+    return {
+      content: contentParts.join('\n'),
+      toolCalls: mergedCalls,
+    };
+  };
+
   let parsed = null;
 
-  // 1. Direct JSON object / array
+  // 1. Direct single JSON object / array
   parsed = tryParseObj(trimmed);
 
-  // 2. ```json ... ``` fenced block
+  // 2. One or more ```json ... ``` fenced blocks (including concatenated JSON inside a block)
   if (!parsed) {
     const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+    const mergedCalls = [];
+    const contentParts = [];
+    const emptyBlockRanges = [];
+    let matchedAny = false;
     let match;
     while ((match = fenceRegex.exec(trimmed)) !== null) {
-      const candidate = tryParseObj(match[1].trim());
+      const block = match[1].trim();
+      const candidate = tryParseObj(block) || parseMultipleJsonBlocks(block);
       if (candidate) {
-        parsed = candidate;
-        break;
+        matchedAny = true;
+        if (candidate.toolCalls.length > 0) {
+          mergedCalls.push(...candidate.toolCalls);
+        }
+        if (candidate.content && candidate.content.trim()) {
+          contentParts.push(candidate.content.trim());
+        }
+        if (candidate.toolCalls.length === 0 && !String(candidate.content || '').trim()) {
+          emptyBlockRanges.push([match.index, match.index + match[0].length]);
+        }
       }
+    }
+    if (matchedAny) {
+      let content = contentParts.join('\n');
+      // If the fenced JSON block(s) were empty envelopes (e.g. {"content":"","tool_calls":[]})
+      // accompanied by surrounding prose, preserve the surrounding prose instead of returning empty.
+      if (mergedCalls.length === 0 && !content.trim() && emptyBlockRanges.length > 0) {
+        let stripped = '';
+        let cursor = 0;
+        for (const [start, end] of emptyBlockRanges) {
+          if (start > cursor) stripped += trimmed.slice(cursor, start);
+          cursor = Math.max(cursor, end);
+        }
+        if (cursor < trimmed.length) stripped += trimmed.slice(cursor);
+        if (stripped.trim()) {
+          content = stripped.trim();
+        }
+      }
+      parsed = {
+        content,
+        toolCalls: mergedCalls,
+      };
     }
   }
 
-  // 3. First { ... } block in text
+  // 3. One or more unfenced top-level JSON objects/arrays in text (e.g. concatenated {"tool_calls":[...]}\n{"tool_calls":[...]})
   if (!parsed) {
-    const firstBrace = trimmed.indexOf('{');
-    const lastBrace = trimmed.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      const sub = trimmed.slice(firstBrace, lastBrace + 1);
-      parsed = tryParseObj(sub);
+    const multi = parseMultipleJsonBlocks(trimmed);
+    if (multi) {
+      if (multi.toolCalls.length > 0 || multi.content.trim()) {
+        parsed = multi;
+      } else {
+        // Avoid discarding prose when a stray empty JSON snippet (e.g. {"content":"","tool_calls":[]}) appears inside text
+        const withoutJson = scanTopLevelJsonSlices(trimmed)
+          .reduce((acc, slice) => acc.replace(slice, ''), trimmed)
+          .trim();
+        if (withoutJson) {
+          parsed = { content: withoutJson, toolCalls: [] };
+        } else {
+          parsed = multi;
+        }
+      }
     }
   }
 
@@ -594,7 +804,7 @@ Instead, respond ONLY with a single valid JSON object (no markdown prose outside
 Rules for "tool_calls":
 1. To create or modify 3D meshes in the scene, populate "tool_calls" with one or more calls to the VIRTUAL AVAILABLE 3D MODELER TOOLS listed above (e.g. "modeler_plan_model", "modeler_create_sdf_mesh", "modeler_create_rounded_box", "modeler_create_wall", "modeler_create_arch", "modeler_create_column", "modeler_create_molding", "modeler_create_stairs", "modeler_create_roof", "modeler_sculpt_mesh", "modeler_create_primitive", "modeler_extrude_polygon", "modeler_create_lathe", "modeler_boolean_operation", "modeler_create_material", "modeler_build_voxel_mesh", "modeler_execute_babylon_code", etc.).
 2. IMPORTANT: Even though "modeler_*" tools do not appear in your CLI runtime tool list, they ARE live via this JSON "tool_calls" bridge! Never say they are unavailable, and NEVER save scripts to /tmp or ask the user to copy/paste code into "modeler_execute_babylon_code" — emit the "modeler_execute_babylon_code" JSON tool call directly.
-3. You can emit multiple tool_calls in a single turn to build all parts of the requested 3D model at once, or inspect results across turns.
+3. You can emit multiple tool_calls in a single turn to build all parts of the requested 3D model at once, or inspect results across turns. Put ALL tool calls for the turn inside ONE single JSON object's "tool_calls" array (never output multiple separate concatenated JSON objects).
 4. If all required TOOL EXECUTION RESULTS are already present above and the 3D model is complete (including any VISUAL CRITIQUE self-corrections), set "tool_calls": [] and provide a concise final summary in "content".`);
 
   return {
@@ -674,6 +884,29 @@ function extractBridgeErrorDetails(err, stdout, stderr, code) {
 }
 
 /**
+ * Returns true if the model explicitly emitted a valid JSON completion envelope with
+ * an empty `tool_calls: []` array and empty `content` (e.g. `{"content":"","tool_calls":[]}`).
+ */
+function isExplicitEmptyCompletionEnvelope(rawText) {
+  const trimmed = String(rawText || '').trim();
+  if (!trimmed) return false;
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i);
+  const candidate = fencedMatch ? fencedMatch[1].trim() : trimmed;
+  try {
+    const parsed = JSON.parse(candidate);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    const rawToolCalls = Array.isArray(parsed.tool_calls)
+      ? parsed.tool_calls
+      : Array.isArray(parsed.toolCalls)
+        ? parsed.toolCalls
+        : null;
+    return Array.isArray(rawToolCalls) && rawToolCalls.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Executes a chat completion request via `agy` and returns an OpenAI-formatted response object.
  */
 async function runAgyChatCompletion(body, options = {}) {
@@ -684,7 +917,7 @@ async function runAgyChatCompletion(body, options = {}) {
   const retryDelaysMs = Array.isArray(options.retryDelaysMs) ? options.retryDelaysMs : [350, 900];
 
   // Always supply --dangerously-skip-permissions and --print-timeout 600s so agy never hangs waiting for stdin confirmation
-  const args = [
+  const baseArgs = [
     '--model',
     model,
     '--output-format',
@@ -695,18 +928,28 @@ async function runAgyChatCompletion(body, options = {}) {
     '600s',
   ];
   if (tempImageFiles.length > 0) {
-    args.push('--add-dir', os.tmpdir());
+    baseArgs.push('--add-dir', os.tmpdir());
   }
-  args.push('-p', prompt);
+
+  const hasExecutedBabylonCode = (body?.messages || []).some(
+    (m) => m && m.role === 'tool' && m.name === 'modeler_execute_babylon_code'
+  );
+  const hasPriorToolResults = (body?.messages || []).some((m) => m && m.role === 'tool');
 
   try {
     let agyResult = null;
-    let rawStdout = '';
+    let finalContent = '';
+    let finalFormattedToolCalls = [];
+    let retryEmptyNudge = false;
     const maxAttempts = 1 + retryDelaysMs.length;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const { code, stdout, stderr } = await execFn(bin, args, { cwd: os.tmpdir(), timeoutMs: 600000 });
-      rawStdout = stdout;
+      const attemptPrompt = retryEmptyNudge
+        ? `${prompt}\n\n[RETRY NOTICE: Your previous attempt returned an empty response with no content and no tool_calls. You MUST output a single valid JSON object containing a non-empty "content" string and/or at least one entry in "tool_calls". Do NOT call internal workspace tools or return an empty string.]`
+        : prompt;
+      const attemptArgs = [...baseArgs, '-p', attemptPrompt];
+
+      const { code, stdout, stderr } = await execFn(bin, attemptArgs, { cwd: os.tmpdir(), timeoutMs: 600000 });
       agyResult = parseLastAgyJson(stdout);
 
       if (agyResult?.status === 'ERROR' || agyResult?.finished_reason === 'error' || (code !== 0 && !agyResult)) {
@@ -724,33 +967,62 @@ async function runAgyChatCompletion(body, options = {}) {
         }
         throw bridgeErr;
       }
-      break;
-    }
 
-    const rawResponseText = agyResult ? agyResult.response || '' : rawStdout;
-    const hasExecutedBabylonCode = (body?.messages || []).some(
-      (m) => m && m.role === 'tool' && m.name === 'modeler_execute_babylon_code'
-    );
-    const { content, toolCalls } = parseStructuredAgentResponse(rawResponseText, {
-      allowCodeFallback: !hasExecutedBabylonCode,
-    });
-
-    const formattedToolCalls = (toolCalls || [])
-      .filter((tc) => tc && typeof (tc.name || tc.function?.name) === 'string')
-      .map((tc, idx) => {
-        const fnName = tc.name || tc.function?.name;
-        const fnArgs = tc.arguments ?? tc.function?.arguments ?? {};
-        return {
-          id: `call_agy_${Date.now()}_${idx}`,
-          type: 'function',
-          function: {
-            name: fnName,
-            arguments: typeof fnArgs === 'string' ? fnArgs : JSON.stringify(fnArgs),
-          },
-        };
+      const rawResponseText = agyResult
+        ? agyResult.response || agyResult.result || agyResult.output || agyResult.text || ''
+        : stdout;
+      const { content, toolCalls } = parseStructuredAgentResponse(rawResponseText, {
+        allowCodeFallback: !hasExecutedBabylonCode,
       });
 
-    if (!String(content || '').trim() && formattedToolCalls.length === 0) {
+      const formattedToolCalls = (toolCalls || [])
+        .filter((tc) => tc && typeof (tc.name || tc.function?.name) === 'string')
+        .map((tc, idx) => {
+          const fnName = tc.name || tc.function?.name;
+          const fnArgs = tc.arguments ?? tc.function?.arguments ?? {};
+          return {
+            id: `call_agy_${Date.now()}_${idx}`,
+            type: 'function',
+            function: {
+              name: fnName,
+              arguments: typeof fnArgs === 'string' ? fnArgs : JSON.stringify(fnArgs),
+            },
+          };
+        });
+
+      if (String(content || '').trim() || formattedToolCalls.length > 0) {
+        finalContent = content;
+        finalFormattedToolCalls = formattedToolCalls;
+        break;
+      }
+
+      // If tool calls already ran in previous turns and the model explicitly returned
+      // {"content":"","tool_calls":[]}, treat it as a completed turn rather than failing with 500.
+      if (hasPriorToolResults && isExplicitEmptyCompletionEnvelope(rawResponseText)) {
+        finalContent = 'Finished 3D mesh operations.';
+        finalFormattedToolCalls = [];
+        break;
+      }
+
+      // Check whether stderr/stdout contains a specific non-500 error (e.g. 429 quota, 401 auth, 504 timeout)
+      const errDetails = extractBridgeErrorDetails(new Error(agyResult?.error || ''), stdout, stderr, code);
+      if (errDetails.statusCode !== 500) {
+        const bridgeErr = new Error(errDetails.message);
+        bridgeErr.statusCode = errDetails.statusCode;
+        throw bridgeErr;
+      }
+
+      const stderrSnippet = String(stderr || '').trim().slice(0, 240);
+      if (attempt < retryDelaysMs.length) {
+        const delayMs = retryDelaysMs[attempt];
+        console.warn(
+          `[Antigravity Bridge] Empty CLI response (code=${code}, status=${agyResult?.status || 'none'}, finished_reason=${agyResult?.finished_reason || 'none'}, stdoutLen=${String(stdout || '').length}${stderrSnippet ? `, stderr=${stderrSnippet}` : ''}); retrying in ${delayMs}ms (attempt ${attempt + 2}/${maxAttempts})...`
+        );
+        retryEmptyNudge = true;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
       throw new Error(agyResult?.error || 'Antigravity CLI returned an empty response with no tool calls or content.');
     }
 
@@ -764,10 +1036,10 @@ async function runAgyChatCompletion(body, options = {}) {
           index: 0,
           message: {
             role: 'assistant',
-            content: content || (formattedToolCalls.length > 0 ? null : 'Done.'),
-            ...(formattedToolCalls.length > 0 ? { tool_calls: formattedToolCalls } : {}),
+            content: finalContent || (finalFormattedToolCalls.length > 0 ? null : 'Finished 3D mesh operations.'),
+            ...(finalFormattedToolCalls.length > 0 ? { tool_calls: finalFormattedToolCalls } : {}),
           },
-          finish_reason: formattedToolCalls.length > 0 ? 'tool_calls' : 'stop',
+          finish_reason: finalFormattedToolCalls.length > 0 ? 'tool_calls' : 'stop',
         },
       ],
       usage: agyResult?.usage || {},

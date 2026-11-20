@@ -1795,6 +1795,133 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(result.content).toBe('Recovered ok.');
     });
 
+    it('retries empty Antigravity CLI responses, preserves prose around empty JSON envelopes, and completes post-tool empty envelopes', async () => {
+      const require = createRequire(import.meta.url);
+      const bridge = require('../../scripts/antigravity-bridge.js');
+
+      // 1. Retries transient empty response from agy and adds retry notice on retry
+      let emptyAttempts = 0;
+      const seenPrompts: string[] = [];
+      const retriedRes = await bridge.runAgyChatCompletion(
+        {
+          model: 'gemini-4-neon-high',
+          messages: [{ role: 'user', content: 'Build a crate' }],
+        },
+        {
+          retryDelaysMs: [1, 1],
+          execFn: async (_bin: string, args: string[]) => {
+            emptyAttempts++;
+            const pIdx = args.indexOf('-p');
+            seenPrompts.push(pIdx >= 0 ? args[pIdx + 1] : '');
+            if (emptyAttempts === 1) {
+              return {
+                code: 0,
+                stdout: JSON.stringify({
+                  conversation_id: 'conv-empty-1',
+                  status: 'SUCCESS',
+                  response: '',
+                }),
+                stderr: '',
+              };
+            }
+            return {
+              code: 0,
+              stdout: JSON.stringify({
+                conversation_id: 'conv-empty-2',
+                status: 'SUCCESS',
+                response: JSON.stringify({ content: 'Created crate.', tool_calls: [] }),
+              }),
+              stderr: '',
+            };
+          },
+        }
+      );
+      expect(emptyAttempts).toBe(2);
+      expect(seenPrompts[1]).toContain('[RETRY NOTICE:');
+      expect(retriedRes.choices[0].message.content).toBe('Created crate.');
+
+      // 2. Does not throw 500 when model returns {"content":"","tool_calls":[]} after prior tool results
+      let postToolAttempts = 0;
+      const postToolRes = await bridge.runAgyChatCompletion(
+        {
+          model: 'gemini-4-neon-high',
+          messages: [
+            { role: 'user', content: 'Build a crate' },
+            { role: 'tool', name: 'modeler_create_primitive', content: '{"status":"ok"}' },
+          ],
+        },
+        {
+          retryDelaysMs: [1],
+          execFn: async () => {
+            postToolAttempts++;
+            return {
+              code: 0,
+              stdout: JSON.stringify({
+                conversation_id: 'conv-done-1',
+                status: 'SUCCESS',
+                response: '{"content":"","tool_calls":[]}',
+              }),
+              stderr: '',
+            };
+          },
+        }
+      );
+      expect(postToolAttempts).toBe(1);
+      expect(postToolRes.choices[0].message.content).toBe('Finished 3D mesh operations.');
+
+      // 3. Preserves prose when accompanied by an empty JSON envelope (fenced or unfenced)
+      const fencedWithProse = bridge.parseStructuredAgentResponse(
+        'Created the wooden barrel.\n```json\n{"content":"","tool_calls":[]}\n```'
+      );
+      expect(fencedWithProse.content).toBe('Created the wooden barrel.');
+      expect(fencedWithProse.toolCalls).toEqual([]);
+
+      const unfencedWithProse = bridge.parseStructuredAgentResponse(
+        'Created the wooden barrel.\n{"content":"","tool_calls":[]}'
+      );
+      expect(unfencedWithProse.content).toBe('Created the wooden barrel.');
+      expect(unfencedWithProse.toolCalls).toEqual([]);
+
+      // 4. Parses multi-line pretty-printed agy JSON output
+      const multiLineAgy = bridge.parseLastAgyJson(
+        '{\n  "conversation_id": "conv-pretty-1",\n  "status": "SUCCESS",\n  "response": "{\\"content\\":\\"Ok\\",\\"tool_calls\\":[]}"\n}'
+      );
+      expect(multiLineAgy?.conversation_id).toBe('conv-pretty-1');
+      expect(multiLineAgy?.status).toBe('SUCCESS');
+
+      // 5. Client-side AIAgentService retries 500 empty-response errors from the Antigravity Bridge
+      let clientAttempts = 0;
+      service.aiAgent.saveConfig({ baseUrl: '/api/antigravity/v1', model: 'gemini-4-neon-high' });
+      service.aiAgent.customFetch = vi.fn(async () => {
+        clientAttempts++;
+        if (clientAttempts === 1) {
+          return {
+            ok: false,
+            status: 500,
+            statusText: 'Internal Server Error',
+            text: async () =>
+              JSON.stringify({
+                error: {
+                  message:
+                    'Antigravity Bridge Error: Antigravity CLI returned an empty response with no tool calls or content.',
+                },
+              }),
+          } as any;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { role: 'assistant', content: 'Recovered after empty response.' } }],
+          }),
+        } as any;
+      }) as any;
+
+      const clientRes = await service.aiAgent.runPrompt({ prompt: 'Say ok' });
+      expect(clientAttempts).toBe(2);
+      expect(clientRes.content).toBe('Recovered after empty response.');
+    });
+
     it('persists optional promptSuffix in config and appends it to user prompts when set', async () => {
       const capturedBodies: any[] = [];
       service.aiAgent.customFetch = vi.fn(async (_url: string, init: any) => {
@@ -2080,6 +2207,163 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(res.toolSteps?.[1].toolName).toBe('modeler_create_primitive');
       expect(service.importedMeshes.some((m) => m.name === 'fallback_gold_orb')).toBe(true);
       expect(res.content).toContain('2 3D modeling operation(s) successfully executed');
+    });
+
+    it('executes concatenated {"tool_calls": [...]} JSON blocks emitted on a later turn after earlier native tool calls and parses them in Antigravity Bridge', async () => {
+      const require = createRequire(import.meta.url);
+      const bridge = require('../../scripts/antigravity-bridge.js');
+
+      const concatenatedJsonText =
+        JSON.stringify(
+          {
+            tool_calls: [
+              {
+                name: 'modeler_create_rounded_box',
+                arguments: {
+                  name: 'qblock_track_1',
+                  width: 0.95,
+                  height: 0.95,
+                  depth: 0.95,
+                  radius: 0.1,
+                  segments: 2,
+                  position: { x: -3.2, y: 2.455, z: -1.7 },
+                  color: '#f6c927',
+                },
+              },
+            ],
+          },
+          null,
+          2
+        ) +
+        '\n' +
+        JSON.stringify(
+          {
+            tool_calls: [
+              {
+                name: 'modeler_create_primitive',
+                arguments: {
+                  name: 'mushroom_fg_left_cap',
+                  type: 'sphere',
+                  options: { diameter: 0.76, segments: 8 },
+                  position: { x: -6.8, y: 2.48, z: -5.6 },
+                  color: '#e53428',
+                },
+              },
+            ],
+          },
+          null,
+          2
+        );
+
+      // 1. Verify Antigravity Bridge parses concatenated {"tool_calls": [...]}\n{"tool_calls": [...]} directly
+      const bridgeParsed = bridge.parseStructuredAgentResponse(concatenatedJsonText);
+      expect(bridgeParsed.toolCalls).toHaveLength(2);
+      expect(bridgeParsed.toolCalls[0].name).toBe('modeler_create_rounded_box');
+      expect(bridgeParsed.toolCalls[1].name).toBe('modeler_create_primitive');
+      expect(bridgeParsed.content).toBe('');
+
+      // 2. Verify Antigravity Bridge also merges multiple fenced ```json blocks
+      const multiFenced =
+        '```json\n{"tool_calls":[{"name":"modeler_create_rounded_box","arguments":{"name":"b1"}}]}\n```\n' +
+        '```json\n{"tool_calls":[{"name":"modeler_create_primitive","arguments":{"name":"p1","type":"sphere"}}]}\n```';
+      const fencedParsed = bridge.parseStructuredAgentResponse(multiFenced);
+      expect(fencedParsed.toolCalls).toHaveLength(2);
+      expect(fencedParsed.toolCalls.map((c: any) => c.name)).toEqual([
+        'modeler_create_rounded_box',
+        'modeler_create_primitive',
+      ]);
+
+      // 3. Verify AIAgentService executes concatenated JSON tool_calls even on turn 2+ (after native tool calls)
+      let turn = 0;
+      (globalThis as any).fetch = vi.fn().mockImplementation(async () => {
+        turn++;
+        if (turn === 1) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: 'chatcmpl-turn-1',
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_turn1_ground',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_create_primitive',
+                          arguments: JSON.stringify({
+                            name: 'level_ground',
+                            type: 'box',
+                            options: { width: 10, height: 0.4, depth: 10 },
+                            position: { x: 0, y: -0.2, z: 0 },
+                            color: '#66c933',
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          };
+        }
+        if (turn === 2) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: 'chatcmpl-turn-2-raw-json',
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: concatenatedJsonText,
+                    tool_calls: [],
+                  },
+                },
+              ],
+            }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: 'chatcmpl-turn-3-summary',
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'Built the diorama ground, question block, and mushroom cap.',
+                  tool_calls: [],
+                },
+              },
+            ],
+          }),
+        };
+      });
+
+      const res = await service.aiAgent.runPrompt({
+        prompt: 'Build a stylized platformer diorama',
+        visualCritique: false,
+        checkZFighting: false,
+      });
+
+      expect(turn).toBe(3);
+      expect(res.toolSteps).toHaveLength(3);
+      expect(res.toolSteps?.map((s) => s.toolName)).toEqual([
+        'modeler_create_primitive',
+        'modeler_create_rounded_box',
+        'modeler_create_primitive',
+      ]);
+      expect(service.importedMeshes.some((m) => m.name === 'level_ground')).toBe(true);
+      expect(service.importedMeshes.some((m) => m.name === 'qblock_track_1')).toBe(true);
+      expect(service.importedMeshes.some((m) => m.name === 'mushroom_fg_left_cap')).toBe(true);
+      expect(res.content).toBe('Built the diorama ground, question block, and mushroom cap.');
+      expect(res.content).not.toContain('"tool_calls"');
     });
   });
 
@@ -2479,6 +2763,115 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
         const status = container.querySelector('#aiSettingsStatus') as HTMLElement;
         expect(status.textContent).toBe('Request failed');
       });
+
+      runSpy.mockRestore();
+      app.dispose();
+      container.remove();
+    });
+
+    it('opens a centered native dialog preview with backdrop when clicking a pasted or sent AI chat image', async () => {
+      const container = document.createElement('div');
+      container.id = 'test-ai-image-preview-ui';
+      document.body.appendChild(container);
+      const app = new MeshEditorApp({
+        container,
+        engine: new NullEngine(),
+      });
+
+      const sampleDataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const promptInput = container.querySelector('#aiPromptInput') as HTMLTextAreaElement;
+      const previewModal = container.querySelector('#aiImagePreviewModal') as HTMLDialogElement;
+      const previewImg = container.querySelector('#aiImagePreviewImg') as HTMLImageElement;
+      const previewTitleText = container.querySelector('#aiImagePreviewTitleText') as HTMLElement;
+      const closeBtn = container.querySelector('#btnCloseAIImagePreview') as HTMLButtonElement;
+
+      expect(previewModal).toBeTruthy();
+      expect(previewModal.tagName).toBe('DIALOG');
+      expect(previewModal.getAttribute('closedby')).toBe('any');
+      expect(previewModal.hasAttribute('open')).toBe(false);
+
+      // Simulate pasting an image into #aiPromptInput
+      const fakeFile = new File(['png-bytes'], 'pasted.png', { type: 'image/png' });
+      const originalFileReader = globalThis.FileReader;
+      class MockFileReader {
+        public result: string | ArrayBuffer | null = null;
+        public onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => any) | null = null;
+        public readAsDataURL(_blob: Blob): void {
+          this.result = sampleDataUrl;
+          this.onload?.call(this as any, {} as ProgressEvent<FileReader>);
+        }
+      }
+      (globalThis as any).FileReader = MockFileReader;
+
+      try {
+        const pasteEvent = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+        Object.defineProperty(pasteEvent, 'clipboardData', {
+          value: {
+            items: [
+              {
+                type: 'image/png',
+                getAsFile: () => fakeFile,
+              },
+            ],
+          },
+        });
+        promptInput.dispatchEvent(pasteEvent);
+      } finally {
+        (globalThis as any).FileReader = originalFileReader;
+      }
+
+      const attachmentsBar = container.querySelector('#aiImageAttachmentsBar') as HTMLElement;
+      expect(attachmentsBar.style.display).toBe('flex');
+      const previewBtn = attachmentsBar.querySelector('.ai-attachment-preview-btn') as HTMLButtonElement;
+      expect(previewBtn).toBeTruthy();
+
+      // Clicking the pasted attachment opens the preview modal with the pasted image
+      previewBtn.click();
+      expect(previewModal.open || previewModal.hasAttribute('open')).toBe(true);
+      expect(previewImg.src).toBe(sampleDataUrl);
+      expect(previewTitleText.textContent).toBe('Reference 1');
+
+      // Keyboard shortcuts (e.g. Delete) must not affect selected 3D meshes while preview is open
+      const initialMeshCount = app.service.importedMeshes.length;
+      if (initialMeshCount > 0) {
+        app.service.selectMesh(app.service.importedMeshes[0]);
+      }
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      expect(app.service.importedMeshes.length).toBe(initialMeshCount);
+
+      // Clicking the close button closes the preview modal
+      closeBtn.click();
+      await vi.waitFor(() => {
+        expect(previewModal.open || previewModal.hasAttribute('open')).toBe(false);
+      });
+
+      // Clicking the remove button removes the attachment without opening the preview modal
+      const removeBtn = attachmentsBar.querySelector('.ai-attachment-remove') as HTMLButtonElement;
+      expect(removeBtn).toBeTruthy();
+      removeBtn.click();
+      expect(previewModal.open || previewModal.hasAttribute('open')).toBe(false);
+      expect(attachmentsBar.style.display).toBe('none');
+
+      // Attach again and send a prompt to verify sent chat bubble images also open the preview modal
+      app.aiAgentUI.aiPendingImages.push(sampleDataUrl);
+      app.aiAgentUI.renderAIAttachments();
+      const runSpy = vi.spyOn(app.service.aiAgent, 'runPrompt').mockResolvedValueOnce({
+        content: 'Created preview test mesh.',
+        steps: [],
+      } as any);
+
+      promptInput.value = 'Inspect reference';
+      (container.querySelector('#btnAIGenerate') as HTMLButtonElement).click();
+
+      await vi.waitFor(() => {
+        const sentImgBtn = container.querySelector('#aiChatLog .ai-msg-image-btn') as HTMLButtonElement | null;
+        expect(sentImgBtn).toBeTruthy();
+        sentImgBtn!.click();
+      });
+
+      expect(previewModal.open || previewModal.hasAttribute('open')).toBe(true);
+      expect(previewImg.src).toBe(sampleDataUrl);
 
       runSpy.mockRestore();
       app.dispose();
