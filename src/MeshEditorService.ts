@@ -3394,12 +3394,34 @@ export class MeshEditorService {
     return cutterMesh;
   }
 
-  public ensureMeshHasCSGGeometry(mesh: Mesh): Mesh | null {
-    if (!mesh || mesh.isDisposed()) return null;
+  public ensureMeshHasCSGGeometry(mesh: Mesh | string | null | undefined): Mesh | null {
+    if (!mesh) return null;
+    if (typeof mesh === 'string') {
+      const found =
+        this.importedMeshes.find((m) => m.name === mesh && !m.isDisposed()) ||
+        (this.scene?.getMeshByName(mesh) as Mesh | null);
+      if (!found) return null;
+      mesh = found;
+    }
+    if (typeof mesh !== 'object') return null;
+    if (typeof (mesh as any).isDisposed === 'function' && (mesh as any).isDisposed()) return null;
 
-    // If mesh has 0 vertices or no positions, check if it's a container node with child geometry
-    if (mesh.getTotalVertices() === 0 || !mesh.isVerticesDataPresent(VertexBuffer.PositionKind)) {
-      const childMeshes = mesh.getChildMeshes(false, (c) => (c instanceof Mesh) && c.getTotalVertices() > 0 && c.isVerticesDataPresent(VertexBuffer.PositionKind)) as Mesh[];
+    const hasVertexApi =
+      typeof (mesh as any).getTotalVertices === 'function' &&
+      typeof (mesh as any).isVerticesDataPresent === 'function';
+
+    // If mesh has 0 vertices, no positions, or is a TransformNode container, check child geometry
+    if (!hasVertexApi || mesh.getTotalVertices() === 0 || !mesh.isVerticesDataPresent(VertexBuffer.PositionKind)) {
+      if (typeof (mesh as any).getChildMeshes !== 'function') return null;
+      const childMeshes = (mesh as any).getChildMeshes(
+        false,
+        (c: any) =>
+          c instanceof Mesh &&
+          typeof c.isDisposed === 'function' &&
+          !c.isDisposed() &&
+          c.getTotalVertices() > 0 &&
+          c.isVerticesDataPresent(VertexBuffer.PositionKind)
+      ) as Mesh[];
       if (childMeshes.length === 1) {
         return childMeshes[0];
       }
@@ -3409,7 +3431,7 @@ export class MeshEditorService {
           for (const cm of childMeshes) {
             if (!cm.isDisposed()) cm.setEnabled(false);
           }
-          merged.name = mesh.name;
+          merged.name = mesh.name || 'Merged_CSG_Source';
           const idx = this.importedMeshes.indexOf(mesh);
           if (idx !== -1) {
             this.importedMeshes.splice(idx, 1, merged);
@@ -3442,8 +3464,8 @@ export class MeshEditorService {
   }
 
   public async performCSGOperation(
-    targetMesh: Mesh,
-    toolMesh: Mesh,
+    targetMesh: Mesh | string | Promise<Mesh | null>,
+    toolMesh: Mesh | string | Promise<Mesh | null>,
     op: 'subtract' | 'union' | 'intersect',
     keepToolMesh: boolean = false,
     options?: {
@@ -3453,26 +3475,38 @@ export class MeshEditorService {
       angleThresholdDeg?: number;
     }
   ): Promise<Mesh | null> {
-    if (!targetMesh || !toolMesh) {
+    const resolvedTarget = await Promise.resolve(targetMesh as any);
+    const resolvedTool = await Promise.resolve(toolMesh as any);
+
+    if (!resolvedTarget || !resolvedTool) {
       this.events.onToast?.('Please specify both a target mesh and a cutter mesh.', 'warning');
       return null;
     }
-    if (targetMesh === toolMesh) {
+    if (resolvedTarget === resolvedTool) {
       this.events.onToast?.('Target mesh and tool mesh cannot be the same mesh.', 'warning');
       return null;
     }
 
-    const validTarget = this.ensureMeshHasCSGGeometry(targetMesh);
+    const targetLabel = typeof resolvedTarget === 'string' ? resolvedTarget : resolvedTarget?.name || 'Target';
+    const toolLabel = typeof resolvedTool === 'string' ? resolvedTool : resolvedTool?.name || 'Tool';
+
+    const validTarget = this.ensureMeshHasCSGGeometry(resolvedTarget);
     if (!validTarget) {
       this.events.onStatusChanged?.('Ready', false);
-      this.events.onToast?.(`Target mesh "${targetMesh.name}" has no 3D vertices/geometry. Please select a valid solid mesh.`, 'warning');
+      this.events.onToast?.(`Target mesh "${targetLabel}" has no 3D vertices/geometry. Please select a valid solid mesh.`, 'warning');
       return null;
     }
 
-    const validTool = this.ensureMeshHasCSGGeometry(toolMesh);
+    const validTool = this.ensureMeshHasCSGGeometry(resolvedTool);
     if (!validTool) {
       this.events.onStatusChanged?.('Ready', false);
-      this.events.onToast?.(`Tool mesh "${toolMesh.name}" has no 3D vertices/geometry. Please select a valid solid mesh.`, 'warning');
+      this.events.onToast?.(`Tool mesh "${toolLabel}" has no 3D vertices/geometry. Please select a valid solid mesh.`, 'warning');
+      return null;
+    }
+
+    if (validTarget === validTool) {
+      this.events.onStatusChanged?.('Ready', false);
+      this.events.onToast?.('Target mesh and tool mesh cannot be the same mesh.', 'warning');
       return null;
     }
 
@@ -3589,12 +3623,15 @@ export class MeshEditorService {
       });
     }
 
+    const targetMeshObj = resolvedTarget instanceof Mesh ? resolvedTarget : validTarget;
+    const toolMeshObj = resolvedTool instanceof Mesh ? resolvedTool : validTool;
+
     // Detach gizmos and highlights from target before disabling
     this.clearSelectionProxy();
     this.gizmoManager.attachToMesh(null);
-    if (this.selectedMesh === validTarget || this.selectedMesh === targetMesh) {
+    if (this.selectedMesh === validTarget || this.selectedMesh === targetMeshObj) {
       this.highlightLayer.removeMesh(validTarget);
-      if (validTarget !== targetMesh) this.highlightLayer.removeMesh(targetMesh);
+      if (validTarget !== targetMeshObj) this.highlightLayer.removeMesh(targetMeshObj);
       this.selectedMesh = null;
     }
 
@@ -3620,18 +3657,18 @@ export class MeshEditorService {
       removedMeshes.push(validTarget);
       validTarget.setEnabled(false);
     } else {
-      const origIdx = this.importedMeshes.indexOf(targetMesh);
+      const origIdx = this.importedMeshes.indexOf(targetMeshObj);
       if (origIdx !== -1) {
         this.importedMeshes.splice(origIdx, 1, resultMesh);
-        removedFromImported.push(targetMesh);
-        removedMeshes.push(targetMesh);
-        targetMesh.setEnabled(false);
+        removedFromImported.push(targetMeshObj);
+        removedMeshes.push(targetMeshObj);
+        targetMeshObj.setEnabled(false);
       } else {
         this.importedMeshes.push(resultMesh);
       }
     }
-    if (targetMesh !== validTarget) {
-      disableAndTrack(targetMesh);
+    if (targetMeshObj !== validTarget) {
+      disableAndTrack(targetMeshObj);
     }
     if (!removedMeshes.includes(validTarget) && !validTarget.isDisposed()) {
       removedMeshes.push(validTarget);
@@ -3640,14 +3677,14 @@ export class MeshEditorService {
 
     // Soft-disable tool mesh unless user toggled 'keepToolMesh'
     if (!keepToolMesh) {
-      if (this.selectedMesh === validTool || this.selectedMesh === toolMesh) {
+      if (this.selectedMesh === validTool || this.selectedMesh === toolMeshObj) {
         this.highlightLayer.removeMesh(validTool);
-        if (validTool !== toolMesh) this.highlightLayer.removeMesh(toolMesh);
+        if (validTool !== toolMeshObj) this.highlightLayer.removeMesh(toolMeshObj);
         this.selectedMesh = null;
       }
       disableAndTrack(validTool);
-      if (toolMesh !== validTool) {
-        disableAndTrack(toolMesh);
+      if (toolMeshObj !== validTool) {
+        disableAndTrack(toolMeshObj);
       }
     }
 

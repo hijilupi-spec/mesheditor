@@ -118,7 +118,7 @@ export class ExecuteBabylonCodeTool extends AbstractTool {
       code: {
         type: 'string',
         description:
-          'JavaScript function body (supports async/await). Available variables in scope: scene, service, MeshBuilder, Mesh, Vector3, Color3, Color4, Quaternion, Matrix, PBRMaterial, StandardMaterial, MultiMaterial, Texture, DynamicTexture, VertexData, VertexBuffer, CSG, CSG2, earcut, registerMesh(mesh), createMaterial(name, hexColor, roughness, metallic), autoUV(mesh, scale), booleanOp(baseMesh, toolMesh, op, newName, keepTool). Return a summary string or created mesh(es).',
+          'JavaScript function body (supports async/await). Available variables in scope: scene, service, MeshBuilder, Mesh, Vector3, Color3, Color4, Quaternion, Matrix, PBRMaterial, StandardMaterial, MultiMaterial, Texture, DynamicTexture, VertexData, VertexBuffer, CSG, CSG2, earcut, registerMesh(mesh), createMaterial(name, hexColor, roughness, metallic), autoUV(mesh, scale), await booleanOp(baseMesh, toolMesh, op, newName, keepTool). Return a summary string or created mesh(es).',
       },
     },
     required: ['code'],
@@ -165,14 +165,34 @@ export class ExecuteBabylonCodeTool extends AbstractTool {
       return m;
     };
 
+    const resolveMeshArg = async (arg: any): Promise<Mesh | null> => {
+      const resolved = await Promise.resolve(arg);
+      if (!resolved) return null;
+      if (typeof resolved === 'string') {
+        return (
+          context.findMeshByNameOrId(resolved) ||
+          (context.scene.getMeshByName(resolved) as Mesh | null) ||
+          null
+        );
+      }
+      return resolved as Mesh;
+    };
+
     const booleanOp = async (
-      baseMesh: Mesh,
-      toolMesh: Mesh,
+      baseMesh: Mesh | string | Promise<Mesh | null>,
+      toolMesh: Mesh | string | Promise<Mesh | null>,
       op: 'union' | 'subtract' | 'intersect' = 'subtract',
       newName?: string,
       keepTool: boolean = false
     ) => {
-      const res = await context.service.performCSGOperation(baseMesh, toolMesh, op, keepTool);
+      const resolvedBase = await resolveMeshArg(baseMesh);
+      const resolvedTool = await resolveMeshArg(toolMesh);
+      if (!resolvedBase || !resolvedTool) {
+        throw new Error(
+          `booleanOp requires two valid meshes (received base=${typeof baseMesh === 'string' ? baseMesh : resolvedBase?.name || String(resolvedBase)}, tool=${typeof toolMesh === 'string' ? toolMesh : resolvedTool?.name || String(resolvedTool)}). Note: booleanOp is async, use await booleanOp(...).`
+        );
+      }
+      const res = await context.service.performCSGOperation(resolvedBase, resolvedTool, op, keepTool);
       if (res && newName) res.name = newName;
       return res;
     };

@@ -730,5 +730,23 @@ describe('Comprehensive Undo / Redo Integration Across Tools', () => {
       expect(service.importedMeshes).toContain(rebuilt);
       expect(service.importedMeshes).not.toContain(textMesh);
     });
+
+    it('handles non-Mesh, string name, and un-awaited Promise arguments safely in CSG helpers', async () => {
+      expect(service.ensureMeshHasCSGGeometry(null)).toBeNull();
+      expect(service.ensureMeshHasCSGGeometry({} as any)).toBeNull();
+      expect(service.ensureMeshHasCSGGeometry('NonExistentMesh')).toBeNull();
+
+      const a = service.createPrimitive(makePrimitiveConfig({ name: 'CSG_Base_A', size: 2 }));
+      const b = service.createPrimitive(makePrimitiveConfig({ name: 'CSG_Cutter_B', size: 1 }));
+      b.position.x = 0.5;
+
+      // Resolve by string name
+      expect(service.ensureMeshHasCSGGeometry(a.name)).toBe(a);
+
+      // Perform CSG when a Promise<Mesh> or string name is passed (e.g. un-awaited chained booleanOp)
+      const res = await service.performCSGOperation(Promise.resolve(a), b.name, 'subtract', false);
+      expect(res).not.toBeNull();
+      expect(service.importedMeshes).toContain(res);
+    });
   });
 });
