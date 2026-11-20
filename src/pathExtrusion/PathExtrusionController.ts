@@ -44,6 +44,13 @@ export class PathExtrusionController {
   // Pointer & Gizmo observers
   private pointerObserver: Observer<PointerInfo> | null = null;
   private gizmoObserver: Observer<any> | null = null;
+  private gizmoDragStartObserver: Observer<any> | null = null;
+  private gizmoDragEndObserver: Observer<any> | null = null;
+  private preDragPathSnapshot: {
+    paths: PathExtrusionItem[];
+    activePathId: string | null;
+    selectedPointIndex: number | null;
+  } | null = null;
   public tapToPlaceMode: boolean = false;
 
   // Callbacks for UI updates
@@ -51,6 +58,48 @@ export class PathExtrusionController {
 
   constructor(private service: MeshEditorService) {
     // Initialized without default paths so activating the tool keeps the scene clean.
+  }
+
+  public captureUndoSnapshot(): {
+    paths: PathExtrusionItem[];
+    activePathId: string | null;
+    selectedPointIndex: number | null;
+  } {
+    return {
+      paths: this.exportState(),
+      activePathId: this.activePathId,
+      selectedPointIndex: this.selectedPointIndex,
+    };
+  }
+
+  public restoreUndoSnapshot(snapshot: {
+    paths: PathExtrusionItem[];
+    activePathId: string | null;
+    selectedPointIndex: number | null;
+  }): void {
+    this.loadState(snapshot.paths);
+    this.activePathId = snapshot.activePathId;
+    this.selectedPointIndex = snapshot.selectedPointIndex;
+    if (this.isActive) {
+      this.refreshScene();
+    }
+    this.onStateChanged?.();
+  }
+
+  public recordStateChange(
+    actionName: string,
+    before: {
+      paths: PathExtrusionItem[];
+      activePathId: string | null;
+      selectedPointIndex: number | null;
+    }
+  ): void {
+    const after = this.captureUndoSnapshot();
+    this.service.recordAction({
+      name: actionName,
+      undo: () => this.restoreUndoSnapshot(before),
+      redo: () => this.restoreUndoSnapshot(after),
+    });
   }
 
   public get activePath(): PathExtrusionItem | null {
@@ -145,6 +194,7 @@ export class PathExtrusionController {
   }
 
   public addNewPath(name?: string): PathExtrusionItem {
+    const before = this.captureUndoSnapshot();
     const id = `path_extrusion_${Date.now().toString().slice(-4)}`;
     const newItem: PathExtrusionItem = {
       id,
@@ -175,6 +225,7 @@ export class PathExtrusionController {
     this.activePathId = id;
     this.selectedPointIndex = null;
     this.refreshScene();
+    this.recordStateChange(`Add Path "${newItem.name}"`, before);
     this.onStateChanged?.();
     return newItem;
   }
@@ -186,12 +237,15 @@ export class PathExtrusionController {
   public deletePath(id: string): void {
     const idx = this.paths.findIndex((p) => p.id === id);
     if (idx !== -1) {
+      const before = this.captureUndoSnapshot();
+      const deletedName = this.paths[idx].name;
       this.paths.splice(idx, 1);
       if (this.activePathId === id) {
         this.activePathId = this.paths.length > 0 ? this.paths[0].id : null;
       }
       this.selectedPointIndex = null;
       this.refreshScene();
+      this.recordStateChange(`Delete Path "${deletedName}"`, before);
       this.onStateChanged?.();
     }
   }
@@ -210,6 +264,7 @@ export class PathExtrusionController {
     const item = this.paths.find((p) => p.id === id);
     if (!item) return null;
 
+    const before = this.captureUndoSnapshot();
     const dupId = `path_extrusion_${Date.now().toString().slice(-4)}`;
     const dup: PathExtrusionItem = {
       id: dupId,
@@ -222,6 +277,7 @@ export class PathExtrusionController {
     this.activePathId = dupId;
     this.selectedPointIndex = null;
     this.refreshScene();
+    this.recordStateChange(`Duplicate Path "${item.name}"`, before);
     this.onStateChanged?.();
     return dup;
   }
@@ -238,9 +294,11 @@ export class PathExtrusionController {
     const pathItem = this.activePath;
     if (!pathItem) return;
 
+    const before = this.captureUndoSnapshot();
     pathItem.points.push({ x: pos.x, y: pos.y, z: pos.z });
     this.selectedPointIndex = pathItem.points.length - 1;
     this.refreshScene();
+    this.recordStateChange(`Add Path Waypoint (#${pathItem.points.length})`, before);
     this.onStateChanged?.();
   }
 
@@ -248,33 +306,39 @@ export class PathExtrusionController {
     const pathItem = this.activePath;
     if (!pathItem || this.selectedPointIndex === null) return;
     if (this.selectedPointIndex >= 0 && this.selectedPointIndex < pathItem.points.length) {
+      const before = this.captureUndoSnapshot();
       pathItem.points.splice(this.selectedPointIndex, 1);
       this.selectedPointIndex = null;
       this.service.gizmoManager.attachToMesh(null);
       this.refreshScene();
+      this.recordStateChange('Remove Path Waypoint', before);
       this.onStateChanged?.();
     }
   }
 
   public clearPoints(): void {
     const pathItem = this.activePath;
-    if (!pathItem) return;
+    if (!pathItem || pathItem.points.length === 0) return;
+    const before = this.captureUndoSnapshot();
     pathItem.points = [];
     this.selectedPointIndex = null;
     this.service.gizmoManager.attachToMesh(null);
     this.refreshScene();
+    this.recordStateChange(`Clear Waypoints "${pathItem.name}"`, before);
     this.onStateChanged?.();
   }
 
   public updateShapeConfig(config: Partial<ShapeConfig>): void {
     const pathItem = this.activePath;
     if (!pathItem) return;
+    const before = this.captureUndoSnapshot();
     Object.assign(pathItem.shapeConfig, config);
     // If shapeType is not custom, update the shape geometry
     if (config.shapeType && config.shapeType !== 'custom') {
       pathItem.shape = PathFactory.getShapePoints(pathItem.shapeConfig);
     }
     this.updatePreviewMesh();
+    this.recordStateChange(`Update Path Profile "${pathItem.name}"`, before);
     this.onStateChanged?.();
   }
 
@@ -323,17 +387,29 @@ export class PathExtrusionController {
     mat.metallic = pathItem.shapeConfig.metallic ?? 0.1;
     mesh.material = mat;
 
+    const prevSelected = [...this.service.selectedNodes];
+    const prevBakedName = pathItem.bakedMeshName;
     this.service.importedMeshes.push(mesh);
     this.service.recordAction({
       name: `Bake Path Extrusion "${pathItem.name}"`,
       undo: () => {
-        mesh.dispose();
+        this.service.clearSelectionProxy();
+        if (!mesh.isDisposed()) mesh.setEnabled(false);
         const idx = this.service.importedMeshes.indexOf(mesh);
         if (idx !== -1) this.service.importedMeshes.splice(idx, 1);
-        this.service.selectNodes([]);
+        pathItem.bakedMeshName = prevBakedName;
+        this.service.selectNodes(prevSelected.filter((n) => !n.isDisposed()));
       },
       redo: () => {
-        // Redo re-registers
+        this.service.clearSelectionProxy();
+        if (!mesh.isDisposed()) {
+          mesh.setEnabled(true);
+          if (!this.service.importedMeshes.includes(mesh)) {
+            this.service.importedMeshes.push(mesh);
+          }
+          pathItem.bakedMeshName = uniqueName;
+          this.service.selectMesh(mesh);
+        }
       },
     });
 
@@ -500,6 +576,10 @@ export class PathExtrusionController {
 
     const posGizmo = this.service.gizmoManager.gizmos.positionGizmo;
     if (posGizmo) {
+      this.gizmoDragStartObserver = posGizmo.onDragStartObservable.add(() => {
+        if (!this.isActive || this.selectedPointIndex === null) return;
+        this.preDragPathSnapshot = this.captureUndoSnapshot();
+      });
       this.gizmoObserver = posGizmo.onDragObservable.add(() => {
         if (!this.isActive || this.selectedPointIndex === null) return;
         const pathItem = this.activePath;
@@ -515,6 +595,14 @@ export class PathExtrusionController {
           this.updatePreviewMesh();
         }
       });
+      this.gizmoDragEndObserver = posGizmo.onDragEndObservable.add(() => {
+        if (this.preDragPathSnapshot) {
+          const before = this.preDragPathSnapshot;
+          this.preDragPathSnapshot = null;
+          this.recordStateChange('Move Path Waypoint', before);
+          this.onStateChanged?.();
+        }
+      });
     }
   }
 
@@ -523,10 +611,22 @@ export class PathExtrusionController {
       this.service.scene.onPointerObservable.remove(this.pointerObserver);
       this.pointerObserver = null;
     }
-    if (this.gizmoObserver && this.service.gizmoManager.gizmos.positionGizmo) {
-      this.service.gizmoManager.gizmos.positionGizmo.onDragObservable.remove(this.gizmoObserver);
-      this.gizmoObserver = null;
+    const posGizmo = this.service.gizmoManager.gizmos.positionGizmo;
+    if (posGizmo) {
+      if (this.gizmoObserver) {
+        posGizmo.onDragObservable.remove(this.gizmoObserver);
+        this.gizmoObserver = null;
+      }
+      if (this.gizmoDragStartObserver) {
+        posGizmo.onDragStartObservable.remove(this.gizmoDragStartObserver);
+        this.gizmoDragStartObserver = null;
+      }
+      if (this.gizmoDragEndObserver) {
+        posGizmo.onDragEndObservable.remove(this.gizmoDragEndObserver);
+        this.gizmoDragEndObserver = null;
+      }
     }
+    this.preDragPathSnapshot = null;
   }
 
   // ─── Project State Persistence ─────────────────────────────────────────

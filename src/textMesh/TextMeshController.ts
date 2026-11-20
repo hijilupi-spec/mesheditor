@@ -329,6 +329,12 @@ export class TextMeshController {
    */
   public async updateTextMesh(mesh: Mesh, updates: Partial<CreateTextMeshOptions>): Promise<Mesh> {
     const existingConfig = this.getTextConfig(mesh) || { ...this.currentConfig };
+    const prevConfigSnapshot: TextMeshConfig = { ...existingConfig };
+    const prevPos = mesh.position.clone();
+    const prevRot = mesh.rotation.clone();
+    const prevRotQuat = mesh.rotationQuaternion ? mesh.rotationQuaternion.clone() : null;
+    const prevScale = mesh.scaling.clone();
+
     const nextConfig: TextMeshConfig = {
       text: (updates.text ?? existingConfig.text).trim() || 'Text',
       fontUrl: this.resolveFontUrl(updates.fontUrl ?? existingConfig.fontUrl),
@@ -368,7 +374,8 @@ export class TextMeshController {
       }
 
       const oldIdx = this.service.importedMeshes.indexOf(mesh);
-      mesh.dispose(false, false);
+      // Soft-disable old mesh instead of disposing so Undo can restore it cleanly
+      mesh.setEnabled(false);
 
       resultMesh = this.buildBabylonTextMesh(meshName, nextConfig, fontData);
       resultMesh.parent = parent;
@@ -404,6 +411,75 @@ export class TextMeshController {
 
     this.applyTextMaterial(resultMesh, nextConfig);
     this.attachMetadata(resultMesh, nextConfig);
+
+    const finalMesh = resultMesh;
+    const nextConfigSnapshot: TextMeshConfig = { ...nextConfig };
+    const nextPos = finalMesh.position.clone();
+    const nextRot = finalMesh.rotation.clone();
+    const nextRotQuat = finalMesh.rotationQuaternion ? finalMesh.rotationQuaternion.clone() : null;
+    const nextScale = finalMesh.scaling.clone();
+
+    if (geometryChanged) {
+      this.service.recordAction({
+        name: `Update 3D Text "${nextConfigSnapshot.text}"`,
+        undo: () => {
+          this.service.clearSelectionProxy();
+          if (!finalMesh.isDisposed()) finalMesh.setEnabled(false);
+          const nIdx = this.service.importedMeshes.indexOf(finalMesh);
+          if (nIdx !== -1) this.service.importedMeshes.splice(nIdx, 1);
+          if (!mesh.isDisposed()) {
+            mesh.setEnabled(true);
+            if (!this.service.importedMeshes.includes(mesh)) {
+              this.service.importedMeshes.push(mesh);
+            }
+            this.currentConfig = { ...prevConfigSnapshot };
+            this.service.selectMesh(mesh);
+            this.onMeshUpdated?.(mesh);
+          }
+        },
+        redo: () => {
+          this.service.clearSelectionProxy();
+          if (!mesh.isDisposed()) mesh.setEnabled(false);
+          const oIdx = this.service.importedMeshes.indexOf(mesh);
+          if (oIdx !== -1) this.service.importedMeshes.splice(oIdx, 1);
+          if (!finalMesh.isDisposed()) {
+            finalMesh.setEnabled(true);
+            if (!this.service.importedMeshes.includes(finalMesh)) {
+              this.service.importedMeshes.push(finalMesh);
+            }
+            this.currentConfig = { ...nextConfigSnapshot };
+            this.service.selectMesh(finalMesh);
+            this.onMeshUpdated?.(finalMesh);
+          }
+        },
+      });
+    } else {
+      this.service.recordAction({
+        name: `Update 3D Text Style "${nextConfigSnapshot.text}"`,
+        undo: () => {
+          if (finalMesh.isDisposed()) return;
+          finalMesh.position.copyFrom(prevPos);
+          finalMesh.rotation.copyFrom(prevRot);
+          finalMesh.rotationQuaternion = prevRotQuat ? prevRotQuat.clone() : null;
+          finalMesh.scaling.copyFrom(prevScale);
+          this.applyTextMaterial(finalMesh, prevConfigSnapshot);
+          this.attachMetadata(finalMesh, prevConfigSnapshot);
+          this.currentConfig = { ...prevConfigSnapshot };
+          this.onMeshUpdated?.(finalMesh);
+        },
+        redo: () => {
+          if (finalMesh.isDisposed()) return;
+          finalMesh.position.copyFrom(nextPos);
+          finalMesh.rotation.copyFrom(nextRot);
+          finalMesh.rotationQuaternion = nextRotQuat ? nextRotQuat.clone() : null;
+          finalMesh.scaling.copyFrom(nextScale);
+          this.applyTextMaterial(finalMesh, nextConfigSnapshot);
+          this.attachMetadata(finalMesh, nextConfigSnapshot);
+          this.currentConfig = { ...nextConfigSnapshot };
+          this.onMeshUpdated?.(finalMesh);
+        },
+      });
+    }
 
     this.service.selectMesh(resultMesh);
     this.service.updateStats();

@@ -363,7 +363,7 @@ export class SculptController {
 
     this.activeMesh = mesh;
     this.isSculpting = true;
-    this.strokeStartVertexData = VertexData.ExtractFromMesh(mesh);
+    this.strokeStartVertexData = VertexData.ExtractFromMesh(mesh, true, true);
 
     // Temporarily detach camera controls so mouse movement sculpts without rotating viewport
     if (this.scene.activeCamera) {
@@ -677,6 +677,32 @@ export class SculptController {
     }
   }
 
+  private recordMeshCreationUndo(mesh: Mesh, actionName: string): void {
+    const prevSelected = [...this.service.selectedNodes];
+    this.service.recordAction({
+      name: actionName,
+      undo: () => {
+        this.service.clearSelectionProxy();
+        if (!mesh.isDisposed()) mesh.setEnabled(false);
+        const idx = this.service.importedMeshes.indexOf(mesh);
+        if (idx !== -1) this.service.importedMeshes.splice(idx, 1);
+        this.service.selectNodes(prevSelected.filter((n) => !n.isDisposed()));
+        this.onMeshModified?.(mesh);
+      },
+      redo: () => {
+        this.service.clearSelectionProxy();
+        if (!mesh.isDisposed()) {
+          mesh.setEnabled(true);
+          if (!this.service.importedMeshes.includes(mesh)) {
+            this.service.importedMeshes.push(mesh);
+          }
+          this.service.selectMesh(mesh);
+          this.onMeshModified?.(mesh);
+        }
+      },
+    });
+  }
+
   /**
    * Displaces vertices of the target mesh based on current brush mode and falloff.
    */
@@ -686,6 +712,10 @@ export class SculptController {
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
     const indices = mesh.getIndices();
     if (!positions || !indices) return;
+
+    const recordStandalone = !this.isSculpting;
+    const prePositionsCopy = recordStandalone ? Array.from(positions) : null;
+    const preNormalsCopy = recordStandalone ? Array.from(mesh.getVerticesData(VertexBuffer.NormalKind) || []) : null;
 
     const normals = mesh.getVerticesData(VertexBuffer.NormalKind) || [];
 
@@ -777,6 +807,35 @@ export class SculptController {
     VertexData.ComputeNormals(positions, indices, normals);
     mesh.setVerticesData(VertexBuffer.NormalKind, normals, true);
     mesh.refreshBoundingInfo();
+
+    if (recordStandalone && prePositionsCopy) {
+      const postPositionsCopy = Array.from(mesh.getVerticesData(VertexBuffer.PositionKind) || []);
+      const postNormalsCopy = Array.from(mesh.getVerticesData(VertexBuffer.NormalKind) || []);
+      const brushLabel = this.brushType;
+      this.service.recordAction({
+        name: `Sculpt (${brushLabel})`,
+        undo: () => {
+          if (!mesh.isDisposed()) {
+            mesh.setVerticesData(VertexBuffer.PositionKind, [...prePositionsCopy], true);
+            if (preNormalsCopy && preNormalsCopy.length === prePositionsCopy.length) {
+              mesh.setVerticesData(VertexBuffer.NormalKind, [...preNormalsCopy], true);
+            }
+            mesh.refreshBoundingInfo();
+            this.onMeshModified?.(mesh);
+          }
+        },
+        redo: () => {
+          if (!mesh.isDisposed()) {
+            mesh.setVerticesData(VertexBuffer.PositionKind, [...postPositionsCopy], true);
+            if (postNormalsCopy.length === postPositionsCopy.length) {
+              mesh.setVerticesData(VertexBuffer.NormalKind, [...postNormalsCopy], true);
+            }
+            mesh.refreshBoundingInfo();
+            this.onMeshModified?.(mesh);
+          }
+        },
+      });
+    }
   }
 
   private applyDeformation(
@@ -1019,6 +1078,7 @@ export class SculptController {
     }
 
     this.applyDefaultCharacterMaterial(baseMesh);
+    this.recordMeshCreationUndo(baseMesh, `Spawn Humanoid "${baseMesh.name}"`);
     this.service.addMesh(baseMesh);
     this.service.selectMesh(baseMesh);
 
@@ -1315,6 +1375,7 @@ export class SculptController {
       this.applyDefaultCharacterMaterial(baseMesh);
     }
 
+    this.recordMeshCreationUndo(baseMesh, `Spawn Chibi "${baseMesh.name}"`);
     this.service.addMesh(baseMesh);
     this.service.selectMesh(baseMesh);
 
@@ -1568,6 +1629,7 @@ export class SculptController {
       this.applyDefaultCharacterMaterial(baseMesh);
     }
 
+    this.recordMeshCreationUndo(baseMesh, `Spawn Creature "${baseMesh.name}"`);
     this.service.addMesh(baseMesh);
     this.service.selectMesh(baseMesh);
 
@@ -1680,6 +1742,7 @@ export class SculptController {
     baseMesh.name = rootName;
     baseMesh.id = `mesh_${Date.now()}_quadruped`;
     this.applyDefaultCharacterMaterial(baseMesh);
+    this.recordMeshCreationUndo(baseMesh, `Spawn Quadruped "${baseMesh.name}"`);
     this.service.addMesh(baseMesh);
     this.service.selectMesh(baseMesh);
 
@@ -1727,6 +1790,7 @@ export class SculptController {
     baseMesh.name = rootName;
     baseMesh.id = `mesh_${Date.now()}_bust`;
     this.applyDefaultCharacterMaterial(baseMesh);
+    this.recordMeshCreationUndo(baseMesh, `Spawn Head Bust "${baseMesh.name}"`);
     this.service.addMesh(baseMesh);
     this.service.selectMesh(baseMesh);
 
@@ -1747,6 +1811,7 @@ export class SculptController {
     sphere.id = `mesh_${Date.now()}_sculpt_sphere`;
 
     this.applyDefaultCharacterMaterial(sphere);
+    this.recordMeshCreationUndo(sphere, `Spawn Sculpt Sphere "${sphere.name}"`);
     this.service.addMesh(sphere);
     this.service.selectMesh(sphere);
 
@@ -2198,12 +2263,16 @@ export class SculptController {
     let existingPos: number[] = [];
     let existingInd: number[] = [];
     let existingUVs: number[] = [];
+    let isNewRetopoMesh = false;
+    let preRetopoSnap: VertexData | null = null;
 
     if (retopoMesh) {
+      preRetopoSnap = VertexData.ExtractFromMesh(retopoMesh);
       existingPos = Array.from(retopoMesh.getVerticesData(VertexBuffer.PositionKind) || []);
       existingInd = Array.from(retopoMesh.getIndices() || []);
       existingUVs = Array.from(retopoMesh.getVerticesData(VertexBuffer.UVKind) || []);
     } else {
+      isNewRetopoMesh = true;
       retopoMesh = new Mesh(retopoName, this.scene);
       const mat = new PBRMaterial(`${retopoName}_Mat`, this.scene);
       mat.albedoColor = new Color3(0.22, 0.78, 0.95);
@@ -2302,6 +2371,31 @@ export class SculptController {
     vd.applyToMesh(retopoMesh, true);
     retopoMesh.refreshBoundingInfo();
 
+    const finalRetopoMesh = retopoMesh;
+    if (isNewRetopoMesh) {
+      this.recordMeshCreationUndo(finalRetopoMesh, `Draw Quad Strip "${finalRetopoMesh.name}"`);
+    } else if (preRetopoSnap) {
+      const postRetopoSnap = VertexData.ExtractFromMesh(finalRetopoMesh);
+      const prevSnap = preRetopoSnap;
+      this.service.recordAction({
+        name: `Draw Quad Strip "${finalRetopoMesh.name}"`,
+        undo: () => {
+          if (!finalRetopoMesh.isDisposed()) {
+            prevSnap.applyToMesh(finalRetopoMesh, true);
+            finalRetopoMesh.refreshBoundingInfo();
+            this.onMeshModified?.(finalRetopoMesh);
+          }
+        },
+        redo: () => {
+          if (!finalRetopoMesh.isDisposed()) {
+            postRetopoSnap.applyToMesh(finalRetopoMesh, true);
+            finalRetopoMesh.refreshBoundingInfo();
+            this.onMeshModified?.(finalRetopoMesh);
+          }
+        },
+      });
+    }
+
     this.service.updateStats();
     this.onMeshModified?.(retopoMesh);
     return retopoMesh;
@@ -2381,11 +2475,14 @@ export class SculptController {
     cageMesh.material = mat;
 
     this.service.addMesh(cageMesh);
-    this.shrinkwrapMesh(cageMesh, targetHighPoly, {
-      offset,
-      mode: 'nearest',
-      smoothIterations: 2,
+    this.service.runWithoutRecording(() => {
+      this.shrinkwrapMesh(cageMesh, targetHighPoly, {
+        offset,
+        mode: 'nearest',
+        smoothIterations: 2,
+      });
     });
+    this.recordMeshCreationUndo(cageMesh, `Generate Quad Cage "${cageMesh.name}"`);
     return cageMesh;
   }
 

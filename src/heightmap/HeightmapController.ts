@@ -277,6 +277,9 @@ interface PaintSnapshot {
   heightmap: Uint8ClampedArray;
   mixmap: Uint8ClampedArray;
   hasCustomMixMap: boolean;
+  heightMapImageUrl?: string;
+  mixMapImageUrl?: string;
+  globalAction?: import('../types').ActionRecord;
 }
 
 /**
@@ -327,7 +330,9 @@ export class HeightmapController {
     const pixelBytes = this.mapSize * this.mapSize * 4;
     this.heightmapRgba = new Uint8ClampedArray(pixelBytes);
     this.mixmapRgba = new Uint8ClampedArray(pixelBytes);
-    this.clearHeightmapToBlack(false);
+    this.service.runWithoutRecording(() => {
+      this.clearHeightmapToBlack(false);
+    });
   }
 
   /**
@@ -639,6 +644,13 @@ export class HeightmapController {
         ? resolved.url
         : resolved.id || resolved.url;
 
+    const prevValue =
+      slot === 1
+        ? this.config.terrainTextureName1
+        : slot === 2
+        ? this.config.terrainTextureName2
+        : this.config.terrainTextureName3;
+
     if (slot === 1) {
       this.config.terrainTextureName1 = valueToStore;
     } else if (slot === 2) {
@@ -648,13 +660,28 @@ export class HeightmapController {
     }
 
     if (!rebuildImmediately) {
+      if (prevValue !== valueToStore) {
+        this.service.recordAction({
+          name: `Set Terrain Texture Layer ${slot}`,
+          undo: () => {
+            if (slot === 1) this.config.terrainTextureName1 = prevValue;
+            else if (slot === 2) this.config.terrainTextureName2 = prevValue;
+            else this.config.terrainTextureName3 = prevValue;
+          },
+          redo: () => {
+            if (slot === 1) this.config.terrainTextureName1 = valueToStore;
+            else if (slot === 2) this.config.terrainTextureName2 = valueToStore;
+            else this.config.terrainTextureName3 = valueToStore;
+          },
+        });
+      }
       return null;
     }
 
     const active = this.getActiveTerrainMesh();
     const mesh = await this.buildOrUpdateTerrainMesh({
       targetMesh: active || undefined,
-      recordHistory: false,
+      recordHistory: true,
     });
     this.service.scene.render();
     return mesh;
@@ -669,39 +696,106 @@ export class HeightmapController {
     rebuildImmediately: boolean = true,
   ): Promise<void> {
     const safeScale = Math.max(0.1, Math.min(200, Number(scale) || 1));
-    if (slot === 1) this.config.terrainTextureScale.x = safeScale;
-    else if (slot === 2) this.config.terrainTextureScale.y = safeScale;
-    else this.config.terrainTextureScale.z = safeScale;
+    const prevScale =
+      slot === 1
+        ? this.config.terrainTextureScale.x
+        : slot === 2
+        ? this.config.terrainTextureScale.y
+        : this.config.terrainTextureScale.z;
 
-    if (!rebuildImmediately) return;
+    const applyScale = (val: number) => {
+      if (slot === 1) this.config.terrainTextureScale.x = val;
+      else if (slot === 2) this.config.terrainTextureScale.y = val;
+      else this.config.terrainTextureScale.z = val;
 
-    const active = this.getActiveTerrainMesh();
-    if (active && active.material instanceof TerrainMaterial) {
-      const tm = active.material;
-      if (slot === 1 && tm.diffuseTexture1) {
-        tm.diffuseTexture1.uScale = tm.diffuseTexture1.vScale = safeScale;
-      } else if (slot === 2 && tm.diffuseTexture2) {
-        tm.diffuseTexture2.uScale = tm.diffuseTexture2.vScale = safeScale;
-      } else if (slot === 3 && tm.diffuseTexture3) {
-        tm.diffuseTexture3.uScale = tm.diffuseTexture3.vScale = safeScale;
+      if (!rebuildImmediately) return;
+      const active = this.getActiveTerrainMesh();
+      if (active && active.material instanceof TerrainMaterial) {
+        const tm = active.material;
+        if (slot === 1 && tm.diffuseTexture1) {
+          tm.diffuseTexture1.uScale = tm.diffuseTexture1.vScale = val;
+        } else if (slot === 2 && tm.diffuseTexture2) {
+          tm.diffuseTexture2.uScale = tm.diffuseTexture2.vScale = val;
+        } else if (slot === 3 && tm.diffuseTexture3) {
+          tm.diffuseTexture3.uScale = tm.diffuseTexture3.vScale = val;
+        }
+        if (active.metadata?.heightmapData) {
+          active.metadata.heightmapData.textureScale = [
+            this.config.terrainTextureScale.x,
+            this.config.terrainTextureScale.y,
+            this.config.terrainTextureScale.z,
+          ];
+        }
+        tm.markAsDirty(Material.TextureDirtyFlag);
+        this.service.scene.render();
+        this.onTerrainUpdated?.(active);
       }
-      if (active.metadata?.heightmapData) {
-        active.metadata.heightmapData.textureScale = [
-          this.config.terrainTextureScale.x,
-          this.config.terrainTextureScale.y,
-          this.config.terrainTextureScale.z,
-        ];
-      }
-      tm.markAsDirty(Material.TextureDirtyFlag);
-      this.service.scene.render();
-      this.onTerrainUpdated?.(active);
+    };
+
+    applyScale(safeScale);
+
+    if (Math.abs(prevScale - safeScale) > 1e-6) {
+      this.service.recordAction({
+        name: `Set Terrain Layer ${slot} Scale (${safeScale})`,
+        undo: () => applyScale(prevScale),
+        redo: () => applyScale(safeScale),
+      });
     }
+  }
+
+  private captureMapSnapshot(): PaintSnapshot {
+    return {
+      heightmap: new Uint8ClampedArray(this.heightmapRgba),
+      mixmap: new Uint8ClampedArray(this.mixmapRgba),
+      hasCustomMixMap: this.hasCustomMixMap,
+      heightMapImageUrl: this.config.heightMapImageUrl,
+      mixMapImageUrl: this.config.mixMapImageUrl,
+    };
+  }
+
+  private restoreMapSnapshot(snap: PaintSnapshot): void {
+    this.heightmapRgba.set(snap.heightmap);
+    this.mixmapRgba.set(snap.mixmap);
+    this.hasCustomMixMap = snap.hasCustomMixMap;
+    this.autoGenerateMixMap = !snap.hasCustomMixMap;
+    this.config.heightMapImageUrl =
+      snap.heightMapImageUrl || ImageUtils.rgbaBufferToDataUrl(this.heightmapRgba, this.mapSize, this.mapSize);
+    this.config.mixMapImageUrl =
+      snap.mixMapImageUrl || ImageUtils.rgbaBufferToDataUrl(this.mixmapRgba, this.mapSize, this.mapSize);
+    this.onMapsChanged?.();
+  }
+
+  private recordMapUndo(label: string, before: PaintSnapshot): void {
+    if (this.service.isRecordingSuppressed()) return;
+    const after = this.captureMapSnapshot();
+    const action: import('../types').ActionRecord = {
+      name: label,
+      undo: () => {
+        this.restoreMapSnapshot(before);
+        const idx = this.paintUndoStack.lastIndexOf(before);
+        if (idx !== -1) this.paintUndoStack.splice(idx, 1);
+      },
+      redo: () => {
+        this.restoreMapSnapshot(after);
+        if (!this.paintUndoStack.includes(before)) {
+          this.paintUndoStack.push(before);
+          if (this.paintUndoStack.length > 25) this.paintUndoStack.shift();
+        }
+      },
+    };
+    before.globalAction = action;
+    this.paintUndoStack.push(before);
+    if (this.paintUndoStack.length > 25) {
+      this.paintUndoStack.shift();
+    }
+    this.service.recordAction(action);
   }
 
   /**
    * Resets the grayscale heightmap to pure black (0, 0, 0, 255) for freehand brush painting.
    */
   public clearHeightmapToBlack(notify: boolean = true): void {
+    const before = this.captureMapSnapshot();
     const len = this.heightmapRgba.length;
     for (let i = 0; i < len; i += 4) {
       this.heightmapRgba[i] = 0;
@@ -711,8 +805,9 @@ export class HeightmapController {
     }
     this.config.heightMapImageUrl = ImageUtils.rgbaBufferToDataUrl(this.heightmapRgba, this.mapSize, this.mapSize);
     if (!this.hasCustomMixMap) {
-      this.regenerateMixmapFromHeightmap(false);
+      this.service.runWithoutRecording(() => this.regenerateMixmapFromHeightmap(false));
     }
+    this.recordMapUndo('Clear Heightmap to Black', before);
     if (notify) {
       this.onMapsChanged?.();
     }
@@ -722,6 +817,7 @@ export class HeightmapController {
    * Regenerates the RGB mixmap buffer from the current grayscale heightmap.
    */
   public regenerateMixmapFromHeightmap(notify: boolean = true): void {
+    const before = this.captureMapSnapshot();
     const mix = ImageUtils.generateMixMapBufferFromHeightMapBuffer(
       this.heightmapRgba,
       this.mapSize,
@@ -732,6 +828,7 @@ export class HeightmapController {
     this.hasCustomMixMap = false;
     this.autoGenerateMixMap = true;
     this.config.mixMapImageUrl = ImageUtils.rgbaBufferToDataUrl(this.mixmapRgba, this.mapSize, this.mapSize);
+    this.recordMapUndo('Regenerate Mixmap from Heightmap', before);
     if (notify) {
       this.onMapsChanged?.();
     }
@@ -741,7 +838,7 @@ export class HeightmapController {
    * Applies a procedural terrain heightmap preset into the 2D grayscale buffer.
    */
   public applyPreset(preset: HeightmapPresetKind, notify: boolean = true): void {
-    this.pushPaintSnapshot();
+    const before = this.captureMapSnapshot();
     const size = this.mapSize;
 
     const hash = (ix: number, iy: number, seed: number): number => {
@@ -796,7 +893,8 @@ export class HeightmapController {
     };
 
     if (preset === 'black' || preset === 'flat') {
-      this.clearHeightmapToBlack(notify);
+      this.service.runWithoutRecording(() => this.clearHeightmapToBlack(notify));
+      this.recordMapUndo(`Apply Heightmap Preset (${preset})`, before);
       return;
     }
 
@@ -866,8 +964,9 @@ export class HeightmapController {
 
     this.config.heightMapImageUrl = ImageUtils.rgbaBufferToDataUrl(this.heightmapRgba, size, size);
     if (!this.hasCustomMixMap) {
-      this.regenerateMixmapFromHeightmap(false);
+      this.service.runWithoutRecording(() => this.regenerateMixmapFromHeightmap(false));
     }
+    this.recordMapUndo(`Apply Heightmap Preset (${preset})`, before);
     if (notify) {
       this.onMapsChanged?.();
     }
@@ -877,7 +976,7 @@ export class HeightmapController {
    * Loads an uploaded or URL grayscale heightmap image into the 256x256 buffer.
    */
   public async loadHeightmapFromUrl(url: string): Promise<void> {
-    this.pushPaintSnapshot();
+    const before = this.captureMapSnapshot();
     const loaded = await ImageUtils.loadImageRgba(url, this.mapSize, this.mapSize);
     if (loaded) {
       for (let i = 0; i < this.heightmapRgba.length; i += 4) {
@@ -890,8 +989,9 @@ export class HeightmapController {
     }
     this.config.heightMapImageUrl = url;
     if (this.autoGenerateMixMap && !this.hasCustomMixMap) {
-      this.regenerateMixmapFromHeightmap(false);
+      this.service.runWithoutRecording(() => this.regenerateMixmapFromHeightmap(false));
     }
+    this.recordMapUndo('Load Heightmap Image', before);
     this.onMapsChanged?.();
   }
 
@@ -899,7 +999,7 @@ export class HeightmapController {
    * Loads an uploaded or URL RGB mixmap image into the 256x256 buffer.
    */
   public async loadMixmapFromUrl(url: string): Promise<void> {
-    this.pushPaintSnapshot();
+    const before = this.captureMapSnapshot();
     const loaded = await ImageUtils.loadImageRgba(url, this.mapSize, this.mapSize);
     if (loaded) {
       this.mixmapRgba.set(loaded.rgba.subarray(0, this.mixmapRgba.length));
@@ -907,6 +1007,7 @@ export class HeightmapController {
     this.hasCustomMixMap = true;
     this.autoGenerateMixMap = false;
     this.config.mixMapImageUrl = url;
+    this.recordMapUndo('Load Mixmap Image', before);
     this.onMapsChanged?.();
   }
 
@@ -914,11 +1015,7 @@ export class HeightmapController {
    * Captures a snapshot on the paint undo stack.
    */
   public pushPaintSnapshot(): void {
-    this.paintUndoStack.push({
-      heightmap: new Uint8ClampedArray(this.heightmapRgba),
-      mixmap: new Uint8ClampedArray(this.mixmapRgba),
-      hasCustomMixMap: this.hasCustomMixMap,
-    });
+    this.paintUndoStack.push(this.captureMapSnapshot());
     if (this.paintUndoStack.length > 25) {
       this.paintUndoStack.shift();
     }
@@ -930,11 +1027,15 @@ export class HeightmapController {
   public undoPaintSnapshot(): boolean {
     const snap = this.paintUndoStack.pop();
     if (!snap) return false;
-    this.heightmapRgba.set(snap.heightmap);
-    this.mixmapRgba.set(snap.mixmap);
-    this.hasCustomMixMap = snap.hasCustomMixMap;
-    this.autoGenerateMixMap = !snap.hasCustomMixMap;
-    this.onMapsChanged?.();
+    this.restoreMapSnapshot(snap);
+    if (snap.globalAction) {
+      const gIdx = this.service.undoStack.lastIndexOf(snap.globalAction);
+      if (gIdx !== -1) {
+        this.service.undoStack.splice(gIdx, 1);
+        this.service.redoStack.push(snap.globalAction);
+        this.service.events.onHistoryChanged?.(this.service.canUndo(), this.service.canRedo());
+      }
+    }
     return true;
   }
 
@@ -947,32 +1048,27 @@ export class HeightmapController {
    */
   public beginPaintStroke(target: 'height' | 'mix'): void {
     this.strokeTarget = target;
-    this.strokePreSnapshot = {
-      heightmap: new Uint8ClampedArray(this.heightmapRgba),
-      mixmap: new Uint8ClampedArray(this.mixmapRgba),
-      hasCustomMixMap: this.hasCustomMixMap,
-    };
+    this.strokePreSnapshot = this.captureMapSnapshot();
     this.strokeStartBuffer = new Uint8ClampedArray(target === 'height' ? this.heightmapRgba : this.mixmapRgba);
     this.strokeCoverage = new Float32Array(this.mapSize * this.mapSize);
   }
 
   /**
-   * Ends an active paint stroke and commits it to the paint undo stack.
+   * Ends an active paint stroke and commits it to the paint undo stack and global undo history.
    */
   public endPaintStroke(): void {
-    if (this.strokePreSnapshot) {
-      this.paintUndoStack.push(this.strokePreSnapshot);
-      if (this.paintUndoStack.length > 25) {
-        this.paintUndoStack.shift();
-      }
-    }
+    const preSnap = this.strokePreSnapshot;
+    const target = this.strokeTarget;
     this.strokeTarget = null;
     this.strokeStartBuffer = null;
     this.strokeCoverage = null;
     this.strokePreSnapshot = null;
 
     if (this.autoGenerateMixMap && !this.hasCustomMixMap) {
-      this.regenerateMixmapFromHeightmap(false);
+      this.service.runWithoutRecording(() => this.regenerateMixmapFromHeightmap(false));
+    }
+    if (preSnap) {
+      this.recordMapUndo(target === 'mix' ? 'Paint Terrain Mixmap' : 'Paint Terrain Heightmap', preSnap);
     }
     this.onMapsChanged?.();
   }
@@ -1176,65 +1272,75 @@ export class HeightmapController {
    * Applies normalized [0..1] or pixel [0..mapSize] brush stroke polylines to the heightmap.
    */
   public applyHeightStrokes(strokes: HeightmapBrushStroke[]): void {
-    for (const stroke of strokes) {
-      if (!stroke.points || stroke.points.length === 0) continue;
-      const toPixel = (pt: [number, number]): [number, number] => {
-        const px = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[0] * (this.mapSize - 1) : pt[0];
-        const py = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[1] * (this.mapSize - 1) : pt[1];
-        return [px, py];
-      };
-      this.beginPaintStroke('height');
-      const opts = {
-        size: stroke.size ?? this.brushSize,
-        smoothness: stroke.smoothness ?? this.brushSmoothness,
-        value: stroke.value ?? 255,
-        opacity: stroke.opacity ?? 1.0,
-      };
-      if (stroke.points.length === 1) {
-        const [px, py] = toPixel(stroke.points[0]);
-        this.paintHeightmapStamp(px, py, opts);
-      } else {
-        for (let i = 0; i < stroke.points.length - 1; i++) {
-          const [x0, y0] = toPixel(stroke.points[i]);
-          const [x1, y1] = toPixel(stroke.points[i + 1]);
-          this.paintHeightmapStroke(x0, y0, x1, y1, opts);
+    if (!strokes || strokes.length === 0) return;
+    const before = this.captureMapSnapshot();
+    this.service.runWithoutRecording(() => {
+      for (const stroke of strokes) {
+        if (!stroke.points || stroke.points.length === 0) continue;
+        const toPixel = (pt: [number, number]): [number, number] => {
+          const px = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[0] * (this.mapSize - 1) : pt[0];
+          const py = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[1] * (this.mapSize - 1) : pt[1];
+          return [px, py];
+        };
+        this.beginPaintStroke('height');
+        const opts = {
+          size: stroke.size ?? this.brushSize,
+          smoothness: stroke.smoothness ?? this.brushSmoothness,
+          value: stroke.value ?? 255,
+          opacity: stroke.opacity ?? 1.0,
+        };
+        if (stroke.points.length === 1) {
+          const [px, py] = toPixel(stroke.points[0]);
+          this.paintHeightmapStamp(px, py, opts);
+        } else {
+          for (let i = 0; i < stroke.points.length - 1; i++) {
+            const [x0, y0] = toPixel(stroke.points[i]);
+            const [x1, y1] = toPixel(stroke.points[i + 1]);
+            this.paintHeightmapStroke(x0, y0, x1, y1, opts);
+          }
         }
+        this.endPaintStroke();
       }
-      this.endPaintStroke();
-    }
+    });
+    this.recordMapUndo(`Apply Heightmap Strokes (${strokes.length})`, before);
   }
 
   /**
    * Applies normalized [0..1] or pixel [0..mapSize] RGB brush stroke polylines to the mixmap.
    */
   public applyMixStrokes(strokes: MixmapBrushStroke[]): void {
-    for (const stroke of strokes) {
-      if (!stroke.points || stroke.points.length === 0) continue;
-      const toPixel = (pt: [number, number]): [number, number] => {
-        const px = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[0] * (this.mapSize - 1) : pt[0];
-        const py = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[1] * (this.mapSize - 1) : pt[1];
-        return [px, py];
-      };
-      this.beginPaintStroke('mix');
-      const opts = {
-        size: stroke.size ?? this.brushSize,
-        smoothness: stroke.smoothness ?? this.brushSmoothness,
-        channel: stroke.channel ?? this.brushRgbChannel,
-        color: stroke.color,
-        opacity: stroke.opacity ?? 1.0,
-      };
-      if (stroke.points.length === 1) {
-        const [px, py] = toPixel(stroke.points[0]);
-        this.paintMixmapStamp(px, py, opts);
-      } else {
-        for (let i = 0; i < stroke.points.length - 1; i++) {
-          const [x0, y0] = toPixel(stroke.points[i]);
-          const [x1, y1] = toPixel(stroke.points[i + 1]);
-          this.paintMixmapStroke(x0, y0, x1, y1, opts);
+    if (!strokes || strokes.length === 0) return;
+    const before = this.captureMapSnapshot();
+    this.service.runWithoutRecording(() => {
+      for (const stroke of strokes) {
+        if (!stroke.points || stroke.points.length === 0) continue;
+        const toPixel = (pt: [number, number]): [number, number] => {
+          const px = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[0] * (this.mapSize - 1) : pt[0];
+          const py = pt[0] <= 1 && pt[1] <= 1 && pt[0] >= 0 && pt[1] >= 0 ? pt[1] * (this.mapSize - 1) : pt[1];
+          return [px, py];
+        };
+        this.beginPaintStroke('mix');
+        const opts = {
+          size: stroke.size ?? this.brushSize,
+          smoothness: stroke.smoothness ?? this.brushSmoothness,
+          channel: stroke.channel ?? this.brushRgbChannel,
+          color: stroke.color,
+          opacity: stroke.opacity ?? 1.0,
+        };
+        if (stroke.points.length === 1) {
+          const [px, py] = toPixel(stroke.points[0]);
+          this.paintMixmapStamp(px, py, opts);
+        } else {
+          for (let i = 0; i < stroke.points.length - 1; i++) {
+            const [x0, y0] = toPixel(stroke.points[i]);
+            const [x1, y1] = toPixel(stroke.points[i + 1]);
+            this.paintMixmapStroke(x0, y0, x1, y1, opts);
+          }
         }
+        this.endPaintStroke();
       }
-      this.endPaintStroke();
-    }
+    });
+    this.recordMapUndo(`Apply Mixmap Strokes (${strokes.length})`, before);
   }
 
   /**
@@ -1251,6 +1357,10 @@ export class HeightmapController {
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
     const indices = mesh.getIndices();
     if (!positions) return;
+
+    const beforePos = Array.from(positions);
+    const beforeNormsRaw = mesh.getVerticesData(VertexBuffer.NormalKind);
+    const beforeNorms = beforeNormsRaw ? Array.from(beforeNormsRaw) : null;
 
     const halfWidth = pathWidth * 0.5;
     const trans = Math.max(0, pathTransitionWidth);
@@ -1296,12 +1406,33 @@ export class HeightmapController {
     }
 
     mesh.updateVerticesData(VertexBuffer.PositionKind, positions);
+    let afterNorms: number[] | null = null;
     if (indices) {
       const normals = new Float32Array(positions.length);
       VertexData.ComputeNormals(positions, indices, normals);
       mesh.updateVerticesData(VertexBuffer.NormalKind, normals);
+      afterNorms = Array.from(normals);
     }
     mesh.refreshBoundingInfo();
+
+    const afterPos = Array.from(positions);
+    this.service.recordAction({
+      name: `Carve Path on Terrain "${mesh.name}"`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.updateVerticesData(VertexBuffer.PositionKind, beforePos.slice());
+        if (beforeNorms) mesh.updateVerticesData(VertexBuffer.NormalKind, beforeNorms.slice());
+        mesh.refreshBoundingInfo();
+        this.onTerrainUpdated?.(mesh);
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.updateVerticesData(VertexBuffer.PositionKind, afterPos.slice());
+        if (afterNorms) mesh.updateVerticesData(VertexBuffer.NormalKind, afterNorms.slice());
+        mesh.refreshBoundingInfo();
+        this.onTerrainUpdated?.(mesh);
+      },
+    });
   }
 
   /**
@@ -1309,7 +1440,7 @@ export class HeightmapController {
    */
   public async buildOrUpdateTerrainMesh(options: BuildHeightmapOptions = {}): Promise<GroundMesh> {
     if (options.preset) {
-      this.applyPreset(options.preset, false);
+      this.service.runWithoutRecording(() => this.applyPreset(options.preset!, false));
     }
     if (options.width !== undefined) this.config.width = Math.max(1, Number(options.width) || 100);
     if (options.height !== undefined) this.config.height = Math.max(1, Number(options.height) || 100);
@@ -1386,13 +1517,15 @@ export class HeightmapController {
     const finalizeTerrainMesh = (mesh: GroundMesh) => {
       // Apply path corridor carving (Schneise/Sockel) if configured
       if (this.config.pathPoints && this.config.pathPoints.length > 1 && this.config.pathWidth > 0 && this.config.pathYOffset !== undefined) {
-        this.applyPathToVertices(
-          mesh,
-          this.config.pathPoints,
-          this.config.pathWidth,
-          this.config.pathTransitionWidth ?? 5,
-          this.config.pathYOffset,
-        );
+        this.service.runWithoutRecording(() => {
+          this.applyPathToVertices(
+            mesh,
+            this.config.pathPoints,
+            this.config.pathWidth,
+            this.config.pathTransitionWidth ?? 5,
+            this.config.pathYOffset,
+          );
+        });
       }
 
       // Optional procedural lowerPoint callback
@@ -1522,8 +1655,14 @@ export class HeightmapController {
     let resultMesh: GroundMesh;
     if (existingMesh) {
       const preVertexData = VertexData.ExtractFromMesh(existingMesh);
-      const preMeta = existingMesh.metadata?.heightmapData
-        ? { ...existingMesh.metadata.heightmapData }
+      const rawPreMeta = existingMesh.metadata?.heightmapData;
+      const preMeta = rawPreMeta
+        ? {
+            ...rawPreMeta,
+            textureScale: Array.isArray(rawPreMeta.textureScale) ? [...rawPreMeta.textureScale] : undefined,
+            heightmapBuffer: rawPreMeta.heightmapBuffer ? new Uint8ClampedArray(rawPreMeta.heightmapBuffer) : undefined,
+            mixmapBuffer: rawPreMeta.mixmapBuffer ? new Uint8ClampedArray(rawPreMeta.mixmapBuffer) : undefined,
+          }
         : null;
 
       const vertexData = CreateGroundFromHeightMapVertexData({
@@ -1549,29 +1688,41 @@ export class HeightmapController {
 
       if (options.recordHistory !== false) {
         const postVertexData = VertexData.ExtractFromMesh(resultMesh);
-        const postMeta = { ...resultMesh.metadata.heightmapData };
+        const postMeta = {
+          ...resultMesh.metadata.heightmapData,
+          textureScale: Array.isArray(resultMesh.metadata.heightmapData?.textureScale)
+            ? [...resultMesh.metadata.heightmapData.textureScale]
+            : [this.config.terrainTextureScale.x, this.config.terrainTextureScale.y, this.config.terrainTextureScale.z],
+          heightmapBuffer: new Uint8ClampedArray(this.heightmapRgba),
+          mixmapBuffer: new Uint8ClampedArray(this.mixmapRgba),
+        };
+        const restoreTerrainState = (vd: VertexData, meta: any) => {
+          if (resultMesh.isDisposed()) return;
+          vd.applyToMesh(resultMesh, true);
+          resultMesh.refreshBoundingInfo();
+          if (meta) {
+            resultMesh.metadata = {
+              ...(resultMesh.metadata || {}),
+              heightmapData: {
+                ...meta,
+                textureScale: Array.isArray(meta.textureScale) ? [...meta.textureScale] : undefined,
+                heightmapBuffer: meta.heightmapBuffer ? new Uint8ClampedArray(meta.heightmapBuffer) : undefined,
+                mixmapBuffer: meta.mixmapBuffer ? new Uint8ClampedArray(meta.mixmapBuffer) : undefined,
+              },
+            };
+            this.syncFromMesh(resultMesh);
+            this.refreshTerrainMaterialTextures(resultMesh);
+            this.service.scene.render();
+          }
+          this.onMapsChanged?.();
+          this.onTerrainUpdated?.(resultMesh);
+          this.service.updateStats();
+          this.service.events.onSceneModified?.();
+        };
         this.service.recordAction({
           name: `Update Heightmap Terrain "${resultMesh.name}"`,
-          undo: () => {
-            if (resultMesh.isDisposed()) return;
-            preVertexData.applyToMesh(resultMesh, true);
-            resultMesh.refreshBoundingInfo();
-            if (preMeta) {
-              resultMesh.metadata = { ...(resultMesh.metadata || {}), heightmapData: preMeta };
-              this.syncFromMesh(resultMesh);
-            }
-            this.service.updateStats();
-            this.service.events.onSceneModified?.();
-          },
-          redo: () => {
-            if (resultMesh.isDisposed()) return;
-            postVertexData.applyToMesh(resultMesh, true);
-            resultMesh.refreshBoundingInfo();
-            resultMesh.metadata = { ...(resultMesh.metadata || {}), heightmapData: postMeta };
-            this.syncFromMesh(resultMesh);
-            this.service.updateStats();
-            this.service.events.onSceneModified?.();
-          },
+          undo: () => restoreTerrainState(preVertexData, preMeta),
+          redo: () => restoreTerrainState(postVertexData, postMeta),
         });
       }
     } else {
@@ -1648,6 +1799,65 @@ export class HeightmapController {
     this.onTerrainUpdated?.(resultMesh);
 
     return resultMesh;
+  }
+
+  /**
+   * Rebinds TerrainMaterial mixTexture and diffuseTexture1/2/3 from current controller config & mixmap buffer.
+   */
+  private refreshTerrainMaterialTextures(mesh: GroundMesh): void {
+    const scene = this.service.scene;
+    let terrainMat = mesh.material instanceof TerrainMaterial ? mesh.material : null;
+    if (!terrainMat) {
+      terrainMat = new TerrainMaterial(`${mesh.name}_TerrainMaterial`, scene);
+      mesh.material = terrainMat;
+    }
+
+    const mixDataUrl = ImageUtils.rgbaBufferToDataUrl(this.mixmapRgba, this.mapSize, this.mapSize);
+    const mixTex = new Texture(mixDataUrl, scene, false, true, Texture.BILINEAR_SAMPLINGMODE);
+    mixTex.name = `${mesh.name}_Mixmap`;
+    mixTex.wrapU = Texture.CLAMP_ADDRESSMODE;
+    mixTex.wrapV = Texture.CLAMP_ADDRESSMODE;
+    if (terrainMat.mixTexture && terrainMat.mixTexture !== mixTex) {
+      terrainMat.mixTexture.dispose();
+    }
+    terrainMat.mixTexture = mixTex;
+    this.config.mixTexture = mixTex;
+
+    const tex1Opt = this.resolveTextureOption(this.config.terrainTextureName1, 'rock');
+    const tex2Opt = this.resolveTextureOption(this.config.terrainTextureName2, 'grass');
+    const tex3Opt = this.resolveTextureOption(this.config.terrainTextureName3, 'sand');
+
+    const makeSplat = (opt: HeightmapTextureOption, scale: number, label: string): Texture => {
+      const t = new Texture(opt.url, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE);
+      t.name = `${mesh.name}_${label}_${opt.id}`;
+      t.wrapU = Texture.WRAP_ADDRESSMODE;
+      t.wrapV = Texture.WRAP_ADDRESSMODE;
+      t.uScale = scale;
+      t.vScale = scale;
+      return t;
+    };
+
+    const oldT1 = terrainMat.diffuseTexture1;
+    const oldT2 = terrainMat.diffuseTexture2;
+    const oldT3 = terrainMat.diffuseTexture3;
+
+    const t1 = makeSplat(tex1Opt, this.config.terrainTextureScale.x, 'tex1');
+    const t2 = makeSplat(tex2Opt, this.config.terrainTextureScale.y, 'tex2');
+    const t3 = makeSplat(tex3Opt, this.config.terrainTextureScale.z, 'tex3');
+
+    terrainMat.diffuseTexture1 = t1;
+    terrainMat.diffuseTexture2 = t2;
+    terrainMat.diffuseTexture3 = t3;
+    this.config.terrainTexture1 = t1;
+    this.config.terrainTexture2 = t2;
+    this.config.terrainTexture3 = t3;
+
+    if (oldT1 && oldT1 !== t1) oldT1.dispose();
+    if (oldT2 && oldT2 !== t2) oldT2.dispose();
+    if (oldT3 && oldT3 !== t3) oldT3.dispose();
+
+    terrainMat.markAsDirty(Material.TextureDirtyFlag);
+    this.config.material = terrainMat;
   }
 
   private bytesToBase64(bytes: Uint8Array): string {

@@ -218,7 +218,9 @@ export class MeshEditorService {
   // Undo / Redo History state
   public undoStack: ActionRecord[] = [];
   public redoStack: ActionRecord[] = [];
-  private readonly maxHistorySteps: number = 50;
+  private readonly maxHistorySteps: number = 100;
+  private historySuppressionDepth: number = 0;
+  private capturedActionBatches: ActionRecord[][] = [];
   private preDragSnapshots: Map<TransformNode, TransformSnapshot> = new Map();
 
   // CSG2 Boolean Sculpting state
@@ -1642,7 +1644,49 @@ export class MeshEditorService {
   /* =========================================================================
      3. UNDO / REDO HISTORY
      ========================================================================= */
+  public isRecordingSuppressed(): boolean {
+    return this.historySuppressionDepth > 0;
+  }
+
+  public runWithoutRecording<T>(fn: () => T): T {
+    this.historySuppressionDepth++;
+    try {
+      return fn();
+    } finally {
+      this.historySuppressionDepth = Math.max(0, this.historySuppressionDepth - 1);
+    }
+  }
+
+  public async runWithoutRecordingAsync<T>(fn: () => Promise<T>): Promise<T> {
+    this.historySuppressionDepth++;
+    try {
+      return await fn();
+    } finally {
+      this.historySuppressionDepth = Math.max(0, this.historySuppressionDepth - 1);
+    }
+  }
+
+  /**
+   * Begins capturing any recorded actions into a temporary batch instead of
+   * pushing them individually to the main undo stack.
+   */
+  public beginActionCapture(): void {
+    this.capturedActionBatches.push([]);
+  }
+
+  /**
+   * Ends the most recent action capture and returns all captured sub-actions.
+   */
+  public endActionCapture(): ActionRecord[] {
+    return this.capturedActionBatches.pop() ?? [];
+  }
+
   public recordAction(action: ActionRecord): void {
+    if (this.historySuppressionDepth > 0) return;
+    if (this.capturedActionBatches.length > 0) {
+      this.capturedActionBatches[this.capturedActionBatches.length - 1].push(action);
+      return;
+    }
     this.undoStack.push(action);
     if (this.undoStack.length > this.maxHistorySteps) {
       this.undoStack.shift();
@@ -1654,7 +1698,9 @@ export class MeshEditorService {
   public undo(): void {
     if (this.undoStack.length === 0) return;
     const action = this.undoStack.pop()!;
-    action.undo();
+    this.runWithoutRecording(() => {
+      action.undo();
+    });
     this.redoStack.push(action);
     this.events.onHistoryChanged?.(this.canUndo(), this.canRedo());
     this.events.onToast?.(`Undo: ${action.name}`, 'info');
@@ -1665,7 +1711,9 @@ export class MeshEditorService {
   public redo(): void {
     if (this.redoStack.length === 0) return;
     const action = this.redoStack.pop()!;
-    action.redo();
+    this.runWithoutRecording(() => {
+      action.redo();
+    });
     this.undoStack.push(action);
     this.events.onHistoryChanged?.(this.canUndo(), this.canRedo());
     this.events.onToast?.(`Redo: ${action.name}`, 'info');
@@ -2111,17 +2159,56 @@ export class MeshEditorService {
       this.events.onToast?.('Select a mesh to snap to ground.', 'info');
       return;
     }
-    this.selectedMesh.computeWorldMatrix(true);
-    const bounds = this.selectedMesh.getBoundingInfo().boundingBox;
+    const mesh = this.selectedMesh;
+    const prevY = mesh.position.y;
+    mesh.computeWorldMatrix(true);
+    const bounds = mesh.getBoundingInfo().boundingBox;
     const lowestY = bounds.minimumWorld.y;
-    this.selectedMesh.position.y -= lowestY;
+    const nextY = prevY - lowestY;
+    mesh.position.y = nextY;
+
+    if (Math.abs(nextY - prevY) > 1e-6) {
+      this.recordAction({
+        name: `Snap "${mesh.name}" to Ground`,
+        undo: () => {
+          if (mesh.isDisposed()) return;
+          mesh.position.y = prevY;
+          mesh.computeWorldMatrix(true);
+        },
+        redo: () => {
+          if (mesh.isDisposed()) return;
+          mesh.position.y = nextY;
+          mesh.computeWorldMatrix(true);
+        },
+      });
+    }
+
     this.events.onSceneModified?.();
     this.events.onToast?.('Snapped mesh to ground plane.', 'success');
   }
 
   public centerSelectedToOrigin(): void {
     if (!this.selectedMesh) return;
-    this.selectedMesh.position.set(0, 0, 0);
+    const mesh = this.selectedMesh;
+    const prevPos = mesh.position.clone();
+    mesh.position.set(0, 0, 0);
+
+    if (prevPos.lengthSquared() > 1e-10) {
+      this.recordAction({
+        name: `Center "${mesh.name}" to Origin`,
+        undo: () => {
+          if (mesh.isDisposed()) return;
+          mesh.position.copyFrom(prevPos);
+          mesh.computeWorldMatrix(true);
+        },
+        redo: () => {
+          if (mesh.isDisposed()) return;
+          mesh.position.set(0, 0, 0);
+          mesh.computeWorldMatrix(true);
+        },
+      });
+    }
+
     this.events.onSceneModified?.();
     this.events.onToast?.('Moved mesh to world origin (0, 0, 0).', 'info');
   }
@@ -2159,20 +2246,95 @@ export class MeshEditorService {
       this.events.onToast?.('Select a mesh first.', 'warning');
       return;
     }
-    this.centerMeshPivot(this.selectedMesh);
-    this.selectMesh(this.selectedMesh);
+    const mesh = this.selectedMesh;
+    const beforePos = mesh.position.clone();
+    const beforeVerts = mesh.getVerticesData(VertexBuffer.PositionKind);
+    const beforeVertsCopy = beforeVerts ? Array.from(beforeVerts) : null;
+
+    this.centerMeshPivot(mesh);
+
+    const afterPos = mesh.position.clone();
+    const afterVerts = mesh.getVerticesData(VertexBuffer.PositionKind);
+    const afterVertsCopy = afterVerts ? Array.from(afterVerts) : null;
+
+    if (Vector3.DistanceSquared(beforePos, afterPos) > 1e-10) {
+      this.recordAction({
+        name: `Center Pivot "${mesh.name}"`,
+        undo: () => {
+          if (mesh.isDisposed()) return;
+          mesh.position.copyFrom(beforePos);
+          if (beforeVertsCopy) mesh.setVerticesData(VertexBuffer.PositionKind, [...beforeVertsCopy], true);
+          mesh.computeWorldMatrix(true);
+          mesh.refreshBoundingInfo();
+        },
+        redo: () => {
+          if (mesh.isDisposed()) return;
+          mesh.position.copyFrom(afterPos);
+          if (afterVertsCopy) mesh.setVerticesData(VertexBuffer.PositionKind, [...afterVertsCopy], true);
+          mesh.computeWorldMatrix(true);
+          mesh.refreshBoundingInfo();
+        },
+      });
+    }
+
+    this.selectMesh(mesh);
     this.events.onSceneModified?.();
-    this.events.onToast?.(`Pivot centered to visual geometry for "${this.selectedMesh.name}".`, 'success');
+    this.events.onToast?.(`Pivot centered to visual geometry for "${mesh.name}".`, 'success');
   }
 
   public centerAllMeshPivots(): void {
+    const entries: Array<{
+      mesh: Mesh;
+      beforePos: Vector3;
+      beforeVerts: number[] | null;
+      afterPos: Vector3;
+      afterVerts: number[] | null;
+    }> = [];
+
     let count = 0;
     for (const mesh of this.importedMeshes) {
-      if (!this.isEditorHelper(mesh)) {
+      if (!this.isEditorHelper(mesh) && !mesh.isDisposed()) {
+        const beforePos = mesh.position.clone();
+        const bv = mesh.getVerticesData(VertexBuffer.PositionKind);
+        const beforeVerts = bv ? Array.from(bv) : null;
+
         this.centerMeshPivot(mesh);
         count++;
+
+        const afterPos = mesh.position.clone();
+        const av = mesh.getVerticesData(VertexBuffer.PositionKind);
+        const afterVerts = av ? Array.from(av) : null;
+
+        if (Vector3.DistanceSquared(beforePos, afterPos) > 1e-10) {
+          entries.push({ mesh, beforePos, beforeVerts, afterPos, afterVerts });
+        }
       }
     }
+
+    if (entries.length > 0) {
+      this.recordAction({
+        name: `Center All Pivots (${entries.length} meshes)`,
+        undo: () => {
+          for (const e of entries) {
+            if (e.mesh.isDisposed()) continue;
+            e.mesh.position.copyFrom(e.beforePos);
+            if (e.beforeVerts) e.mesh.setVerticesData(VertexBuffer.PositionKind, [...e.beforeVerts], true);
+            e.mesh.computeWorldMatrix(true);
+            e.mesh.refreshBoundingInfo();
+          }
+        },
+        redo: () => {
+          for (const e of entries) {
+            if (e.mesh.isDisposed()) continue;
+            e.mesh.position.copyFrom(e.afterPos);
+            if (e.afterVerts) e.mesh.setVerticesData(VertexBuffer.PositionKind, [...e.afterVerts], true);
+            e.mesh.computeWorldMatrix(true);
+            e.mesh.refreshBoundingInfo();
+          }
+        },
+      });
+    }
+
     this.selectNodes(this.selectedNodes);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Centered pivots for ${count} meshes in scene!`, 'success');
@@ -2180,8 +2342,49 @@ export class MeshEditorService {
 
   public bakeSelectedTransform(): void {
     if (!this.selectedMesh) return;
-    this.selectedMesh.bakeCurrentTransformIntoVertices();
-    this.selectedMesh.refreshBoundingInfo();
+    const mesh = this.selectedMesh;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
+    const beforeTransform: TransformSnapshot = {
+      position: mesh.position.clone(),
+      rotation: mesh.rotation.clone(),
+      rotationQuaternion: mesh.rotationQuaternion ? mesh.rotationQuaternion.clone() : null,
+      scaling: mesh.scaling.clone(),
+    };
+
+    mesh.bakeCurrentTransformIntoVertices();
+    mesh.refreshBoundingInfo();
+
+    const afterSnap = captureMeshSurfaceSnapshot(mesh);
+    const afterTransform: TransformSnapshot = {
+      position: mesh.position.clone(),
+      rotation: mesh.rotation.clone(),
+      rotationQuaternion: mesh.rotationQuaternion ? mesh.rotationQuaternion.clone() : null,
+      scaling: mesh.scaling.clone(),
+    };
+
+    const applyTransform = (t: TransformSnapshot) => {
+      mesh.position.copyFrom(t.position);
+      mesh.rotation.copyFrom(t.rotation);
+      mesh.rotationQuaternion = t.rotationQuaternion ? t.rotationQuaternion.clone() : null;
+      mesh.scaling.copyFrom(t.scaling);
+      mesh.computeWorldMatrix(true);
+      mesh.refreshBoundingInfo();
+    };
+
+    this.recordAction({
+      name: `Bake Transform "${mesh.name}"`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        restoreMeshSurfaceSnapshot(mesh, beforeSnap);
+        applyTransform(beforeTransform);
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        restoreMeshSurfaceSnapshot(mesh, afterSnap);
+        applyTransform(afterTransform);
+      },
+    });
+
     this.events.onSceneModified?.();
     this.events.onToast?.('Current transforms baked into mesh geometry.', 'success');
   }
@@ -2199,6 +2402,10 @@ export class MeshEditorService {
 
   public setMeshWireframe(mesh: Mesh, wireframe: boolean): void {
     if (!mesh || mesh.isDisposed()) return;
+    const prevMat = mesh.material;
+    const prevWireframe = this.isMeshWireframe(mesh);
+    if (prevMat && prevWireframe === wireframe) return;
+
     if (!mesh.material) {
       const mat = new StandardMaterial(`${mesh.name}_wiremat`, this.scene);
       mat.diffuseColor = new Color3(0.85, 0.85, 0.85);
@@ -2209,7 +2416,23 @@ export class MeshEditorService {
         mesh.material = mesh.material.clone(`${mesh.name}_wireframe_mat`);
       }
     }
-    (mesh.material as any).wireframe = wireframe;
+    const nextMat = mesh.material;
+    (nextMat as any).wireframe = wireframe;
+
+    this.recordAction({
+      name: `${wireframe ? 'Enable' : 'Disable'} Wireframe "${mesh.name}"`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.material = prevMat;
+        if (prevMat) (prevMat as any).wireframe = prevWireframe;
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.material = nextMat;
+        if (nextMat) (nextMat as any).wireframe = wireframe;
+      },
+    });
+
     this.events.onSceneModified?.();
   }
 
@@ -2241,9 +2464,38 @@ export class MeshEditorService {
     }
 
     const anyNotWireframe = targets.some((m) => !this.isMeshWireframe(m));
-    for (const m of targets) {
-      this.setMeshWireframe(m, anyNotWireframe);
-    }
+    const entries = targets.map((m) => ({
+      mesh: m,
+      prevMat: m.material,
+      prevWireframe: this.isMeshWireframe(m),
+      nextMat: m.material as Material | null,
+    }));
+
+    this.runWithoutRecording(() => {
+      for (const e of entries) {
+        this.setMeshWireframe(e.mesh, anyNotWireframe);
+        e.nextMat = e.mesh.material;
+      }
+    });
+
+    this.recordAction({
+      name: `${anyNotWireframe ? 'Enable' : 'Disable'} Wireframe (${targets.length} mesh${targets.length === 1 ? '' : 'es'})`,
+      undo: () => {
+        for (const e of entries) {
+          if (e.mesh.isDisposed()) continue;
+          e.mesh.material = e.prevMat;
+          if (e.prevMat) (e.prevMat as any).wireframe = e.prevWireframe;
+        }
+      },
+      redo: () => {
+        for (const e of entries) {
+          if (e.mesh.isDisposed()) continue;
+          e.mesh.material = e.nextMat;
+          if (e.nextMat) (e.nextMat as any).wireframe = anyNotWireframe;
+        }
+      },
+    });
+
     this.events.onToast?.(`Wireframe ${anyNotWireframe ? 'enabled' : 'disabled'} for ${targets.length} mesh(es)`, 'info');
     this.events.onSceneModified?.();
     return anyNotWireframe;
@@ -2746,14 +2998,46 @@ export class MeshEditorService {
     if (!subMeshes || subMeshes.length <= 1) return [sourceMesh];
 
     const newMeshes: Mesh[] = [];
-    for (let i = 0; i < subMeshes.length; i++) {
-      const part = this.extractSelectedSubMesh(i, false);
-      if (part) newMeshes.push(part);
-    }
+    this.runWithoutRecording(() => {
+      for (let i = 0; i < subMeshes.length; i++) {
+        const part = this.extractSelectedSubMesh(i, false);
+        if (part) newMeshes.push(part);
+      }
+    });
 
     const origIdx = this.importedMeshes.indexOf(sourceMesh);
     if (origIdx !== -1) this.importedMeshes.splice(origIdx, 1);
     sourceMesh.setEnabled(false);
+
+    this.recordAction({
+      name: `Split SubMeshes "${sourceMesh.name}" (${newMeshes.length})`,
+      undo: () => {
+        this.clearSelectionProxy();
+        for (const p of newMeshes) {
+          if (!p.isDisposed()) p.setEnabled(false);
+          const idx = this.importedMeshes.indexOf(p);
+          if (idx !== -1) this.importedMeshes.splice(idx, 1);
+        }
+        if (!sourceMesh.isDisposed()) {
+          sourceMesh.setEnabled(true);
+          if (!this.importedMeshes.includes(sourceMesh)) this.importedMeshes.push(sourceMesh);
+          this.selectMesh(sourceMesh);
+        }
+      },
+      redo: () => {
+        this.clearSelectionProxy();
+        if (!sourceMesh.isDisposed()) sourceMesh.setEnabled(false);
+        const idx = this.importedMeshes.indexOf(sourceMesh);
+        if (idx !== -1) this.importedMeshes.splice(idx, 1);
+        for (const p of newMeshes) {
+          if (!p.isDisposed()) {
+            p.setEnabled(true);
+            if (!this.importedMeshes.includes(p)) this.importedMeshes.push(p);
+          }
+        }
+        this.selectNodes(newMeshes);
+      },
+    });
 
     this.selectNodes(newMeshes);
     this.updateStats();
@@ -2827,6 +3111,25 @@ export class MeshEditorService {
     this.centerMeshPivot(partMesh);
     this.importedMeshes.push(partMesh);
 
+    this.recordAction({
+      name: `Extract SubMesh "${partMesh.name}"`,
+      undo: () => {
+        this.clearSelectionProxy();
+        if (!partMesh.isDisposed()) partMesh.setEnabled(false);
+        const idx = this.importedMeshes.indexOf(partMesh);
+        if (idx !== -1) this.importedMeshes.splice(idx, 1);
+        if (!sourceMesh.isDisposed()) this.selectMesh(sourceMesh, targetIdx);
+      },
+      redo: () => {
+        this.clearSelectionProxy();
+        if (!partMesh.isDisposed()) {
+          partMesh.setEnabled(true);
+          if (!this.importedMeshes.includes(partMesh)) this.importedMeshes.push(partMesh);
+          if (selectResult) this.selectMesh(partMesh);
+        }
+      },
+    });
+
     if (selectResult) {
       this.selectMesh(partMesh);
       this.events.onToast?.(`Extracted submesh as "${partMesh.name}"!`, 'success');
@@ -2848,6 +3151,8 @@ export class MeshEditorService {
     const indices = sourceMesh.getIndices();
     if (!indices) return;
 
+    const beforeSnap = captureMeshSurfaceSnapshot(sourceMesh);
+
     const nextIndices = [
       ...indices.slice(0, subMesh.indexStart),
       ...indices.slice(subMesh.indexStart + subMesh.indexCount),
@@ -2856,6 +3161,22 @@ export class MeshEditorService {
     sourceMesh.setIndices(nextIndices);
     sourceMesh.subMeshes.splice(subMeshId, 1);
     this.selectedSubMeshId = null;
+
+    const afterSnap = captureMeshSurfaceSnapshot(sourceMesh);
+    this.recordAction({
+      name: `Delete SubMesh ${subMeshId} from "${sourceMesh.name}"`,
+      undo: () => {
+        if (sourceMesh.isDisposed()) return;
+        restoreMeshSurfaceSnapshot(sourceMesh, beforeSnap);
+        this.selectMesh(sourceMesh, subMeshId);
+      },
+      redo: () => {
+        if (sourceMesh.isDisposed()) return;
+        restoreMeshSurfaceSnapshot(sourceMesh, afterSnap);
+        this.selectMesh(sourceMesh, null);
+      },
+    });
+
     this.events.onSceneModified?.();
     this.events.onToast?.(`Deleted submesh ${subMeshId} from "${sourceMesh.name}".`, 'success');
   }
@@ -2917,9 +3238,30 @@ export class MeshEditorService {
     mesh.material = mat;
 
     // Center pivot
+    const prevSelected = [...this.selectedNodes];
     this.centerMeshPivot(mesh);
     this.importedMeshes.push(mesh);
     this.selectMesh(mesh);
+
+    this.recordAction({
+      name: `Create ${config.shape} "${mesh.name}"`,
+      undo: () => {
+        this.clearSelectionProxy();
+        if (!mesh.isDisposed()) mesh.setEnabled(false);
+        const idx = this.importedMeshes.indexOf(mesh);
+        if (idx !== -1) this.importedMeshes.splice(idx, 1);
+        this.selectNodes(prevSelected.filter((n) => !n.isDisposed()));
+      },
+      redo: () => {
+        this.clearSelectionProxy();
+        if (!mesh.isDisposed()) {
+          mesh.setEnabled(true);
+          if (!this.importedMeshes.includes(mesh)) this.importedMeshes.push(mesh);
+          this.selectMesh(mesh);
+        }
+      },
+    });
+
     this.updateStats();
     this.events.onSceneModified?.();
     this.events.onToast?.(`Created ${config.shape} "${mesh.name}"!`, 'success');
@@ -3018,12 +3360,33 @@ export class MeshEditorService {
     cutterMat.backFaceCulling = false;
     cutterMesh.material = cutterMat;
 
+    const prevSelected = [...this.selectedNodes];
     cutterMesh.position.copyFrom(pos);
     cutterMesh.computeWorldMatrix(true);
     this.centerMeshPivot(cutterMesh);
 
     this.importedMeshes.push(cutterMesh);
     this.selectMesh(cutterMesh);
+
+    this.recordAction({
+      name: `Add ${shape} Cutter "${cutterName}"`,
+      undo: () => {
+        this.clearSelectionProxy();
+        if (!cutterMesh.isDisposed()) cutterMesh.setEnabled(false);
+        const idx = this.importedMeshes.indexOf(cutterMesh);
+        if (idx !== -1) this.importedMeshes.splice(idx, 1);
+        this.selectNodes(prevSelected.filter((n) => !n.isDisposed()));
+      },
+      redo: () => {
+        this.clearSelectionProxy();
+        if (!cutterMesh.isDisposed()) {
+          cutterMesh.setEnabled(true);
+          if (!this.importedMeshes.includes(cutterMesh)) this.importedMeshes.push(cutterMesh);
+          this.selectMesh(cutterMesh);
+        }
+      },
+    });
+
     this.updateStats();
     this.events.onSceneModified?.();
     this.events.onToast?.(`Added ${shape} cutter "${cutterName}". Transform it into place, then click Subtract / Cut!`, 'success');
@@ -3041,8 +3404,11 @@ export class MeshEditorService {
         return childMeshes[0];
       }
       if (childMeshes.length > 1) {
-        const merged = Mesh.MergeMeshes(childMeshes, true, true, undefined, false, true);
+        const merged = Mesh.MergeMeshes(childMeshes, false, true, undefined, false, true);
         if (merged) {
+          for (const cm of childMeshes) {
+            if (!cm.isDisposed()) cm.setEnabled(false);
+          }
           merged.name = mesh.name;
           const idx = this.importedMeshes.indexOf(mesh);
           if (idx !== -1) {
@@ -3213,15 +3579,18 @@ export class MeshEditorService {
     resultMesh.metadata.nonDestructiveCSG = nonDestructiveMeta;
 
     if (options?.bevelWidth && options.bevelWidth > 0) {
-      this.applyNonDestructiveBevel(resultMesh, {
-        width: options.bevelWidth,
-        segments: options.bevelSegments || 2,
-        angleThresholdDeg: options.angleThresholdDeg ?? 30,
-        nonDestructive: nonDestructiveMeta.isNonDestructive,
+      this.runWithoutRecording(() => {
+        this.applyNonDestructiveBevel(resultMesh!, {
+          width: options.bevelWidth!,
+          segments: options.bevelSegments || 2,
+          angleThresholdDeg: options.angleThresholdDeg ?? 30,
+          nonDestructive: nonDestructiveMeta.isNonDestructive,
+        });
       });
     }
 
-    // Detach gizmos and highlights from target before disposal
+    // Detach gizmos and highlights from target before disabling
+    this.clearSelectionProxy();
     this.gizmoManager.attachToMesh(null);
     if (this.selectedMesh === validTarget || this.selectedMesh === targetMesh) {
       this.highlightLayer.removeMesh(validTarget);
@@ -3229,41 +3598,95 @@ export class MeshEditorService {
       this.selectedMesh = null;
     }
 
+    // Track meshes disabled/removed so Undo can restore them cleanly
+    const removedMeshes: Mesh[] = [];
+    const removedFromImported: Mesh[] = [];
+    const disableAndTrack = (m: Mesh) => {
+      if (m.isDisposed()) return;
+      if (!removedMeshes.includes(m)) removedMeshes.push(m);
+      const idx = this.importedMeshes.indexOf(m);
+      if (idx !== -1) {
+        this.importedMeshes.splice(idx, 1);
+        if (!removedFromImported.includes(m)) removedFromImported.push(m);
+      }
+      m.setEnabled(false);
+    };
+
     // Replace target in importedMeshes
     const targetIdx = this.importedMeshes.indexOf(validTarget);
     if (targetIdx !== -1) {
       this.importedMeshes.splice(targetIdx, 1, resultMesh);
+      removedFromImported.push(validTarget);
+      removedMeshes.push(validTarget);
+      validTarget.setEnabled(false);
     } else {
       const origIdx = this.importedMeshes.indexOf(targetMesh);
       if (origIdx !== -1) {
         this.importedMeshes.splice(origIdx, 1, resultMesh);
+        removedFromImported.push(targetMesh);
+        removedMeshes.push(targetMesh);
+        targetMesh.setEnabled(false);
       } else {
         this.importedMeshes.push(resultMesh);
       }
     }
-    validTarget.dispose();
-    if (targetMesh !== validTarget && !targetMesh.isDisposed()) {
-      targetMesh.dispose();
+    if (targetMesh !== validTarget) {
+      disableAndTrack(targetMesh);
+    }
+    if (!removedMeshes.includes(validTarget) && !validTarget.isDisposed()) {
+      removedMeshes.push(validTarget);
+      validTarget.setEnabled(false);
     }
 
-    // Clean up tool mesh unless user toggled 'keepToolMesh'
+    // Soft-disable tool mesh unless user toggled 'keepToolMesh'
     if (!keepToolMesh) {
       if (this.selectedMesh === validTool || this.selectedMesh === toolMesh) {
         this.highlightLayer.removeMesh(validTool);
         if (validTool !== toolMesh) this.highlightLayer.removeMesh(toolMesh);
         this.selectedMesh = null;
       }
-      const toolIdx = this.importedMeshes.indexOf(validTool);
-      if (toolIdx !== -1) {
-        this.importedMeshes.splice(toolIdx, 1);
-      }
-      validTool.dispose();
-      if (toolMesh !== validTool && !toolMesh.isDisposed()) {
-        const origToolIdx = this.importedMeshes.indexOf(toolMesh);
-        if (origToolIdx !== -1) this.importedMeshes.splice(origToolIdx, 1);
-        toolMesh.dispose();
+      disableAndTrack(validTool);
+      if (toolMesh !== validTool) {
+        disableAndTrack(toolMesh);
       }
     }
+
+    const finalResultMesh = resultMesh;
+    this.recordAction({
+      name: `CSG ${op} "${origTargetName}"`,
+      undo: () => {
+        this.clearSelectionProxy();
+        if (!finalResultMesh.isDisposed()) finalResultMesh.setEnabled(false);
+        const resIdx = this.importedMeshes.indexOf(finalResultMesh);
+        if (resIdx !== -1) this.importedMeshes.splice(resIdx, 1);
+
+        for (const m of removedMeshes) {
+          if (!m.isDisposed()) m.setEnabled(true);
+        }
+        for (const m of removedFromImported) {
+          if (!m.isDisposed() && !this.importedMeshes.includes(m)) {
+            this.importedMeshes.push(m);
+          }
+        }
+        const restoreSelection = [validTarget, ...(keepToolMesh ? [] : [validTool])].filter((m) => !m.isDisposed());
+        this.selectNodes(restoreSelection);
+      },
+      redo: () => {
+        this.clearSelectionProxy();
+        for (const m of removedMeshes) {
+          if (!m.isDisposed()) m.setEnabled(false);
+          const idx = this.importedMeshes.indexOf(m);
+          if (idx !== -1) this.importedMeshes.splice(idx, 1);
+        }
+        if (!finalResultMesh.isDisposed()) {
+          finalResultMesh.setEnabled(true);
+          if (!this.importedMeshes.includes(finalResultMesh)) {
+            this.importedMeshes.push(finalResultMesh);
+          }
+          this.selectMesh(finalResultMesh);
+        }
+      },
+    });
 
     this.selectMesh(resultMesh);
     this.updateStats();
@@ -4514,6 +4937,7 @@ export class MeshEditorService {
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -4591,7 +5015,9 @@ export class MeshEditorService {
       mesh.refreshBoundingInfo();
 
       this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-      this.highlightFace(mesh, this.selectedFaceId ?? fA);
+      const nextFaceId = this.selectedFaceId ?? fA;
+      this.recordMeshSurfaceEdit(mesh, `Extrude Quad Face (${distance})`, beforeSnap, faceId, nextFaceId);
+      this.highlightFace(mesh, nextFaceId);
       this.events.onSceneModified?.();
       this.events.onToast?.(`Extruded Quad Face by ${distance}!`, 'success');
       return;
@@ -4658,18 +5084,21 @@ export class MeshEditorService {
     mesh.refreshBoundingInfo();
 
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-    this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+    const nextFaceId = this.selectedFaceId ?? faceId;
+    this.recordMeshSurfaceEdit(mesh, `Extrude Face (${distance})`, beforeSnap, faceId, nextFaceId);
+    this.highlightFace(mesh, nextFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Extruded face by ${distance}!`, 'success');
   }
 
-  public insetSelectedFacet(insetAmount: number = 0.25, depth: number = 0.0): void {
+  public insetSelectedFacet(insetAmount: number = 0.25, depth: number = 0.0, actionLabel?: string): void {
     if (!this.selectedMesh || this.selectedFaceId === null) {
       this.events.onToast?.('Please pick a face to inset.', 'warning');
       return;
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -4759,7 +5188,9 @@ export class MeshEditorService {
       mesh.refreshBoundingInfo();
 
       this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-      this.highlightFace(mesh, this.selectedFaceId ?? fA);
+      const nextFaceId = this.selectedFaceId ?? fA;
+      this.recordMeshSurfaceEdit(mesh, actionLabel || `Inset Quad Face (${ratio.toFixed(2)})`, beforeSnap, faceId, nextFaceId);
+      this.highlightFace(mesh, nextFaceId);
       this.events.onSceneModified?.();
       this.events.onToast?.(`Inset Quad Face #${fA} & #${fB} (factor ${ratio.toFixed(2)})!`, 'success');
       return;
@@ -4837,7 +5268,9 @@ export class MeshEditorService {
     mesh.refreshBoundingInfo();
 
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-    this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+    const nextFaceId = this.selectedFaceId ?? faceId;
+    this.recordMeshSurfaceEdit(mesh, actionLabel || `Inset Face (${ratio.toFixed(2)})`, beforeSnap, faceId, nextFaceId);
+    this.highlightFace(mesh, nextFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Inset face #${faceId} (factor ${ratio.toFixed(2)})!`, 'success');
   }
@@ -4853,6 +5286,7 @@ export class MeshEditorService {
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -4912,7 +5346,9 @@ export class MeshEditorService {
     mesh.refreshBoundingInfo();
 
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-    this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+    const nextFaceId = this.selectedFaceId ?? faceId;
+    this.recordMeshSurfaceEdit(mesh, `Subdivide Face #${faceId}`, beforeSnap, faceId, nextFaceId);
+    this.highlightFace(mesh, nextFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Subdivided face #${faceId} into 4 facets!`, 'success');
   }
@@ -4923,6 +5359,8 @@ export class MeshEditorService {
       this.events.onToast?.('Please select a mesh to subdivide.', 'warning');
       return;
     }
+    const faceIdBefore = this.selectedMesh === mesh ? this.selectedFaceId : null;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const indices = Array.from(mesh.getIndices() || []);
     const positions = Array.from(mesh.getVerticesData(VertexBuffer.PositionKind) || []);
     const uvs = Array.from(mesh.getVerticesData(VertexBuffer.UVKind) || []);
@@ -4998,6 +5436,7 @@ export class MeshEditorService {
       this.events.onFaceSelected?.(null);
     }
 
+    this.recordMeshSurfaceEdit(mesh, `Subdivide Mesh "${mesh.name}"`, beforeSnap, faceIdBefore, null);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Subdivided "${mesh.name}" (${triCount * 4} triangles)!`, 'success');
   }
@@ -5010,6 +5449,8 @@ export class MeshEditorService {
     }
     this.selectMesh(mesh);
 
+    const faceIdBefore = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const clampedIterations = Math.min(3, Math.max(1, Math.round(iterations)));
     const result = subdivideCatmullClarkMesh(mesh, clampedIterations, true);
 
@@ -5022,6 +5463,7 @@ export class MeshEditorService {
       this.events.onFaceSelected?.(null);
     }
 
+    this.recordMeshSurfaceEdit(mesh, `Sub-D Smooth "${mesh.name}" (${clampedIterations}x)`, beforeSnap, faceIdBefore, null);
     this.events.onSceneModified?.();
     this.events.onToast?.(
       `Applied Catmull-Clark Sub-D smoothing (${clampedIterations}x, ${result.vertexCount} verts) to "${mesh.name}"!`,
@@ -5036,6 +5478,8 @@ export class MeshEditorService {
       return;
     }
     this.selectMesh(mesh);
+    const faceIdBefore = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const indices = Array.from(mesh.getIndices() || []);
     const positions = Array.from(mesh.getVerticesData(VertexBuffer.PositionKind) || []);
     const uvs = Array.from(mesh.getVerticesData(VertexBuffer.UVKind) || []);
@@ -5091,7 +5535,9 @@ export class MeshEditorService {
       mesh.refreshBoundingInfo();
 
       this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-      this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+      const nextFaceId = this.selectedFaceId ?? faceId;
+      this.recordMeshSurfaceEdit(mesh, `Solidify Face #${faceId}`, beforeSnap, faceId, nextFaceId);
+      this.highlightFace(mesh, nextFaceId);
       this.events.onSceneModified?.();
       this.events.onToast?.(`Solidified face #${faceId} (thickness: ${thickness})!`, 'success');
       return;
@@ -5166,6 +5612,7 @@ export class MeshEditorService {
     mesh.refreshBoundingInfo();
 
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, 0, undefined, explicitTriMats);
+    this.recordMeshSurfaceEdit(mesh, `Solidify "${mesh.name}"`, beforeSnap, faceIdBefore, this.selectedFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Solidified "${mesh.name}" with thickness ${thickness}!`, 'success');
   }
@@ -5175,7 +5622,7 @@ export class MeshEditorService {
       this.events.onToast?.('Please pick a face to bevel.', 'warning');
       return;
     }
-    this.insetSelectedFacet(width, width * 0.4);
+    this.insetSelectedFacet(width, width * 0.4, `Bevel Face (${width})`);
     this.events.onToast?.(`Beveled face #${this.selectedFaceId}!`, 'success');
   }
 
@@ -5186,6 +5633,7 @@ export class MeshEditorService {
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -5259,18 +5707,21 @@ export class MeshEditorService {
     mesh.refreshBoundingInfo();
 
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-    this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+    const nextFaceId = this.selectedFaceId ?? faceId;
+    this.recordMeshSurfaceEdit(mesh, `Arc Face (${segs} segments)`, beforeSnap, faceId, nextFaceId);
+    this.highlightFace(mesh, nextFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Created segmented arch (${segs} segments)!`, 'success');
   }
 
-  public knifeSplitFacet(): void {
+  public knifeSplitFacet(actionLabel?: string): void {
     if (!this.selectedMesh || this.selectedFaceId === null) {
       this.events.onToast?.('Please pick a face to knife split.', 'warning');
       return;
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -5330,7 +5781,9 @@ export class MeshEditorService {
     mesh.refreshBoundingInfo();
 
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-    this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+    const nextFaceId = this.selectedFaceId ?? faceId;
+    this.recordMeshSurfaceEdit(mesh, actionLabel || `Knife Split Face #${faceId}`, beforeSnap, faceId, nextFaceId);
+    this.highlightFace(mesh, nextFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Knife cut face #${faceId} in two!`, 'success');
   }
@@ -5340,7 +5793,7 @@ export class MeshEditorService {
       this.events.onToast?.('Please pick a face for loop cut.', 'warning');
       return;
     }
-    this.knifeSplitFacet();
+    this.knifeSplitFacet(`Loop Cut Face #${this.selectedFaceId}`);
     this.events.onToast?.(`Loop cut executed on face #${this.selectedFaceId}!`, 'success');
   }
 
@@ -5351,6 +5804,7 @@ export class MeshEditorService {
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -5411,7 +5865,9 @@ export class MeshEditorService {
     mesh.refreshBoundingInfo();
 
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-    this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+    const nextFaceId = this.selectedFaceId ?? faceId;
+    this.recordMeshSurfaceEdit(mesh, `Cut Through Face #${faceId}`, beforeSnap, faceId, nextFaceId);
+    this.highlightFace(mesh, nextFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Cut through face #${faceId} (opening created)!`, 'success');
   }
@@ -5423,6 +5879,7 @@ export class MeshEditorService {
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const indices = Array.from(mesh.getIndices() || []);
     const positions = Array.from(mesh.getVerticesData(VertexBuffer.PositionKind) || []);
 
@@ -5465,6 +5922,7 @@ export class MeshEditorService {
     mesh.setVerticesData(VertexBuffer.NormalKind, normals);
     mesh.refreshBoundingInfo();
 
+    this.recordMeshSurfaceEdit(mesh, `Relax Face #${faceId}`, beforeSnap, faceId, faceId);
     this.highlightFace(mesh, faceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Relaxed vertices on face #${faceId}!`, 'success');
@@ -5489,6 +5947,7 @@ export class MeshEditorService {
 
     if (this.selectedFaceId !== null && this.selectedFaceId * 3 + 2 < indices.length) {
       const faceId = this.selectedFaceId;
+      const beforeSnap = captureMeshSurfaceSnapshot(mesh);
       const preCtx = this.capturePreEditSubMeshContext(mesh);
       const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
       const i0 = indices[faceId * 3];
@@ -5531,16 +5990,46 @@ export class MeshEditorService {
       mesh.refreshBoundingInfo();
 
       this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
+      this.recordMeshSurfaceEdit(mesh, `Array Face (${numCopies}x)`, beforeSnap, faceId, this.selectedFaceId ?? faceId);
       this.events.onSceneModified?.();
       this.events.onToast?.(`Created array of ${numCopies} faces!`, 'success');
       return;
     }
 
+    const createdClones: Mesh[] = [];
     for (let c = 1; c <= numCopies; c++) {
       const clone = mesh.clone(`${mesh.name}_array_${c}`);
       clone.position.addInPlace(new Vector3(offsetX * c, offsetY * c, offsetZ * c));
       this.importedMeshes.push(clone);
+      createdClones.push(clone);
     }
+
+    if (createdClones.length > 0) {
+      this.recordAction({
+        name: `Array "${mesh.name}" (${numCopies}x)`,
+        undo: () => {
+          this.clearSelectionProxy();
+          for (const cl of createdClones) {
+            if (!cl.isDisposed()) cl.setEnabled(false);
+            const idx = this.importedMeshes.indexOf(cl);
+            if (idx !== -1) this.importedMeshes.splice(idx, 1);
+          }
+          if (!mesh.isDisposed()) this.selectMesh(mesh);
+        },
+        redo: () => {
+          this.clearSelectionProxy();
+          for (const cl of createdClones) {
+            if (!cl.isDisposed()) {
+              cl.setEnabled(true);
+              if (!this.importedMeshes.includes(cl)) this.importedMeshes.push(cl);
+            }
+          }
+          this.selectNodes([mesh, ...createdClones].filter((m) => !m.isDisposed()));
+        },
+      });
+    }
+
+    this.updateStats();
     this.events.onSceneModified?.();
     this.events.onToast?.(`Created array of ${numCopies} copies of "${mesh.name}"!`, 'success');
   }
@@ -5552,6 +6041,7 @@ export class MeshEditorService {
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -5585,6 +6075,7 @@ export class MeshEditorService {
       this.facetHighlightMesh = null;
     }
     this.selectedFaceId = null;
+    this.recordMeshSurfaceEdit(mesh, quad ? 'Delete Quad Face' : `Delete Face #${faceId}`, beforeSnap, faceId, null);
     this.events.onFaceSelected?.(null);
     this.events.onSelectionChanged?.(this.selectedNodes, this.selectedMesh, this.selectedSubMeshId);
     this.events.onSceneModified?.();
@@ -5598,6 +6089,7 @@ export class MeshEditorService {
     }
     const mesh = this.selectedMesh;
     const faceId = this.selectedFaceId;
+    const beforeSnap = captureMeshSurfaceSnapshot(mesh);
     const preCtx = this.capturePreEditSubMeshContext(mesh);
     const srcMatIdx = getFacetMaterialInfo(mesh, faceId).materialIndex;
     const indices = Array.from(mesh.getIndices() || []);
@@ -5625,7 +6117,9 @@ export class MeshEditorService {
     }
     mesh.refreshBoundingInfo();
     this.finalizeSubMeshesAfterTopologyEdit(mesh, preCtx, srcMatIdx);
-    this.highlightFace(mesh, this.selectedFaceId ?? faceId);
+    const nextFaceId = this.selectedFaceId ?? faceId;
+    this.recordMeshSurfaceEdit(mesh, quad ? 'Flip Quad Face Normal' : `Flip Face #${faceId} Normal`, beforeSnap, faceId, nextFaceId);
+    this.highlightFace(mesh, nextFaceId);
     this.events.onSceneModified?.();
     this.events.onToast?.(quad ? 'Quad face normal inverted!' : 'Face normal inverted!', 'success');
   }
@@ -6070,7 +6564,9 @@ export class MeshEditorService {
       this.events.onToast?.('Please select a mesh first.', 'warning');
       return null;
     }
-    const matName = name || `Mat_${this.selectedMesh.name}_${Date.now().toString().slice(-4)}`;
+    const mesh = this.selectedMesh;
+    const prevMat = mesh.material;
+    const matName = name || `Mat_${mesh.name}_${Date.now().toString().slice(-4)}`;
     const mat = new PBRMaterial(matName, this.scene);
     mat.albedoColor = new Color3(0.9, 0.9, 0.9);
     mat.roughness = 0.5;
@@ -6078,7 +6574,22 @@ export class MeshEditorService {
     mat.backFaceCulling = false;
     mat.twoSidedLighting = true;
 
-    this.selectedMesh.material = mat;
+    mesh.material = mat;
+
+    this.recordAction({
+      name: `Create Material "${matName}"`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.material = prevMat;
+        this.events.onTexturesChanged?.();
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.material = mat;
+        this.events.onTexturesChanged?.();
+      },
+    });
+
     this.events.onSceneModified?.();
     this.events.onToast?.(`Created new PBR Material "${matName}"!`, 'success');
     return mat;
@@ -6283,14 +6794,35 @@ export class MeshEditorService {
   }
 
   public applyTextureToSelectedMaterial(url: string, name?: string): boolean {
+    const mesh = this.selectedMesh;
+    const prevMeshMat = mesh ? mesh.material : null;
     let selMat = this.getSelectedMaterial();
-    if (!selMat && this.selectedMesh) {
-      selMat = this.createNewMaterialForSelected();
+    let createdNewMat = false;
+    if (!selMat && mesh) {
+      selMat = this.runWithoutRecording(() => this.createNewMaterialForSelected());
+      createdNewMat = !!selMat;
     }
     if (!selMat) {
       this.events.onToast?.('Please select a mesh first', 'warning');
       return false;
     }
+
+    // Capture previous texture state
+    const targetMat = selMat;
+    const prevAlbedo =
+      targetMat instanceof PBRMaterial
+        ? targetMat.albedoTexture
+        : targetMat instanceof StandardMaterial
+        ? targetMat.diffuseTexture
+        : null;
+    const prevUseAlpha =
+      targetMat instanceof PBRMaterial
+        ? targetMat.useAlphaFromAlbedoTexture
+        : targetMat instanceof StandardMaterial
+        ? targetMat.useAlphaFromDiffuseTexture
+        : false;
+    const prevTransMode =
+      targetMat instanceof PBRMaterial ? targetMat.transparencyMode : null;
 
     // Reuse existing Texture instance in the scene with the same URL if available
     let tex = this.scene.textures.find(
@@ -6305,16 +6837,52 @@ export class MeshEditorService {
     }
 
     // Default texture alpha to false - the user decides whether to enable alpha and transparency
+    const prevTexHasAlpha = tex.hasAlpha;
     tex.hasAlpha = false;
 
-    if (selMat instanceof PBRMaterial) {
-      selMat.albedoTexture = tex;
-      selMat.useAlphaFromAlbedoTexture = false;
-      selMat.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
-    } else if (selMat instanceof StandardMaterial) {
-      selMat.diffuseTexture = tex;
-      selMat.useAlphaFromDiffuseTexture = false;
+    if (targetMat instanceof PBRMaterial) {
+      targetMat.albedoTexture = tex;
+      targetMat.useAlphaFromAlbedoTexture = false;
+      targetMat.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+    } else if (targetMat instanceof StandardMaterial) {
+      targetMat.diffuseTexture = tex;
+      targetMat.useAlphaFromDiffuseTexture = false;
     }
+
+    const appliedTex = tex;
+    this.recordAction({
+      name: `Apply Texture "${appliedTex.name || 'texture'}"`,
+      undo: () => {
+        if (createdNewMat && mesh && !mesh.isDisposed()) {
+          mesh.material = prevMeshMat;
+        } else if (targetMat instanceof PBRMaterial) {
+          targetMat.albedoTexture = prevAlbedo;
+          targetMat.useAlphaFromAlbedoTexture = prevUseAlpha;
+          targetMat.transparencyMode = prevTransMode;
+        } else if (targetMat instanceof StandardMaterial) {
+          targetMat.diffuseTexture = prevAlbedo;
+          targetMat.useAlphaFromDiffuseTexture = prevUseAlpha;
+        }
+        appliedTex.hasAlpha = prevTexHasAlpha;
+        this.events.onTexturesChanged?.();
+      },
+      redo: () => {
+        if (createdNewMat && mesh && !mesh.isDisposed()) {
+          mesh.material = targetMat;
+        }
+        appliedTex.hasAlpha = false;
+        if (targetMat instanceof PBRMaterial) {
+          targetMat.albedoTexture = appliedTex;
+          targetMat.useAlphaFromAlbedoTexture = false;
+          targetMat.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+        } else if (targetMat instanceof StandardMaterial) {
+          targetMat.diffuseTexture = appliedTex;
+          targetMat.useAlphaFromDiffuseTexture = false;
+        }
+        this.events.onTexturesChanged?.();
+      },
+    });
+
     this.events.onTexturesChanged?.();
     this.events.onSceneModified?.();
     this.events.onToast?.(`Applied texture to material "${selMat.name}"`, 'success');
@@ -6329,9 +6897,27 @@ export class MeshEditorService {
     if (!selMat) return false;
     if (selMat instanceof PBRMaterial) {
       if (!selMat.albedoTexture) return false;
+      const prevTex = selMat.albedoTexture;
+      const prevUseAlpha = selMat.useAlphaFromAlbedoTexture;
+      const prevTransMode = selMat.transparencyMode;
       selMat.albedoTexture = null;
       selMat.useAlphaFromAlbedoTexture = false;
       selMat.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+      this.recordAction({
+        name: `Remove Texture from "${selMat.name}"`,
+        undo: () => {
+          selMat.albedoTexture = prevTex;
+          selMat.useAlphaFromAlbedoTexture = prevUseAlpha;
+          selMat.transparencyMode = prevTransMode;
+          this.events.onTexturesChanged?.();
+        },
+        redo: () => {
+          selMat.albedoTexture = null;
+          selMat.useAlphaFromAlbedoTexture = false;
+          selMat.transparencyMode = PBRMaterial.PBRMATERIAL_OPAQUE;
+          this.events.onTexturesChanged?.();
+        },
+      });
       this.events.onTexturesChanged?.();
       this.events.onSceneModified?.();
       this.events.onToast?.(`Removed texture from material "${selMat.name}"`, 'info');
@@ -6339,8 +6925,23 @@ export class MeshEditorService {
     }
     if (selMat instanceof StandardMaterial) {
       if (!selMat.diffuseTexture) return false;
+      const prevTex = selMat.diffuseTexture;
+      const prevUseAlpha = selMat.useAlphaFromDiffuseTexture;
       selMat.diffuseTexture = null;
       selMat.useAlphaFromDiffuseTexture = false;
+      this.recordAction({
+        name: `Remove Texture from "${selMat.name}"`,
+        undo: () => {
+          selMat.diffuseTexture = prevTex;
+          selMat.useAlphaFromDiffuseTexture = prevUseAlpha;
+          this.events.onTexturesChanged?.();
+        },
+        redo: () => {
+          selMat.diffuseTexture = null;
+          selMat.useAlphaFromDiffuseTexture = false;
+          this.events.onTexturesChanged?.();
+        },
+      });
       this.events.onTexturesChanged?.();
       this.events.onSceneModified?.();
       this.events.onToast?.(`Removed texture from material "${selMat.name}"`, 'info');
@@ -6350,14 +6951,23 @@ export class MeshEditorService {
   }
 
   public applyBumpTextureToSelectedMaterial(fileOrUrl: File | string, name?: string): boolean {
+    const mesh = this.selectedMesh;
+    const prevMeshMat = mesh ? mesh.material : null;
     let selMat = this.getSelectedMaterial();
-    if (!selMat && this.selectedMesh) {
-      selMat = this.createNewMaterialForSelected();
+    let createdNewMat = false;
+    if (!selMat && mesh) {
+      selMat = this.runWithoutRecording(() => this.createNewMaterialForSelected());
+      createdNewMat = !!selMat;
     }
     if (!selMat) {
       this.events.onToast?.('Please select a mesh first', 'warning');
       return false;
     }
+
+    const targetMat = selMat;
+    const prevBump =
+      targetMat instanceof PBRMaterial || targetMat instanceof StandardMaterial ? targetMat.bumpTexture : null;
+    const prevBumpLevel = prevBump ? prevBump.level : 1.0;
 
     let url: string;
     let texName = name;
@@ -6394,10 +7004,34 @@ export class MeshEditorService {
       tex.wrapV = baseTex.wrapV;
     }
 
-    if (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) {
-      selMat.bumpTexture = tex;
+    if (targetMat instanceof PBRMaterial || targetMat instanceof StandardMaterial) {
+      targetMat.bumpTexture = tex;
       tex.level = 1.0;
     }
+
+    const appliedTex = tex;
+    this.recordAction({
+      name: `Apply Bump/Normal Map "${appliedTex.name || 'normal'}"`,
+      undo: () => {
+        if (createdNewMat && mesh && !mesh.isDisposed()) {
+          mesh.material = prevMeshMat;
+        } else if (targetMat instanceof PBRMaterial || targetMat instanceof StandardMaterial) {
+          targetMat.bumpTexture = prevBump;
+          if (prevBump) prevBump.level = prevBumpLevel;
+        }
+        this.events.onTexturesChanged?.();
+      },
+      redo: () => {
+        if (createdNewMat && mesh && !mesh.isDisposed()) {
+          mesh.material = targetMat;
+        }
+        if (targetMat instanceof PBRMaterial || targetMat instanceof StandardMaterial) {
+          targetMat.bumpTexture = appliedTex;
+          appliedTex.level = 1.0;
+        }
+        this.events.onTexturesChanged?.();
+      },
+    });
 
     this.events.onTexturesChanged?.();
     this.events.onSceneModified?.();
@@ -6418,7 +7052,20 @@ export class MeshEditorService {
     const selMat = this.getSelectedMaterial();
     if (!selMat) return false;
     if (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) {
+      if (!selMat.bumpTexture) return false;
+      const prevBump = selMat.bumpTexture;
       selMat.bumpTexture = null;
+      this.recordAction({
+        name: `Remove Bump Map from "${selMat.name}"`,
+        undo: () => {
+          selMat.bumpTexture = prevBump;
+          this.events.onTexturesChanged?.();
+        },
+        redo: () => {
+          selMat.bumpTexture = null;
+          this.events.onTexturesChanged?.();
+        },
+      });
       this.events.onTexturesChanged?.();
       this.events.onSceneModified?.();
       this.events.onToast?.(`Removed normal / bump map from material "${selMat.name}"`, 'info');
@@ -6440,7 +7087,18 @@ export class MeshEditorService {
     const selMat = this.getSelectedMaterial();
     if (!selMat) return;
     if (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) {
+      const prev = !!selMat.invertNormalMapX;
+      if (prev === invert) return;
       selMat.invertNormalMapX = invert;
+      this.recordAction({
+        name: `Invert Normal Map X (${invert ? 'On' : 'Off'})`,
+        undo: () => {
+          selMat.invertNormalMapX = prev;
+        },
+        redo: () => {
+          selMat.invertNormalMapX = invert;
+        },
+      });
       this.events.onSceneModified?.();
     }
   }
@@ -6449,7 +7107,18 @@ export class MeshEditorService {
     const selMat = this.getSelectedMaterial();
     if (!selMat) return;
     if (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) {
+      const prev = !!selMat.invertNormalMapY;
+      if (prev === invert) return;
       selMat.invertNormalMapY = invert;
+      this.recordAction({
+        name: `Invert Normal Map Y (${invert ? 'On' : 'Off'})`,
+        undo: () => {
+          selMat.invertNormalMapY = prev;
+        },
+        redo: () => {
+          selMat.invertNormalMapY = invert;
+        },
+      });
       this.events.onSceneModified?.();
     }
   }
@@ -6458,7 +7127,18 @@ export class MeshEditorService {
     const selMat = this.getSelectedMaterial();
     if (!selMat) return;
     if (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) {
+      const prev = !!selMat.useParallax;
+      if (prev === enabled) return;
       selMat.useParallax = enabled;
+      this.recordAction({
+        name: `Parallax Mapping (${enabled ? 'On' : 'Off'})`,
+        undo: () => {
+          selMat.useParallax = prev;
+        },
+        redo: () => {
+          selMat.useParallax = enabled;
+        },
+      });
       this.events.onSceneModified?.();
     }
   }
@@ -6467,10 +7147,25 @@ export class MeshEditorService {
     const selMat = this.getSelectedMaterial();
     if (!selMat) return;
     if (selMat instanceof PBRMaterial || selMat instanceof StandardMaterial) {
+      const prevOcclusion = !!selMat.useParallaxOcclusion;
+      const prevParallax = !!selMat.useParallax;
+      if (prevOcclusion === enabled && (!enabled || prevParallax)) return;
       selMat.useParallaxOcclusion = enabled;
       if (enabled) {
         selMat.useParallax = true;
       }
+      const nextParallax = !!selMat.useParallax;
+      this.recordAction({
+        name: `Parallax Occlusion (${enabled ? 'On' : 'Off'})`,
+        undo: () => {
+          selMat.useParallaxOcclusion = prevOcclusion;
+          selMat.useParallax = prevParallax;
+        },
+        redo: () => {
+          selMat.useParallaxOcclusion = enabled;
+          selMat.useParallax = nextParallax;
+        },
+      });
       this.events.onSceneModified?.();
     }
   }
@@ -6565,6 +7260,16 @@ export class MeshEditorService {
     const mat = this.getSelectedMaterial();
     if (!mat) return;
     const tex = this.getActiveMaterialTexture();
+    const prevTexAlpha = tex ? !!tex.hasAlpha : false;
+    const prevBackFace = mat.backFaceCulling;
+    const prevUseAlpha =
+      mat instanceof PBRMaterial
+        ? mat.useAlphaFromAlbedoTexture
+        : mat instanceof StandardMaterial
+        ? mat.useAlphaFromDiffuseTexture
+        : false;
+    const prevTransMode = mat instanceof PBRMaterial ? mat.transparencyMode : null;
+
     if (tex) {
       tex.hasAlpha = enabled;
     }
@@ -6585,12 +7290,50 @@ export class MeshEditorService {
       mat.useAlphaFromDiffuseTexture = enabled;
       mat.backFaceCulling = !enabled;
     }
+
+    const nextBackFace = mat.backFaceCulling;
+    const nextTransMode = mat instanceof PBRMaterial ? mat.transparencyMode : null;
+    this.recordAction({
+      name: `Texture Alpha (${enabled ? 'On' : 'Off'})`,
+      undo: () => {
+        if (tex) tex.hasAlpha = prevTexAlpha;
+        mat.backFaceCulling = prevBackFace;
+        if (mat instanceof PBRMaterial) {
+          mat.useAlphaFromAlbedoTexture = prevUseAlpha;
+          mat.transparencyMode = prevTransMode;
+        } else if (mat instanceof StandardMaterial) {
+          mat.useAlphaFromDiffuseTexture = prevUseAlpha;
+        }
+      },
+      redo: () => {
+        if (tex) tex.hasAlpha = enabled;
+        mat.backFaceCulling = nextBackFace;
+        if (mat instanceof PBRMaterial) {
+          mat.useAlphaFromAlbedoTexture = enabled;
+          mat.transparencyMode = nextTransMode;
+        } else if (mat instanceof StandardMaterial) {
+          mat.useAlphaFromDiffuseTexture = enabled;
+        }
+      },
+    });
+
     this.events.onSceneModified?.();
   }
 
   public setMaterialTransparencyMode(mode: number): void {
     const mat = this.getSelectedMaterial();
     if (!mat) return;
+    const tex = this.getActiveMaterialTexture();
+    const prevTexAlpha = tex ? !!tex.hasAlpha : false;
+    const prevBackFace = mat.backFaceCulling;
+    const prevMode = (mat as any).transparencyMode;
+    const prevUseAlpha =
+      mat instanceof PBRMaterial
+        ? mat.useAlphaFromAlbedoTexture
+        : mat instanceof StandardMaterial
+        ? mat.useAlphaFromDiffuseTexture
+        : false;
+
     if (mat instanceof PBRMaterial) {
       mat.transparencyMode = mode;
       mat.useAlphaFromAlbedoTexture = mode !== PBRMaterial.PBRMATERIAL_OPAQUE;
@@ -6600,17 +7343,62 @@ export class MeshEditorService {
       mat.useAlphaFromDiffuseTexture = mode !== 0;
       if (mode !== 0) mat.backFaceCulling = false;
     }
-    const tex = this.getActiveMaterialTexture();
     if (tex) {
       tex.hasAlpha = mode !== 0;
     }
+
+    const nextBackFace = mat.backFaceCulling;
+    const nextUseAlpha =
+      mat instanceof PBRMaterial
+        ? mat.useAlphaFromAlbedoTexture
+        : mat instanceof StandardMaterial
+        ? mat.useAlphaFromDiffuseTexture
+        : false;
+    this.recordAction({
+      name: `Change Transparency Mode`,
+      undo: () => {
+        if (tex) tex.hasAlpha = prevTexAlpha;
+        mat.backFaceCulling = prevBackFace;
+        if (mat instanceof PBRMaterial) {
+          mat.transparencyMode = prevMode;
+          mat.useAlphaFromAlbedoTexture = prevUseAlpha;
+        } else if (mat instanceof StandardMaterial) {
+          mat.transparencyMode = prevMode;
+          mat.useAlphaFromDiffuseTexture = prevUseAlpha;
+        }
+      },
+      redo: () => {
+        if (tex) tex.hasAlpha = mode !== 0;
+        mat.backFaceCulling = nextBackFace;
+        if (mat instanceof PBRMaterial) {
+          mat.transparencyMode = mode;
+          mat.useAlphaFromAlbedoTexture = nextUseAlpha;
+        } else if (mat instanceof StandardMaterial) {
+          mat.transparencyMode = mode;
+          mat.useAlphaFromDiffuseTexture = nextUseAlpha;
+        }
+      },
+    });
+
     this.events.onSceneModified?.();
   }
 
   public setMaterialTwoSided(twoSided: boolean): void {
     const mat = this.getSelectedMaterial();
     if (!mat) return;
-    mat.backFaceCulling = !twoSided;
+    const prevBackFace = mat.backFaceCulling;
+    const nextBackFace = !twoSided;
+    if (prevBackFace === nextBackFace) return;
+    mat.backFaceCulling = nextBackFace;
+    this.recordAction({
+      name: `Two-Sided Material (${twoSided ? 'On' : 'Off'})`,
+      undo: () => {
+        mat.backFaceCulling = prevBackFace;
+      },
+      redo: () => {
+        mat.backFaceCulling = nextBackFace;
+      },
+    });
     this.events.onSceneModified?.();
   }
 
@@ -6645,6 +7433,31 @@ export class MeshEditorService {
     return { hasAlpha, mode, twoSided, alphaCutOff };
   }
 
+  private recordMeshUVEdit(
+    mesh: Mesh,
+    actionName: string,
+    beforeUVs: number[] | null,
+    afterUVs: number[]
+  ): void {
+    const afterCopy = [...afterUVs];
+    const beforeCopy = beforeUVs ? [...beforeUVs] : null;
+    this.recordAction({
+      name: actionName,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        if (beforeCopy) {
+          mesh.setVerticesData(VertexBuffer.UVKind, [...beforeCopy], true);
+        } else {
+          mesh.removeVerticesData(VertexBuffer.UVKind);
+        }
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.setVerticesData(VertexBuffer.UVKind, [...afterCopy], true);
+      },
+    });
+  }
+
   public applyTriplanarUVs(scaleOrUScale: number = 1.0, vScaleParam?: number): void {
     if (!this.selectedMesh) {
       this.events.onToast?.('Please select a mesh first.', 'warning');
@@ -6654,6 +7467,9 @@ export class MeshEditorService {
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
     const normals = mesh.getVerticesData(VertexBuffer.NormalKind);
     if (!positions || !normals) return;
+
+    const prevUVRaw = mesh.getVerticesData(VertexBuffer.UVKind);
+    const beforeUVs = prevUVRaw ? Array.from(prevUVRaw) : null;
 
     const uScale = typeof scaleOrUScale === 'number' && !isNaN(scaleOrUScale) ? scaleOrUScale : 1.0;
     const vScale = typeof vScaleParam === 'number' && !isNaN(vScaleParam) ? vScaleParam : uScale;
@@ -6691,6 +7507,7 @@ export class MeshEditorService {
     }
 
     mesh.setVerticesData(VertexBuffer.UVKind, uvs);
+    this.recordMeshUVEdit(mesh, `Triplanar UVs "${mesh.name}"`, beforeUVs, uvs);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Applied Triplanar UV mapping to mesh (uScale: ${uScale}, vScale: ${vScale})!`, 'success');
   }
@@ -6707,6 +7524,9 @@ export class MeshEditorService {
     const mesh = this.selectedMesh;
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
     if (!positions) return;
+
+    const prevUVRaw = mesh.getVerticesData(VertexBuffer.UVKind);
+    const beforeUVs = prevUVRaw ? Array.from(prevUVRaw) : null;
 
     const uScale = typeof scaleOrUScale === 'number' && !isNaN(scaleOrUScale) ? scaleOrUScale : 1.0;
     const vScale = typeof vScaleParam === 'number' && !isNaN(vScaleParam) ? vScaleParam : uScale;
@@ -6736,6 +7556,7 @@ export class MeshEditorService {
     }
 
     mesh.setVerticesData(VertexBuffer.UVKind, uvs);
+    this.recordMeshUVEdit(mesh, `Planar (${direction}) UVs "${mesh.name}"`, beforeUVs, uvs);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Applied Planar (${direction}) UVs (uScale: ${uScale}, vScale: ${vScale})!`, 'success');
   }
@@ -6748,6 +7569,9 @@ export class MeshEditorService {
     const mesh = this.selectedMesh;
     const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
     if (!positions) return;
+
+    const prevUVRaw = mesh.getVerticesData(VertexBuffer.UVKind);
+    const beforeUVs = prevUVRaw ? Array.from(prevUVRaw) : null;
 
     const uScale = typeof scaleOrUScale === 'number' && !isNaN(scaleOrUScale) ? scaleOrUScale : 1.0;
     const vScale = typeof vScaleParam === 'number' && !isNaN(vScaleParam) ? vScaleParam : uScale;
@@ -6767,6 +7591,7 @@ export class MeshEditorService {
     }
 
     mesh.setVerticesData(VertexBuffer.UVKind, uvs);
+    this.recordMeshUVEdit(mesh, `Cylindrical UVs "${mesh.name}"`, beforeUVs, uvs);
     this.events.onSceneModified?.();
     this.events.onToast?.(`Applied Cylindrical UVs to mesh (uScale: ${uScale}, vScale: ${vScale})!`, 'success');
   }
@@ -6788,6 +7613,8 @@ export class MeshEditorService {
       return;
     }
 
+    const beforeUVs = Array.from(uvs);
+
     const uScale = typeof scaleOrUScale === 'number' && !isNaN(scaleOrUScale) ? scaleOrUScale : 1.0;
     const vScale = typeof vScaleParam === 'number' && !isNaN(vScaleParam) ? vScaleParam : uScale;
     const safeUOffset = typeof uOffset === 'number' && !isNaN(uOffset) ? uOffset : 0;
@@ -6800,6 +7627,7 @@ export class MeshEditorService {
     }
 
     mesh.setVerticesData(VertexBuffer.UVKind, newUVs);
+    this.recordMeshUVEdit(mesh, `Scale UVs "${mesh.name}"`, beforeUVs, Array.from(newUVs));
     this.events.onSceneModified?.();
     this.events.onToast?.(`Baked UV transform to mesh (uScale: ${uScale}, vScale: ${vScale})!`, 'success');
   }
@@ -6818,6 +7646,39 @@ export class MeshEditorService {
     if (imageFiles.length === 0) return;
 
     this.registerDroppedFiles(imageFiles);
+
+    // Snapshot existing material texture assignments for Undo/Redo
+    type MatSlotSnap = {
+      mat: PBRMaterial | StandardMaterial;
+      albedoOrDiffuse: any;
+      bump: any;
+      useAlpha: boolean;
+      transparencyMode: any;
+    };
+    const captureMatSlots = (): Map<PBRMaterial | StandardMaterial, MatSlotSnap> => {
+      const map = new Map<PBRMaterial | StandardMaterial, MatSlotSnap>();
+      for (const m of this.scene.materials) {
+        if (m instanceof PBRMaterial) {
+          map.set(m, {
+            mat: m,
+            albedoOrDiffuse: m.albedoTexture,
+            bump: m.bumpTexture,
+            useAlpha: m.useAlphaFromAlbedoTexture,
+            transparencyMode: m.transparencyMode,
+          });
+        } else if (m instanceof StandardMaterial) {
+          map.set(m, {
+            mat: m,
+            albedoOrDiffuse: m.diffuseTexture,
+            bump: m.bumpTexture,
+            useAlpha: m.useAlphaFromDiffuseTexture,
+            transparencyMode: (m as any).transparencyMode,
+          });
+        }
+      }
+      return map;
+    };
+    const beforeMatSlots = captureMatSlots();
 
     let totalApplied = 0;
 
@@ -7011,6 +7872,49 @@ export class MeshEditorService {
       }
 
       totalApplied += fileAppliedCount;
+    }
+
+    if (totalApplied > 0) {
+      const afterMatSlots = captureMatSlots();
+      const changed: Array<{ before: MatSlotSnap; after: MatSlotSnap }> = [];
+      for (const [mat, after] of afterMatSlots.entries()) {
+        const before = beforeMatSlots.get(mat);
+        if (
+          before &&
+          (before.albedoOrDiffuse !== after.albedoOrDiffuse ||
+            before.bump !== after.bump ||
+            before.useAlpha !== after.useAlpha ||
+            before.transparencyMode !== after.transparencyMode)
+        ) {
+          changed.push({ before, after });
+        }
+      }
+      if (changed.length > 0) {
+        const applySlotSnap = (snap: MatSlotSnap) => {
+          if (snap.mat instanceof PBRMaterial) {
+            snap.mat.albedoTexture = snap.albedoOrDiffuse;
+            snap.mat.bumpTexture = snap.bump;
+            snap.mat.useAlphaFromAlbedoTexture = snap.useAlpha;
+            snap.mat.transparencyMode = snap.transparencyMode;
+          } else {
+            snap.mat.diffuseTexture = snap.albedoOrDiffuse;
+            snap.mat.bumpTexture = snap.bump;
+            snap.mat.useAlphaFromDiffuseTexture = snap.useAlpha;
+            (snap.mat as any).transparencyMode = snap.transparencyMode;
+          }
+        };
+        this.recordAction({
+          name: `Apply Dropped Texture (${imageFiles.length} file${imageFiles.length === 1 ? '' : 's'})`,
+          undo: () => {
+            for (const c of changed) applySlotSnap(c.before);
+            this.events.onTexturesChanged?.();
+          },
+          redo: () => {
+            for (const c of changed) applySlotSnap(c.after);
+            this.events.onTexturesChanged?.();
+          },
+        });
+      }
     }
 
     this.events.onTexturesChanged?.();
@@ -7817,12 +8721,14 @@ export class MeshEditorService {
 
     this.events.onStatusChanged?.('Optimizing textures to WebP...', true);
     let optimizedCount = 0;
+    const replacements: Array<{ oldTex: Texture; newTex: Texture }> = [];
 
     for (const tex of textures) {
       try {
         const optimizedTexture = await this.convertTextureToWebP(tex, quality, maxResolution);
         if (optimizedTexture) {
           this.replaceTextureInAllMaterials(tex, optimizedTexture);
+          replacements.push({ oldTex: tex, newTex: optimizedTexture });
           optimizedCount++;
         }
       } catch (e) {
@@ -7831,6 +8737,21 @@ export class MeshEditorService {
     }
 
     if (optimizedCount > 0) {
+      this.recordAction({
+        name: `Optimize ${optimizedCount} Texture(s) to WebP`,
+        undo: () => {
+          for (let i = replacements.length - 1; i >= 0; i--) {
+            this.replaceTextureInAllMaterials(replacements[i].newTex, replacements[i].oldTex);
+          }
+          this.events.onTexturesChanged?.();
+        },
+        redo: () => {
+          for (const r of replacements) {
+            this.replaceTextureInAllMaterials(r.oldTex, r.newTex);
+          }
+          this.events.onTexturesChanged?.();
+        },
+      });
       this.events.onTexturesChanged?.();
     }
     this.events.onStatusChanged?.('Ready');
@@ -8532,7 +9453,7 @@ export class MeshEditorService {
         return imageExtensions.includes(ext);
       });
       if (imagesInDrop.length > 0) {
-        await this.applyDroppedTextures(imagesInDrop);
+        await this.runWithoutRecordingAsync(() => this.applyDroppedTextures(imagesInDrop));
       }
 
       this.events.onModelLoaded?.(displayName);
@@ -8859,8 +9780,40 @@ export class MeshEditorService {
       }
     }
 
+    const prevSelected = [...this.selectedNodes];
     this.groups.push(group);
     this.selectNodes([group]);
+
+    this.recordAction({
+      name: `Import "${sourceName}"`,
+      undo: () => {
+        this.clearSelectionProxy();
+        for (const m of valid) {
+          if (!m.isDisposed()) m.setEnabled(false);
+          const idx = this.importedMeshes.indexOf(m);
+          if (idx !== -1) this.importedMeshes.splice(idx, 1);
+        }
+        if (!group.isDisposed()) group.setEnabled(false);
+        const gIdx = this.groups.indexOf(group);
+        if (gIdx !== -1) this.groups.splice(gIdx, 1);
+        this.selectNodes(prevSelected.filter((n) => !n.isDisposed()));
+      },
+      redo: () => {
+        this.clearSelectionProxy();
+        if (!group.isDisposed()) {
+          group.setEnabled(true);
+          if (!this.groups.includes(group)) this.groups.push(group);
+        }
+        for (const m of valid) {
+          if (!m.isDisposed()) {
+            m.setEnabled(true);
+            if (!this.importedMeshes.includes(m)) this.importedMeshes.push(m);
+          }
+        }
+        this.selectNodes([group]);
+      },
+    });
+
     if (this.scene.animationGroups.length > 0) {
       this.loadAnimationsFromScene();
     }

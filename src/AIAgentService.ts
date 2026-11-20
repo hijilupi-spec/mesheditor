@@ -24,6 +24,7 @@ import * as earcutModule from 'earcut';
 const earcut: any = (earcutModule as any).default || earcutModule;
 import { MeshEditorService } from './MeshEditorService';
 import {
+  ActionRecord,
   AIAgentChatMessage,
   AIAgentEndpointConfig,
   AIAgentProtocol,
@@ -1711,6 +1712,17 @@ ${textureRule}
     this.currentRequestOnStatus = options.onStatus;
     this.service.events.onStatusChanged?.('AI Agent working...', true);
 
+    this.service.beginActionCapture();
+    let capturedSubActions: ActionRecord[] = [];
+    let captureClosed = false;
+    const closeCapture = (): ActionRecord[] => {
+      if (!captureClosed) {
+        captureClosed = true;
+        capturedSubActions = this.service.endActionCapture();
+      }
+      return capturedSubActions;
+    };
+
     try {
       for (let iteration = 0; iteration < maxIterations; iteration++) {
         if (options.signal?.aborted) {
@@ -1974,8 +1986,10 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
         this.service.focusOnAll();
       }
 
+      const subActions = closeCapture();
+
       if (executedSteps.length > 0) {
-        this.registerUndoRedoRecord(prompt, meshesBeforeRun, preRunTransforms, newlyCreatedMeshes);
+        this.registerUndoRedoRecord(prompt, meshesBeforeRun, preRunTransforms, newlyCreatedMeshes, subActions);
       }
 
       this.service.updateStats();
@@ -2000,6 +2014,7 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       this.chatHistory.push(assistantMsg);
       return assistantMsg;
     } catch (err: any) {
+      closeCapture();
       this.service.events.onStatusChanged?.('Ready', false);
       this.service.events.onToast?.(`AI Agent error: ${err?.message || err}`, 'error');
       throw err;
@@ -2013,7 +2028,8 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       Mesh,
       { pos: Vector3; rot: Vector3; scale: Vector3; mat: Material | null; visible: boolean; enabled: boolean }
     >,
-    newlyCreatedMeshes: Mesh[]
+    newlyCreatedMeshes: Mesh[],
+    subActions: ActionRecord[] = []
   ): void {
     const postRunTransforms = new Map<
       Mesh,
@@ -2037,6 +2053,13 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       name: `AI Agent: ${shortPrompt}`,
       undo: () => {
         this.service.clearSelectionProxy();
+        for (let i = subActions.length - 1; i >= 0; i--) {
+          try {
+            subActions[i].undo();
+          } catch {
+            // Continue reverting remaining sub-actions
+          }
+        }
         for (const m of newlyCreatedMeshes) {
           if (!m.isDisposed()) {
             m.setEnabled(false);
@@ -2062,6 +2085,13 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       },
       redo: () => {
         this.service.clearSelectionProxy();
+        for (let i = 0; i < subActions.length; i++) {
+          try {
+            subActions[i].redo();
+          } catch {
+            // Continue replaying remaining sub-actions
+          }
+        }
         for (const m of newlyCreatedMeshes) {
           if (!m.isDisposed()) {
             m.setEnabled(true);

@@ -214,13 +214,40 @@ export class AITextureGenerator {
   public removeTexture(id: string): boolean {
     const idx = this.history.findIndex((item) => item.id === id);
     if (idx === -1) return false;
+    const prevHistory = [...this.history];
+    const removed = this.history[idx];
     this.history.splice(idx, 1);
+    const nextHistory = [...this.history];
+    this.service.recordAction({
+      name: `Remove AI Texture "${removed.name}"`,
+      undo: () => {
+        this.history = [...prevHistory];
+        this.onHistoryChanged?.(this.getHistory());
+      },
+      redo: () => {
+        this.history = [...nextHistory];
+        this.onHistoryChanged?.(this.getHistory());
+      },
+    });
     this.onHistoryChanged?.(this.getHistory());
     return true;
   }
 
   public clearHistory(): void {
+    if (this.history.length === 0) return;
+    const prevHistory = [...this.history];
     this.history = [];
+    this.service.recordAction({
+      name: `Clear AI Texture History (${prevHistory.length})`,
+      undo: () => {
+        this.history = [...prevHistory];
+        this.onHistoryChanged?.(this.getHistory());
+      },
+      redo: () => {
+        this.history = [];
+        this.onHistoryChanged?.([]);
+      },
+    });
     this.onHistoryChanged?.([]);
   }
 

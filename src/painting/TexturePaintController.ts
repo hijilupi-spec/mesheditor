@@ -47,10 +47,22 @@ export interface PaintLayerSummary {
   isActive: boolean;
 }
 
+interface PaintLayerStackSnapshot {
+  layers: PaintLayer[];
+  activeLayerId: string;
+  hasRoughnessOrMetallicData: boolean;
+  hasEmissiveData: boolean;
+}
+
 interface PaintUndoEntry {
-  layerId: string;
-  before: Uint8ClampedArray;
-  after: Uint8ClampedArray;
+  kind: 'pixels' | 'layers';
+  label?: string;
+  layerId?: string;
+  before?: Uint8ClampedArray;
+  after?: Uint8ClampedArray;
+  beforeStack?: PaintLayerStackSnapshot;
+  afterStack?: PaintLayerStackSnapshot;
+  globalAction?: import('../types').ActionRecord;
 }
 
 interface CachedUVTriangle {
@@ -230,6 +242,7 @@ export class TexturePaintController {
 
   public isActive: boolean = false;
   public isStrokeActive: boolean = false;
+  private active2DStrokeEntry: { session: MeshPaintSession; entry: PaintUndoEntry } | null = null;
 
   // Tool & Brush parameters
   public mode: PaintToolMode = 'brush';
@@ -853,18 +866,22 @@ export class TexturePaintController {
     const hasUVs = Boolean(mesh.getVerticesData(VertexBuffer.UVKind)?.length);
     const shouldAutoUnwrap = options.autoUnwrap !== false;
     if (!hasUVs || options.forceUnwrap) {
-      this.service.uvUnwrapController.unwrapMesh(mesh, {
-        method: 'angle_project',
-        textureResolution: res,
-        marginPx: Math.max(4, paddingPx),
-      });
-    } else if (shouldAutoUnwrap && !existing && !hasExistingAlbedo) {
-      const analysis = this.service.uvUnwrapController.analyzeUVs(mesh, res);
-      if (analysis.overlapDetected || analysis.uvSurfaceArea > 1.05 || analysis.uvCoveragePercent < 1) {
+      this.service.runWithoutRecording(() => {
         this.service.uvUnwrapController.unwrapMesh(mesh, {
           method: 'angle_project',
           textureResolution: res,
           marginPx: Math.max(4, paddingPx),
+        });
+      });
+    } else if (shouldAutoUnwrap && !existing && !hasExistingAlbedo) {
+      const analysis = this.service.uvUnwrapController.analyzeUVs(mesh, res);
+      if (analysis.overlapDetected || analysis.uvSurfaceArea > 1.05 || analysis.uvCoveragePercent < 1) {
+        this.service.runWithoutRecording(() => {
+          this.service.uvUnwrapController.unwrapMesh(mesh, {
+            method: 'angle_project',
+            textureResolution: res,
+            marginPx: Math.max(4, paddingPx),
+          });
         });
       }
     }
@@ -1845,6 +1862,42 @@ export class TexturePaintController {
     }));
   }
 
+  private captureLayerStackSnapshot(session: MeshPaintSession): PaintLayerStackSnapshot {
+    return {
+      layers: session.layers.map((l) => ({
+        id: l.id,
+        name: l.name,
+        visible: l.visible,
+        opacity: l.opacity,
+        blendMode: l.blendMode,
+        channel: l.channel,
+        pixels: l.pixels.slice(),
+      })),
+      activeLayerId: session.activeLayerId,
+      hasRoughnessOrMetallicData: session.hasRoughnessOrMetallicData,
+      hasEmissiveData: session.hasEmissiveData,
+    };
+  }
+
+  private restoreLayerStackSnapshot(session: MeshPaintSession, snap: PaintLayerStackSnapshot): void {
+    session.layers = snap.layers.map((l) => ({
+      id: l.id,
+      name: l.name,
+      visible: l.visible,
+      opacity: l.opacity,
+      blendMode: l.blendMode,
+      channel: l.channel,
+      pixels: l.pixels.slice(),
+    }));
+    session.activeLayerId = snap.activeLayerId;
+    session.hasRoughnessOrMetallicData = snap.hasRoughnessOrMetallicData;
+    session.hasEmissiveData = snap.hasEmissiveData;
+    const active = this.getActiveLayer(session);
+    if (active) {
+      this.channel = active.channel;
+    }
+  }
+
   public addLayer(
     mesh: Mesh,
     opts: {
@@ -1858,6 +1911,7 @@ export class TexturePaintController {
     const session = this.ensurePaintSession(mesh);
     if (!session) return null;
 
+    const beforeStack = this.captureLayerStackSnapshot(session);
     const channel = opts.channel ?? this.channel;
     const pixels = new Uint8ClampedArray(session.resolution * session.resolution * 4);
     if (opts.fillRgba) {
@@ -1889,6 +1943,7 @@ export class TexturePaintController {
       session.hasEmissiveData = true;
     }
 
+    this.pushLayerStackUndo(session, beforeStack, `Add Paint Layer "${layer.name}"`);
     this.compositeAndUpload(session, true);
     this.onCanvasUpdated?.(mesh);
     this.onStateChanged?.(this.isActive);
@@ -1913,10 +1968,13 @@ export class TexturePaintController {
     if (!session || session.layers.length <= 1) return false;
     const idx = session.layers.findIndex((l) => l.id === layerId);
     if (idx < 0) return false;
+    const beforeStack = this.captureLayerStackSnapshot(session);
+    const removedName = session.layers[idx].name;
     session.layers.splice(idx, 1);
     if (session.activeLayerId === layerId) {
       session.activeLayerId = session.layers[Math.max(0, idx - 1)].id;
     }
+    this.pushLayerStackUndo(session, beforeStack, `Delete Paint Layer "${removedName}"`);
     this.compositeAndUpload(session, true);
     this.onCanvasUpdated?.(mesh);
     this.onStateChanged?.(this.isActive);
@@ -1928,6 +1986,7 @@ export class TexturePaintController {
     if (!session) return null;
     const idx = session.layers.findIndex((l) => l.id === layerId);
     if (idx < 0) return null;
+    const beforeStack = this.captureLayerStackSnapshot(session);
     const src = session.layers[idx];
     const copy: PaintLayer = {
       id: this.generateLayerId(),
@@ -1940,6 +1999,7 @@ export class TexturePaintController {
     };
     session.layers.splice(idx + 1, 0, copy);
     session.activeLayerId = copy.id;
+    this.pushLayerStackUndo(session, beforeStack, `Duplicate Paint Layer "${src.name}"`);
     this.compositeAndUpload(session, true);
     this.onCanvasUpdated?.(mesh);
     this.onStateChanged?.(this.isActive);
@@ -1953,8 +2013,10 @@ export class TexturePaintController {
     if (idx < 0) return false;
     const targetIdx = direction === 'up' ? idx + 1 : idx - 1;
     if (targetIdx < 0 || targetIdx >= session.layers.length) return false;
+    const beforeStack = this.captureLayerStackSnapshot(session);
     const [removed] = session.layers.splice(idx, 1);
     session.layers.splice(targetIdx, 0, removed);
+    this.pushLayerStackUndo(session, beforeStack, `Move Paint Layer "${removed.name}" ${direction}`);
     this.compositeAndUpload(session, true);
     this.onCanvasUpdated?.(mesh);
     this.onStateChanged?.(this.isActive);
@@ -1970,10 +2032,12 @@ export class TexturePaintController {
     if (!session) return false;
     const layer = session.layers.find((l) => l.id === layerId);
     if (!layer) return false;
+    const beforeStack = this.captureLayerStackSnapshot(session);
     if (props.name !== undefined) layer.name = props.name;
     if (props.visible !== undefined) layer.visible = props.visible;
     if (props.opacity !== undefined) layer.opacity = Math.max(0, Math.min(1, props.opacity));
     if (props.blendMode !== undefined) layer.blendMode = props.blendMode;
+    this.pushLayerStackUndo(session, beforeStack, `Update Paint Layer "${layer.name}"`);
     this.compositeAndUpload(session, true);
     this.onCanvasUpdated?.(mesh);
     this.onStateChanged?.(this.isActive);
@@ -1983,6 +2047,7 @@ export class TexturePaintController {
   public flattenAlbedoLayers(mesh: Mesh): boolean {
     const session = this.sessions.get(mesh);
     if (!session) return false;
+    const beforeStack = this.captureLayerStackSnapshot(session);
     this.compositeAndUpload(session, false);
     const nonAlbedo = session.layers.filter((l) => l.channel !== 'albedo');
     const flattened: PaintLayer = {
@@ -1996,6 +2061,7 @@ export class TexturePaintController {
     };
     session.layers = [flattened, ...nonAlbedo];
     session.activeLayerId = flattened.id;
+    this.pushLayerStackUndo(session, beforeStack, 'Flatten Albedo Layers');
     this.compositeAndUpload(session, true);
     this.onCanvasUpdated?.(mesh);
     this.onStateChanged?.(this.isActive);
@@ -2017,11 +2083,13 @@ export class TexturePaintController {
         session.activeLayerId = existing.id;
         return existing;
       }
-      const created = this.addLayer(session.mesh, {
-        name: layerName,
-        channel: targetChannel,
-        blendMode: blendMode ?? 'normal',
-      });
+      const created = this.service.runWithoutRecording(() =>
+        this.addLayer(session.mesh, {
+          name: layerName,
+          channel: targetChannel,
+          blendMode: blendMode ?? 'normal',
+        })
+      );
       if (created) return created;
     }
 
@@ -2036,11 +2104,13 @@ export class TexturePaintController {
       return matching;
     }
 
-    return this.addLayer(session.mesh, {
-      name: `${targetChannel.charAt(0).toUpperCase() + targetChannel.slice(1)} Layer`,
-      channel: targetChannel,
-      blendMode: blendMode ?? 'normal',
-    })!;
+    return this.service.runWithoutRecording(() =>
+      this.addLayer(session.mesh, {
+        name: `${targetChannel.charAt(0).toUpperCase() + targetChannel.slice(1)} Layer`,
+        channel: targetChannel,
+        blendMode: blendMode ?? 'normal',
+      })
+    )!;
   }
 
   // =========================================================================
@@ -2273,7 +2343,14 @@ export class TexturePaintController {
     }
 
     if (before) {
-      this.pushUndo(session, layer.id, before, layer.pixels.slice());
+      const entry = this.pushUndo(session, layer.id, before, layer.pixels.slice(), '2D Texture Paint');
+      this.active2DStrokeEntry = entry ? { session, entry } : null;
+    } else if (
+      this.active2DStrokeEntry &&
+      this.active2DStrokeEntry.session === session &&
+      this.active2DStrokeEntry.entry.layerId === layer.id
+    ) {
+      this.active2DStrokeEntry.entry.after = layer.pixels.slice();
     }
     this.compositeAndUpload(session, false);
     this.onCanvasUpdated?.(mesh);
@@ -2283,6 +2360,13 @@ export class TexturePaintController {
   public finalize2DStroke(mesh: Mesh): void {
     const session = this.sessions.get(mesh);
     if (!session) return;
+    if (this.active2DStrokeEntry && this.active2DStrokeEntry.session === session) {
+      const layer = session.layers.find((l) => l.id === this.active2DStrokeEntry!.entry.layerId);
+      if (layer) {
+        this.active2DStrokeEntry.entry.after = layer.pixels.slice();
+      }
+      this.active2DStrokeEntry = null;
+    }
     this.compositeAndUpload(session, true);
     this.onCanvasUpdated?.(mesh);
   }
@@ -3668,29 +3752,109 @@ export class TexturePaintController {
   // 8. UNDO / REDO, EYEDROPPER, 2D PREVIEW & EXPORT
   // =========================================================================
 
+  private applyPaintUndoEntry(session: MeshPaintSession, entry: PaintUndoEntry, direction: 'undo' | 'redo'): boolean {
+    if (entry.kind === 'layers') {
+      const snap = direction === 'undo' ? entry.beforeStack : entry.afterStack;
+      if (!snap) return false;
+      this.restoreLayerStackSnapshot(session, snap);
+      this.compositeAndUpload(session, true);
+      this.onCanvasUpdated?.(session.mesh);
+      this.onStateChanged?.(this.isActive);
+      return true;
+    }
+    if (!entry.layerId) return false;
+    const layer = session.layers.find((l) => l.id === entry.layerId);
+    const data = direction === 'undo' ? entry.before : entry.after;
+    if (!layer || !data) return false;
+    layer.pixels.set(data);
+    this.compositeAndUpload(session, true);
+    this.onCanvasUpdated?.(session.mesh);
+    return true;
+  }
+
+  private registerPaintEntryWithGlobalHistory(session: MeshPaintSession, entry: PaintUndoEntry): void {
+    if (this.service.isRecordingSuppressed()) return;
+    const action: import('../types').ActionRecord = {
+      name: entry.label || `Texture Paint (${session.mesh.name})`,
+      undo: () => {
+        if (session.mesh.isDisposed()) return;
+        this.applyPaintUndoEntry(session, entry, 'undo');
+        const idx = session.undoStack.lastIndexOf(entry);
+        if (idx !== -1) session.undoStack.splice(idx, 1);
+        if (!session.redoStack.includes(entry)) session.redoStack.push(entry);
+      },
+      redo: () => {
+        if (session.mesh.isDisposed()) return;
+        this.applyPaintUndoEntry(session, entry, 'redo');
+        const idx = session.redoStack.lastIndexOf(entry);
+        if (idx !== -1) session.redoStack.splice(idx, 1);
+        if (!session.undoStack.includes(entry)) session.undoStack.push(entry);
+      },
+    };
+    entry.globalAction = action;
+    this.service.recordAction(action);
+  }
+
   private pushUndo(
     session: MeshPaintSession,
     layerId: string,
     before: Uint8ClampedArray,
-    after: Uint8ClampedArray
-  ): void {
-    session.undoStack.push({ layerId, before, after });
+    after: Uint8ClampedArray,
+    label?: string
+  ): PaintUndoEntry {
+    const entry: PaintUndoEntry = {
+      kind: 'pixels',
+      label: label || `Texture Paint (${session.mesh.name})`,
+      layerId,
+      before,
+      after,
+    };
+    session.undoStack.push(entry);
     if (session.undoStack.length > MAX_UNDO_STEPS) {
       session.undoStack.shift();
     }
     session.redoStack = [];
+    this.registerPaintEntryWithGlobalHistory(session, entry);
+    return entry;
+  }
+
+  private pushLayerStackUndo(
+    session: MeshPaintSession,
+    beforeStack: PaintLayerStackSnapshot,
+    label: string
+  ): void {
+    if (this.service.isRecordingSuppressed()) return;
+    const afterStack = this.captureLayerStackSnapshot(session);
+    const entry: PaintUndoEntry = {
+      kind: 'layers',
+      label,
+      beforeStack,
+      afterStack,
+    };
+    session.undoStack.push(entry);
+    if (session.undoStack.length > MAX_UNDO_STEPS) {
+      session.undoStack.shift();
+    }
+    session.redoStack = [];
+    this.registerPaintEntryWithGlobalHistory(session, entry);
   }
 
   public undo(mesh: Mesh): boolean {
     const session = this.sessions.get(mesh);
     if (!session || session.undoStack.length === 0) return false;
     const entry = session.undoStack.pop()!;
-    const layer = session.layers.find((l) => l.id === entry.layerId);
-    if (!layer) return false;
-    layer.pixels.set(entry.before);
+    const ok = this.applyPaintUndoEntry(session, entry, 'undo');
+    if (!ok) return false;
     session.redoStack.push(entry);
-    this.compositeAndUpload(session, true);
-    this.onCanvasUpdated?.(mesh);
+    // Keep global undo/redo stack synchronized if this entry is registered there
+    if (entry.globalAction) {
+      const gIdx = this.service.undoStack.lastIndexOf(entry.globalAction);
+      if (gIdx !== -1) {
+        this.service.undoStack.splice(gIdx, 1);
+        this.service.redoStack.push(entry.globalAction);
+        this.service.events.onHistoryChanged?.(this.service.canUndo(), this.service.canRedo());
+      }
+    }
     return true;
   }
 
@@ -3698,12 +3862,18 @@ export class TexturePaintController {
     const session = this.sessions.get(mesh);
     if (!session || session.redoStack.length === 0) return false;
     const entry = session.redoStack.pop()!;
-    const layer = session.layers.find((l) => l.id === entry.layerId);
-    if (!layer) return false;
-    layer.pixels.set(entry.after);
+    const ok = this.applyPaintUndoEntry(session, entry, 'redo');
+    if (!ok) return false;
     session.undoStack.push(entry);
-    this.compositeAndUpload(session, true);
-    this.onCanvasUpdated?.(mesh);
+    // Keep global undo/redo stack synchronized if this entry is registered there
+    if (entry.globalAction) {
+      const gIdx = this.service.redoStack.lastIndexOf(entry.globalAction);
+      if (gIdx !== -1) {
+        this.service.redoStack.splice(gIdx, 1);
+        this.service.undoStack.push(entry.globalAction);
+        this.service.events.onHistoryChanged?.(this.service.canUndo(), this.service.canRedo());
+      }
+    }
     return true;
   }
 

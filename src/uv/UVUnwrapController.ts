@@ -251,6 +251,7 @@ export class UVUnwrapController {
     if (!Array.isArray(mesh.metadata.uvSeams)) {
       mesh.metadata.uvSeams = [];
     }
+    const prevSeams = [...mesh.metadata.uvSeams];
     const seamSet = new Set<string>(mesh.metadata.uvSeams);
     let added = false;
     if (seamSet.has(bestEdgeKey)) {
@@ -259,7 +260,27 @@ export class UVUnwrapController {
       seamSet.add(bestEdgeKey);
       added = true;
     }
-    mesh.metadata.uvSeams = Array.from(seamSet);
+    const nextSeams = Array.from(seamSet);
+    mesh.metadata.uvSeams = nextSeams;
+
+    this.service.recordAction({
+      name: `${added ? 'Mark' : 'Unmark'} UV Seam`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        if (!mesh.metadata) mesh.metadata = {};
+        mesh.metadata.uvSeams = [...prevSeams];
+        this.refreshSeamOverlay(mesh);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, this.textureResolution));
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        if (!mesh.metadata) mesh.metadata = {};
+        mesh.metadata.uvSeams = [...nextSeams];
+        this.refreshSeamOverlay(mesh);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, this.textureResolution));
+      },
+    });
+
     this.refreshSeamOverlay(mesh);
     this.onUVModified?.(mesh, this.analyzeUVs(mesh, this.textureResolution));
     return added;
@@ -346,17 +367,57 @@ export class UVUnwrapController {
 
     const resultKeys = Array.from(seamKeys);
     if (!mesh.metadata) mesh.metadata = {};
+    const prevSeams = Array.isArray(mesh.metadata.uvSeams) ? [...mesh.metadata.uvSeams] : [];
     mesh.metadata.uvSeams = resultKeys;
+
+    this.service.recordAction({
+      name: `Mark Smart Seams (${resultKeys.length})`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        if (!mesh.metadata) mesh.metadata = {};
+        mesh.metadata.uvSeams = [...prevSeams];
+        this.refreshSeamOverlay(mesh);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, this.textureResolution));
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        if (!mesh.metadata) mesh.metadata = {};
+        mesh.metadata.uvSeams = [...resultKeys];
+        this.refreshSeamOverlay(mesh);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, this.textureResolution));
+      },
+    });
 
     this.refreshSeamOverlay(mesh);
     return { seamEdgeCount: resultKeys.length, seamKeys: resultKeys };
   }
 
   public clearSeams(mesh: Mesh): void {
+    const prevSeams = Array.isArray(mesh.metadata?.uvSeams) ? [...mesh.metadata.uvSeams] : [];
     if (mesh.metadata) {
       mesh.metadata.uvSeams = [];
     }
     this.clearSeamOverlay();
+
+    if (prevSeams.length > 0) {
+      this.service.recordAction({
+        name: `Clear UV Seams (${mesh.name})`,
+        undo: () => {
+          if (mesh.isDisposed()) return;
+          if (!mesh.metadata) mesh.metadata = {};
+          mesh.metadata.uvSeams = [...prevSeams];
+          this.refreshSeamOverlay(mesh);
+          this.onUVModified?.(mesh, this.analyzeUVs(mesh, this.textureResolution));
+        },
+        redo: () => {
+          if (mesh.isDisposed()) return;
+          if (!mesh.metadata) mesh.metadata = {};
+          mesh.metadata.uvSeams = [];
+          this.clearSeamOverlay();
+          this.onUVModified?.(mesh, this.analyzeUVs(mesh, this.textureResolution));
+        },
+      });
+    }
   }
 
   public clearSeamOverlay(): void {
@@ -423,6 +484,10 @@ export class UVUnwrapController {
     const preUVs = mesh.getVerticesData(VertexBuffer.UVKind)
       ? Array.from(mesh.getVerticesData(VertexBuffer.UVKind)!)
       : null;
+    const preColors = mesh.getVerticesData(VertexBuffer.ColorKind)
+      ? Array.from(mesh.getVerticesData(VertexBuffer.ColorKind)!)
+      : null;
+    const preSeams = Array.isArray(mesh.metadata?.uvSeams) ? [...mesh.metadata.uvSeams] : [];
 
     if (prePositions.length < 9 || preIndices.length < 3) {
       return this.analyzeUVs(mesh, textureResolution);
@@ -433,7 +498,9 @@ export class UVUnwrapController {
       method === 'smart_seams' &&
       (!mesh.metadata?.uvSeams || mesh.metadata.uvSeams.length === 0)
     ) {
-      this.markSmartSeams(mesh, angleThresholdDeg);
+      this.service.runWithoutRecording(() => {
+        this.markSmartSeams(mesh, angleThresholdDeg);
+      });
     }
 
     const seamSet = new Set<string>(mesh.metadata?.uvSeams || []);
@@ -656,22 +723,29 @@ export class UVUnwrapController {
     }
     vd.applyToMesh(mesh, true);
 
-    // Pack the UV islands with uniform texel density and margin padding
-    const packAnalysis = this.packUVIslands(mesh, {
-      marginPx,
-      textureResolution,
-      rotateOptimal,
-      normalizeScale: true,
-    });
+    // Pack the UV islands with uniform texel density and margin padding (suppressed from separate undo)
+    const packAnalysis = this.service.runWithoutRecording(() => {
+      const packed = this.packUVIslands(mesh, {
+        marginPx,
+        textureResolution,
+        rotateOptimal,
+        normalizeScale: true,
+      });
 
-    if (options.targetTexelDensity && options.targetTexelDensity > 0) {
-      this.normalizeTexelDensity(mesh, options.targetTexelDensity, textureResolution, false);
-    }
+      if (options.targetTexelDensity && options.targetTexelDensity > 0) {
+        this.normalizeTexelDensity(mesh, options.targetTexelDensity, textureResolution, false);
+      }
+      return packed;
+    });
 
     const postPositions = Array.from(mesh.getVerticesData(VertexBuffer.PositionKind) || []);
     const postIndices = Array.from(mesh.getIndices() || []);
     const postNormals = Array.from(mesh.getVerticesData(VertexBuffer.NormalKind) || []);
     const postUVs = Array.from(mesh.getVerticesData(VertexBuffer.UVKind) || []);
+    const postColors = mesh.getVerticesData(VertexBuffer.ColorKind)
+      ? Array.from(mesh.getVerticesData(VertexBuffer.ColorKind)!)
+      : null;
+    const postSeams = Array.isArray(mesh.metadata?.uvSeams) ? [...mesh.metadata.uvSeams] : [];
 
     this.service.recordAction({
       name: `UV Unwrap (${mesh.name})`,
@@ -682,7 +756,11 @@ export class UVUnwrapController {
           uVd.indices = preIndices;
           uVd.normals = preNormals;
           if (preUVs) uVd.uvs = preUVs;
+          if (preColors) uVd.colors = preColors;
           uVd.applyToMesh(mesh, true);
+          if (!mesh.metadata) mesh.metadata = {};
+          mesh.metadata.uvSeams = [...preSeams];
+          this.refreshSeamOverlay(mesh);
           this.onUVModified?.(mesh, this.analyzeUVs(mesh, textureResolution));
         }
       },
@@ -693,7 +771,11 @@ export class UVUnwrapController {
           rVd.indices = postIndices;
           rVd.normals = postNormals;
           rVd.uvs = postUVs;
+          if (postColors) rVd.colors = postColors;
           rVd.applyToMesh(mesh, true);
+          if (!mesh.metadata) mesh.metadata = {};
+          mesh.metadata.uvSeams = [...postSeams];
+          this.refreshSeamOverlay(mesh);
           this.onUVModified?.(mesh, this.analyzeUVs(mesh, textureResolution));
         }
       },
@@ -860,6 +942,7 @@ export class UVUnwrapController {
       return this.analyzeUVs(mesh, textureResolution);
     }
 
+    const beforeUVs = Array.from(rawUVs);
     const uvs = Array.from(rawUVs);
     mesh.computeWorldMatrix(true);
     const worldMat = mesh.getWorldMatrix();
@@ -882,17 +965,36 @@ export class UVUnwrapController {
 
     mesh.setVerticesData(VertexBuffer.UVKind, uvs, true);
 
+    let stats: UVAnalysisResult;
     if (fitInsideZeroOne) {
-      return this.packUVIslands(mesh, {
-        marginPx: this.marginPx,
-        textureResolution,
-        rotateOptimal: this.rotateOptimal,
-        normalizeScale: false,
-      });
+      stats = this.service.runWithoutRecording(() =>
+        this.packUVIslands(mesh, {
+          marginPx: this.marginPx,
+          textureResolution,
+          rotateOptimal: this.rotateOptimal,
+          normalizeScale: false,
+        })
+      );
+    } else {
+      stats = this.analyzeUVs(mesh, textureResolution);
+      this.onUVModified?.(mesh, stats);
     }
 
-    const stats = this.analyzeUVs(mesh, textureResolution);
-    this.onUVModified?.(mesh, stats);
+    const afterUVs = Array.from(mesh.getVerticesData(VertexBuffer.UVKind) || []);
+    this.service.recordAction({
+      name: `Normalize Texel Density (${mesh.name})`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.setVerticesData(VertexBuffer.UVKind, [...beforeUVs], true);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, textureResolution));
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.setVerticesData(VertexBuffer.UVKind, [...afterUVs], true);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, textureResolution));
+      },
+    });
+
     return stats;
   }
 
@@ -921,6 +1023,7 @@ export class UVUnwrapController {
       return this.analyzeUVs(mesh, textureResolution);
     }
 
+    const beforeUVs = Array.from(rawUVs);
     const uvs = Array.from(rawUVs);
     mesh.computeWorldMatrix(true);
     const worldMat = mesh.getWorldMatrix();
@@ -1039,6 +1142,20 @@ export class UVUnwrapController {
     }
 
     mesh.setVerticesData(VertexBuffer.UVKind, uvs, true);
+    const afterUVs = [...uvs];
+    this.service.recordAction({
+      name: `Pack UV Islands (${mesh.name})`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.setVerticesData(VertexBuffer.UVKind, [...beforeUVs], true);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, textureResolution));
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.setVerticesData(VertexBuffer.UVKind, [...afterUVs], true);
+        this.onUVModified?.(mesh, this.analyzeUVs(mesh, textureResolution));
+      },
+    });
     const stats = this.analyzeUVs(mesh, textureResolution);
     this.onUVModified?.(mesh, stats);
     return stats;

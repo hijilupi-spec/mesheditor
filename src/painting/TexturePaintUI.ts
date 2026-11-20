@@ -1,3 +1,5 @@
+import type { Mesh } from '@babylonjs/core';
+
 /**
  * Decentralized UI Controller for the 3D Texture Painter dialog (Phases 1-3).
  * Keeps MeshEditorApp lean while wiring all Paint, Layer Stack, 2D UV Canvas,
@@ -295,13 +297,36 @@ export function initTexturePaintDialogUI(app: any): void {
 
   const layerOpacityRange = app.getElement('texPaintLayerOpacityRange') as HTMLInputElement | null;
   const layerOpacityVal = app.getElement('texPaintLayerOpacityVal') as HTMLElement | null;
+  let layerOpacityDragStart: { mesh: Mesh; layerId: string; opacity: number } | null = null;
   layerOpacityRange?.addEventListener('input', () => {
     const v = parseFloat(layerOpacityRange.value);
     if (layerOpacityVal && Number.isFinite(v)) layerOpacityVal.textContent = `${Math.round(v * 100)}%`;
     const mesh = ctrl.getActiveTargetMesh();
     const session = ctrl.getSession(mesh);
     if (mesh && session && Number.isFinite(v)) {
-      ctrl.updateLayerProperties(mesh, session.activeLayerId, { opacity: v });
+      if (!layerOpacityDragStart) {
+        const active = ctrl.getActiveLayer(session);
+        if (active) {
+          layerOpacityDragStart = { mesh, layerId: active.id, opacity: active.opacity };
+        }
+      }
+      ctrl.service.runWithoutRecording(() => {
+        ctrl.updateLayerProperties(mesh, session.activeLayerId, { opacity: v });
+      });
+    }
+  });
+  layerOpacityRange?.addEventListener('change', () => {
+    const v = parseFloat(layerOpacityRange.value);
+    if (layerOpacityDragStart && Number.isFinite(v)) {
+      const start = layerOpacityDragStart;
+      layerOpacityDragStart = null;
+      if (Math.abs(start.opacity - v) > 1e-4) {
+        // Temporarily restore start opacity without recording, then commit single undo entry
+        ctrl.service.runWithoutRecording(() => {
+          ctrl.updateLayerProperties(start.mesh, start.layerId, { opacity: start.opacity });
+        });
+        ctrl.updateLayerProperties(start.mesh, start.layerId, { opacity: v });
+      }
     }
   });
 

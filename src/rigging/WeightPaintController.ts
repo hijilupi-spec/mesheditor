@@ -273,6 +273,20 @@ export class WeightPaintController {
    */
   public createAutoRig(mesh: Mesh, preset: AutoRigPreset = 'humanoid'): Skeleton {
     const targets = this.getTargetMeshes(mesh);
+    const prevTargetStates = targets.map((t) => ({
+      mesh: t,
+      skeleton: t.skeleton,
+      rigBoneSpecs: t.metadata?.rigBoneSpecs ? JSON.parse(JSON.stringify(t.metadata.rigBoneSpecs)) : undefined,
+      bindPosePositions: Array.isArray(t.metadata?.bindPosePositions) ? [...t.metadata.bindPosePositions] : undefined,
+      indices: t.getVerticesData(VertexBuffer.MatricesIndicesKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesIndicesKind)!)
+        : null,
+      weights: t.getVerticesData(VertexBuffer.MatricesWeightsKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesWeightsKind)!)
+        : null,
+    }));
+    const prevActiveBoneIndex = this.activeBoneIndex;
+
     let minW = new Vector3(Infinity, Infinity, Infinity);
     let maxW = new Vector3(-Infinity, -Infinity, -Infinity);
 
@@ -451,8 +465,78 @@ export class WeightPaintController {
       }
     }
 
-    this.autoBindSkinWeights(mesh, skeleton);
+    this.service.runWithoutRecording(() => {
+      this.autoBindSkinWeights(mesh, skeleton);
+    });
     this.activeBoneIndex = Math.min(1, specs.length - 1);
+    const nextActiveBoneIndex = this.activeBoneIndex;
+
+    const nextTargetStates = targets.map((t) => ({
+      mesh: t,
+      rigBoneSpecs: JSON.parse(JSON.stringify(serializedSpecs)),
+      bindPosePositions: Array.isArray(t.metadata?.bindPosePositions) ? [...t.metadata.bindPosePositions] : undefined,
+      indices: t.getVerticesData(VertexBuffer.MatricesIndicesKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesIndicesKind)!)
+        : null,
+      weights: t.getVerticesData(VertexBuffer.MatricesWeightsKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesWeightsKind)!)
+        : null,
+    }));
+
+    this.service.recordAction({
+      name: `Create Auto-Rig (${preset})`,
+      undo: () => {
+        for (const node of createdNodes) {
+          if (!node.isDisposed()) node.setEnabled(false);
+        }
+        for (const st of prevTargetStates) {
+          if (st.mesh.isDisposed()) continue;
+          st.mesh.skeleton = st.skeleton;
+          if (!st.mesh.metadata) st.mesh.metadata = {};
+          if (st.rigBoneSpecs !== undefined) st.mesh.metadata.rigBoneSpecs = JSON.parse(JSON.stringify(st.rigBoneSpecs));
+          else delete st.mesh.metadata.rigBoneSpecs;
+          if (st.bindPosePositions !== undefined) st.mesh.metadata.bindPosePositions = [...st.bindPosePositions];
+          else delete st.mesh.metadata.bindPosePositions;
+          if (st.indices) this.setMeshMatrixIndices(st.mesh, st.indices);
+          else st.mesh.removeVerticesData(VertexBuffer.MatricesIndicesKind);
+          if (st.weights) st.mesh.setVerticesData(VertexBuffer.MatricesWeightsKind, [...st.weights], true);
+          else st.mesh.removeVerticesData(VertexBuffer.MatricesWeightsKind);
+        }
+        this.activeBoneIndex = prevActiveBoneIndex;
+        if (this.isActive) {
+          for (const t of targets) {
+            if (!t.isDisposed() && this.showHeatmap && t.skeleton) this.updateWeightHeatmap(t);
+          }
+          if (this.showBoneOverlay) {
+            if (mesh.skeleton) this.refreshBoneOverlay(mesh);
+            else this.clearBoneOverlay();
+          }
+        }
+        this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
+      },
+      redo: () => {
+        for (const node of createdNodes) {
+          if (!node.isDisposed()) node.setEnabled(true);
+        }
+        for (const st of nextTargetStates) {
+          if (st.mesh.isDisposed()) continue;
+          st.mesh.skeleton = skeleton;
+          if (!st.mesh.metadata) st.mesh.metadata = {};
+          st.mesh.metadata.rigBoneSpecs = JSON.parse(JSON.stringify(st.rigBoneSpecs));
+          if (st.bindPosePositions !== undefined) st.mesh.metadata.bindPosePositions = [...st.bindPosePositions];
+          if (st.indices) this.setMeshMatrixIndices(st.mesh, st.indices);
+          if (st.weights) st.mesh.setVerticesData(VertexBuffer.MatricesWeightsKind, [...st.weights], true);
+        }
+        this.activeBoneIndex = nextActiveBoneIndex;
+        if (this.isActive) {
+          for (const t of targets) {
+            if (!t.isDisposed() && this.showHeatmap) this.updateWeightHeatmap(t);
+          }
+          if (this.showBoneOverlay) this.refreshBoneOverlay(mesh);
+        }
+        this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
+      },
+    });
 
     if (this.isActive) {
       for (const t of targets) {
@@ -472,9 +556,47 @@ export class WeightPaintController {
   public autoBindSkinWeights(mesh: Mesh, skeleton?: Nullable<Skeleton>): void {
     const targets = this.getTargetMeshes(mesh);
     const skel = skeleton || mesh.skeleton;
+    const before = targets.map((t) => ({
+      mesh: t,
+      indices: t.getVerticesData(VertexBuffer.MatricesIndicesKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesIndicesKind)!)
+        : null,
+      weights: t.getVerticesData(VertexBuffer.MatricesWeightsKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesWeightsKind)!)
+        : null,
+    }));
+
     for (const t of targets) {
       this.bindSingleMeshSkinWeights(t, t.skeleton || skel);
     }
+
+    const after = targets.map((t) => ({
+      mesh: t,
+      indices: t.getVerticesData(VertexBuffer.MatricesIndicesKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesIndicesKind)!)
+        : null,
+      weights: t.getVerticesData(VertexBuffer.MatricesWeightsKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesWeightsKind)!)
+        : null,
+    }));
+
+    const applySkin = (states: typeof before) => {
+      for (const st of states) {
+        if (st.mesh.isDisposed()) continue;
+        if (st.indices) this.setMeshMatrixIndices(st.mesh, st.indices);
+        else st.mesh.removeVerticesData(VertexBuffer.MatricesIndicesKind);
+        if (st.weights) st.mesh.setVerticesData(VertexBuffer.MatricesWeightsKind, [...st.weights], true);
+        else st.mesh.removeVerticesData(VertexBuffer.MatricesWeightsKind);
+        if (this.isActive && this.showHeatmap) this.updateSingleMeshHeatmap(st.mesh, this.activeBoneIndex);
+      }
+      this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
+    };
+
+    this.service.recordAction({
+      name: `Auto-Bind Skin Weights (${mesh.name})`,
+      undo: () => applySkin(before),
+      redo: () => applySkin(after),
+    });
   }
 
   /**
@@ -700,6 +822,19 @@ export class WeightPaintController {
     boneIndex: number = this.activeBoneIndex
   ): number {
     const targets = this.getTargetMeshes(mesh);
+    const recordStandalone = !this.isPainting;
+    const before = recordStandalone
+      ? targets.map((t) => ({
+          mesh: t,
+          indices: t.getVerticesData(VertexBuffer.MatricesIndicesKind)
+            ? Array.from(t.getVerticesData(VertexBuffer.MatricesIndicesKind)!)
+            : null,
+          weights: t.getVerticesData(VertexBuffer.MatricesWeightsKind)
+            ? Array.from(t.getVerticesData(VertexBuffer.MatricesWeightsKind)!)
+            : null,
+        }))
+      : null;
+
     let totalModified = 0;
 
     for (const target of targets) {
@@ -710,6 +845,32 @@ export class WeightPaintController {
       for (const target of targets) {
         this.updateSingleMeshHeatmap(target, boneIndex);
       }
+    }
+
+    if (recordStandalone && before && totalModified > 0) {
+      const after = targets.map((t) => ({
+        mesh: t,
+        indices: t.getVerticesData(VertexBuffer.MatricesIndicesKind)
+          ? Array.from(t.getVerticesData(VertexBuffer.MatricesIndicesKind)!)
+          : null,
+        weights: t.getVerticesData(VertexBuffer.MatricesWeightsKind)
+          ? Array.from(t.getVerticesData(VertexBuffer.MatricesWeightsKind)!)
+          : null,
+      }));
+      const applySkin = (states: typeof before) => {
+        for (const st of states) {
+          if (st.mesh.isDisposed()) continue;
+          if (st.indices) this.setMeshMatrixIndices(st.mesh, st.indices);
+          if (st.weights) st.mesh.setVerticesData(VertexBuffer.MatricesWeightsKind, [...st.weights], true);
+          if (this.showHeatmap) this.updateSingleMeshHeatmap(st.mesh, boneIndex);
+        }
+        this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
+      };
+      this.service.recordAction({
+        name: `Weight Paint (${this.brushMode})`,
+        undo: () => applySkin(before),
+        redo: () => applySkin(after),
+      });
     }
 
     this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
@@ -977,9 +1138,44 @@ export class WeightPaintController {
     rollDeg: number = 0
   ): void {
     const targets = this.getTargetMeshes(mesh);
+    const before = targets.map((t) => ({
+      mesh: t,
+      pos: t.getVerticesData(VertexBuffer.PositionKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.PositionKind)!)
+        : null,
+      norm: t.getVerticesData(VertexBuffer.NormalKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.NormalKind)!)
+        : null,
+    }));
+
     for (const t of targets) {
       this.poseSingleMeshActiveBone(t, pitchDeg, yawDeg, rollDeg);
     }
+
+    const after = targets.map((t) => ({
+      mesh: t,
+      pos: t.getVerticesData(VertexBuffer.PositionKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.PositionKind)!)
+        : null,
+      norm: t.getVerticesData(VertexBuffer.NormalKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.NormalKind)!)
+        : null,
+    }));
+
+    const applyPose = (states: typeof before) => {
+      for (const st of states) {
+        if (st.mesh.isDisposed()) continue;
+        if (st.pos) st.mesh.setVerticesData(VertexBuffer.PositionKind, [...st.pos], true);
+        if (st.norm) st.mesh.setVerticesData(VertexBuffer.NormalKind, [...st.norm], true);
+        st.mesh.refreshBoundingInfo();
+      }
+    };
+
+    this.service.recordAction({
+      name: `Pose Bone #${this.activeBoneIndex}`,
+      undo: () => applyPose(before),
+      redo: () => applyPose(after),
+    });
   }
 
   private poseSingleMeshActiveBone(
@@ -1076,9 +1272,44 @@ export class WeightPaintController {
    */
   public resetBindPose(mesh: Mesh): void {
     const targets = this.getTargetMeshes(mesh);
+    const before = targets.map((t) => ({
+      mesh: t,
+      pos: t.getVerticesData(VertexBuffer.PositionKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.PositionKind)!)
+        : null,
+      norm: t.getVerticesData(VertexBuffer.NormalKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.NormalKind)!)
+        : null,
+    }));
+
     for (const t of targets) {
       this.resetSingleMeshBindPose(t);
     }
+
+    const after = targets.map((t) => ({
+      mesh: t,
+      pos: t.getVerticesData(VertexBuffer.PositionKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.PositionKind)!)
+        : null,
+      norm: t.getVerticesData(VertexBuffer.NormalKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.NormalKind)!)
+        : null,
+    }));
+
+    const applyPose = (states: typeof before) => {
+      for (const st of states) {
+        if (st.mesh.isDisposed()) continue;
+        if (st.pos) st.mesh.setVerticesData(VertexBuffer.PositionKind, [...st.pos], true);
+        if (st.norm) st.mesh.setVerticesData(VertexBuffer.NormalKind, [...st.norm], true);
+        st.mesh.refreshBoundingInfo();
+      }
+    };
+
+    this.service.recordAction({
+      name: `Reset Bind Pose (${mesh.name})`,
+      undo: () => applyPose(before),
+      redo: () => applyPose(after),
+    });
   }
 
   private resetSingleMeshBindPose(mesh: Mesh): void {
@@ -1095,6 +1326,55 @@ export class WeightPaintController {
     mesh.refreshBoundingInfo();
   }
 
+  private cloneSpecs(specs: BoneNodeSpec[]): BoneNodeSpec[] {
+    return specs.map((s) => ({
+      name: s.name,
+      parentIndex: s.parentIndex,
+      headWorldPos: s.headWorldPos.clone(),
+      tailWorldPos: s.tailWorldPos.clone(),
+    }));
+  }
+
+  private captureRigSkinState(mesh: Mesh): {
+    specs: BoneNodeSpec[];
+    skin: Array<{ mesh: Mesh; indices: number[] | null; weights: number[] | null }>;
+  } {
+    const specs = mesh.skeleton ? this.cloneSpecs(this.getBoneSegments(mesh, mesh.skeleton)) : [];
+    const targets = this.getTargetMeshes(mesh);
+    const skin = targets.map((t) => ({
+      mesh: t,
+      indices: t.getVerticesData(VertexBuffer.MatricesIndicesKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesIndicesKind)!)
+        : null,
+      weights: t.getVerticesData(VertexBuffer.MatricesWeightsKind)
+        ? Array.from(t.getVerticesData(VertexBuffer.MatricesWeightsKind)!)
+        : null,
+    }));
+    return { specs, skin };
+  }
+
+  private restoreRigSkinState(
+    mesh: Mesh,
+    state: { specs: BoneNodeSpec[]; skin: Array<{ mesh: Mesh; indices: number[] | null; weights: number[] | null }> }
+  ): void {
+    if (mesh.isDisposed()) return;
+    if (state.specs.length > 0 && mesh.skeleton) {
+      this.syncBonesWithSpecs(mesh, this.cloneSpecs(state.specs));
+    }
+    for (const st of state.skin) {
+      if (st.mesh.isDisposed()) continue;
+      if (st.indices) this.setMeshMatrixIndices(st.mesh, st.indices);
+      if (st.weights) st.mesh.setVerticesData(VertexBuffer.MatricesWeightsKind, [...st.weights], true);
+      if (this.showHeatmap && this.isActive) {
+        this.updateSingleMeshHeatmap(st.mesh, this.activeBoneIndex);
+      }
+    }
+    if (this.showBoneOverlay && mesh.skeleton) {
+      this.refreshBoneOverlay(mesh);
+    }
+    this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
+  }
+
   /**
    * Dynamically adjusts the heights of the arms/shoulders and hips/legs across the skeleton
    * and automatically re-binds envelope skin weights so the rig matches any stylized character!
@@ -1104,6 +1384,7 @@ export class WeightPaintController {
     const specs = this.getBoneSegments(mesh, mesh.skeleton);
     if (specs.length === 0) return;
 
+    const beforeState = this.captureRigSkinState(mesh);
     const targets = this.getTargetMeshes(mesh);
     let minW = new Vector3(Infinity, Infinity, Infinity);
     let maxW = new Vector3(-Infinity, -Infinity, -Infinity);
@@ -1159,6 +1440,14 @@ export class WeightPaintController {
         this.updateSingleMeshHeatmap(t, this.activeBoneIndex);
       }
     }
+
+    const afterState = this.captureRigSkinState(mesh);
+    this.service.recordAction({
+      name: `Adjust Rig Proportions (${mesh.name})`,
+      undo: () => this.restoreRigSkinState(mesh, beforeState),
+      redo: () => this.restoreRigSkinState(mesh, afterState),
+    });
+
     this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
   }
 
@@ -1171,6 +1460,7 @@ export class WeightPaintController {
     const idx = Math.min(this.activeBoneIndex, specs.length - 1);
     if (!specs[idx]) return;
 
+    const beforeState = this.captureRigSkinState(mesh);
     specs[idx].headWorldPos.addInPlace(delta);
     specs[idx].tailWorldPos.addInPlace(delta);
 
@@ -1187,6 +1477,14 @@ export class WeightPaintController {
         this.updateSingleMeshHeatmap(t, this.activeBoneIndex);
       }
     }
+
+    const afterState = this.captureRigSkinState(mesh);
+    this.service.recordAction({
+      name: `Nudge Bone "${specs[idx].name}"`,
+      undo: () => this.restoreRigSkinState(mesh, beforeState),
+      redo: () => this.restoreRigSkinState(mesh, afterState),
+    });
+
     this.onWeightsModified?.(mesh, this.analyzeWeights(mesh));
   }
 

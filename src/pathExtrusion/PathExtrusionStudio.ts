@@ -384,6 +384,7 @@ export class PathExtrusionStudio {
   private panStartX = 0;
   private panStartY = 0;
   private draggedVertexIndex: number | null = null;
+  private dragUndoSnapshot: ReturnType<PathExtrusionController['captureUndoSnapshot']> | null = null;
   private hoveredVertexIndex: number | null = null;
   private hoveredEdgeIndex: number | null = null;
   private snapGrid = 0.1; // meters
@@ -983,9 +984,11 @@ export class PathExtrusionStudio {
     closedBtn.innerHTML = `🔲 Closed: ${isClosed ? 'Yes' : 'No'}`;
     closedBtn.onclick = () => {
       if (p.shape) {
+        const before = this.controller.captureUndoSnapshot();
         (p.shape as SolidShape).closedShape = !isClosed;
         p.shapeConfig.closedShape = !isClosed;
         this.currentPreset = 'custom';
+        this.controller.recordStateChange(`Toggle Path Shape Closed (${!isClosed ? 'Yes' : 'No'})`, before);
         this.renderActiveTab();
         this.triggerWYSIWYGUpdate();
       }
@@ -996,8 +999,10 @@ export class PathExtrusionStudio {
     flipHBtn.innerHTML = '↔️ Flip H';
     flipHBtn.onclick = () => {
       if (p.shape) {
+        const before = this.controller.captureUndoSnapshot();
         p.shape.forEach((pt) => (pt.x = -pt.x));
         this.currentPreset = 'custom';
+        this.controller.recordStateChange('Flip Path Shape Horizontally', before);
         this.renderActiveTab();
         this.triggerWYSIWYGUpdate();
       }
@@ -1008,8 +1013,10 @@ export class PathExtrusionStudio {
     flipVBtn.innerHTML = '↕️ Flip V';
     flipVBtn.onclick = () => {
       if (p.shape) {
+        const before = this.controller.captureUndoSnapshot();
         p.shape.forEach((pt) => (pt.y = -pt.y));
         this.currentPreset = 'custom';
+        this.controller.recordStateChange('Flip Path Shape Vertically', before);
         this.renderActiveTab();
         this.triggerWYSIWYGUpdate();
       }
@@ -1100,8 +1107,10 @@ export class PathExtrusionStudio {
             const target = e.target as HTMLInputElement;
             const idx = parseInt(target.dataset.idx!, 10);
             const coord = target.dataset.coord as 'x' | 'y';
+            const before = this.controller.captureUndoSnapshot();
             p.shape![idx][coord] = parseFloat(target.value) || 0;
             this.currentPreset = 'custom';
+            this.controller.recordStateChange('Edit Path Shape Vertex', before);
             this.redrawCanvas();
             this.triggerWYSIWYGUpdate();
           };
@@ -1109,8 +1118,10 @@ export class PathExtrusionStudio {
 
         tr.querySelector('button')?.addEventListener('click', () => {
           if (p.shape && p.shape.length > 3) {
+            const before = this.controller.captureUndoSnapshot();
             p.shape.splice(i, 1);
             this.currentPreset = 'custom';
+            this.controller.recordStateChange('Delete Path Shape Vertex', before);
             this.renderActiveTab();
             this.redrawCanvas();
             this.triggerWYSIWYGUpdate();
@@ -1139,6 +1150,7 @@ export class PathExtrusionStudio {
   private applyPresetToActivePath(): void {
     const p = this.getActivePath();
     if (!p) return;
+    const before = this.controller.captureUndoSnapshot();
 
     let points: SolidShape = [];
     switch (this.currentPreset) {
@@ -1191,6 +1203,7 @@ export class PathExtrusionStudio {
     p.shapeConfig.width = parseFloat(dims.width.toFixed(2));
     p.shapeConfig.height = parseFloat(dims.height.toFixed(2));
 
+    this.controller.recordStateChange(`Apply Path Preset (${this.currentPreset})`, before);
     this.fitCanvasView();
     this.redrawCanvas();
     this.triggerWYSIWYGUpdate();
@@ -1215,6 +1228,7 @@ export class PathExtrusionStudio {
     const p = this.getActivePath();
     if (!p || !p.shape || p.shape.length === 0) return;
 
+    const before = this.controller.captureUndoSnapshot();
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const pt of p.shape) {
       minX = Math.min(minX, pt.x);
@@ -1230,6 +1244,7 @@ export class PathExtrusionStudio {
       pt.y -= midY;
     }
     this.currentPreset = 'custom';
+    this.controller.recordStateChange('Center Path Shape', before);
     this.renderActiveTab();
     this.redrawCanvas();
     this.triggerWYSIWYGUpdate();
@@ -1352,11 +1367,13 @@ export class PathExtrusionStudio {
       }
 
       if (e.button === 0 && this.canvasToolMode === 'add') {
+        const before = this.controller.captureUndoSnapshot();
         const world = toWorld(cx, cy);
         const finalX = this.snapGrid > 0 ? Math.round(world.x / this.snapGrid) * this.snapGrid : world.x;
         const finalY = this.snapGrid > 0 ? Math.round(world.y / this.snapGrid) * this.snapGrid : world.y;
         shape.push(new Vector3(finalX, finalY, 0));
         this.currentPreset = 'custom';
+        this.controller.recordStateChange('Add Path Shape Vertex', before);
         this.renderActiveTab();
         this.triggerWYSIWYGUpdate();
         return;
@@ -1364,8 +1381,10 @@ export class PathExtrusionStudio {
 
       if (e.button === 0 && this.canvasToolMode === 'delete') {
         if (foundIdx !== null && shape.length > 3) {
+          const before = this.controller.captureUndoSnapshot();
           shape.splice(foundIdx, 1);
           this.currentPreset = 'custom';
+          this.controller.recordStateChange('Delete Path Shape Vertex', before);
           this.renderActiveTab();
           this.triggerWYSIWYGUpdate();
         }
@@ -1387,11 +1406,13 @@ export class PathExtrusionStudio {
         }
 
         if (foundIdx !== null) {
+          this.dragUndoSnapshot = this.controller.captureUndoSnapshot();
           this.isCanvasDragging = true;
           this.draggedVertexIndex = foundIdx;
           canvas.style.cursor = 'grabbing';
         } else if (edgeIdx !== null) {
           // Edge pick: insert vertex
+          this.dragUndoSnapshot = this.controller.captureUndoSnapshot();
           const world = toWorld(cx, cy);
           const insertIdx = edgeIdx + 1;
           shape.splice(insertIdx, 0, new Vector3(world.x, world.y, 0));
@@ -1414,8 +1435,10 @@ export class PathExtrusionStudio {
         canvas.style.cursor = 'grabbing';
       } else if (e.button === 2) {
         if (foundIdx !== null && shape.length > 3) {
+          const before = this.controller.captureUndoSnapshot();
           shape.splice(foundIdx, 1);
           this.currentPreset = 'custom';
+          this.controller.recordStateChange('Delete Path Shape Vertex', before);
           this.renderActiveTab();
           this.triggerWYSIWYGUpdate();
         }
@@ -1521,6 +1544,11 @@ export class PathExtrusionStudio {
       if (this.isCanvasDragging) {
         this.isCanvasDragging = false;
         this.draggedVertexIndex = null;
+        if (this.dragUndoSnapshot) {
+          const before = this.dragUndoSnapshot;
+          this.dragUndoSnapshot = null;
+          this.controller.recordStateChange('Edit Path Shape Vertex', before);
+        }
         if (p) this.updateVertexTable(p);
       }
       if (this.isPanning) {
@@ -1540,8 +1568,10 @@ export class PathExtrusionStudio {
       const p = this.getActivePath();
       if (!p || !p.shape) return;
 
+      const before = this.controller.captureUndoSnapshot();
       p.shape.push(new Vector3(world.x, world.y, 0));
       this.currentPreset = 'custom';
+      this.controller.recordStateChange('Append Path Shape Vertex', before);
       this.renderActiveTab();
       this.triggerWYSIWYGUpdate();
     });
@@ -1798,14 +1828,31 @@ export class PathExtrusionStudio {
       num.step = step.toString();
       num.value = (val || 0).toString();
 
+      let sliderBefore: ReturnType<PathExtrusionController['captureUndoSnapshot']> | null = null;
       const sync = (v: number) => {
         slider.value = v.toString();
         num.value = v.toString();
         onChange(v);
         this.triggerWYSIWYGUpdate();
       };
-      slider.oninput = () => sync(parseFloat(slider.value));
-      num.onchange = () => sync(parseFloat(num.value));
+      slider.onpointerdown = () => {
+        sliderBefore = this.controller.captureUndoSnapshot();
+      };
+      slider.oninput = () => {
+        if (!sliderBefore) sliderBefore = this.controller.captureUndoSnapshot();
+        sync(parseFloat(slider.value));
+      };
+      slider.onchange = () => {
+        if (sliderBefore) {
+          this.controller.recordStateChange(`Update Path ${label.replace(':', '')}`, sliderBefore);
+          sliderBefore = null;
+        }
+      };
+      num.onchange = () => {
+        const before = this.controller.captureUndoSnapshot();
+        sync(parseFloat(num.value));
+        this.controller.recordStateChange(`Update Path ${label.replace(':', '')}`, before);
+      };
 
       cnt.append(slider, num);
       row.append(lbl, cnt);
@@ -1860,7 +1907,9 @@ export class PathExtrusionStudio {
     capCheck.type = 'checkbox';
     capCheck.checked = p.shapeConfig.capEnds ?? false;
     capCheck.onchange = () => {
+      const before = this.controller.captureUndoSnapshot();
       p.shapeConfig.capEnds = capCheck.checked;
+      this.controller.recordStateChange(`Toggle Path Cap Ends (${capCheck.checked ? 'On' : 'Off'})`, before);
       this.triggerWYSIWYGUpdate();
     };
     const capDesc = document.createElement('span');
@@ -1892,10 +1941,18 @@ export class PathExtrusionStudio {
     colHex.style.fontSize = '12px';
     colHex.style.fontFamily = 'monospace';
     colHex.textContent = colInput.value;
+    let colorBefore: ReturnType<PathExtrusionController['captureUndoSnapshot']> | null = null;
     colInput.oninput = () => {
+      if (!colorBefore) colorBefore = this.controller.captureUndoSnapshot();
       p.shapeConfig.color = colInput.value;
       colHex.textContent = colInput.value;
       this.triggerWYSIWYGUpdate();
+    };
+    colInput.onchange = () => {
+      if (colorBefore) {
+        this.controller.recordStateChange('Change Path Color', colorBefore);
+        colorBefore = null;
+      }
     };
     colCnt.append(colInput, colHex);
     colRow.append(colLbl, colCnt);
@@ -1923,10 +1980,18 @@ export class PathExtrusionStudio {
       num.style.width = '35px';
       num.textContent = slider.value;
 
+      let matSliderBefore: ReturnType<PathExtrusionController['captureUndoSnapshot']> | null = null;
       slider.oninput = () => {
+        if (!matSliderBefore) matSliderBefore = this.controller.captureUndoSnapshot();
         num.textContent = slider.value;
         onChange(parseFloat(slider.value));
         this.triggerWYSIWYGUpdate();
+      };
+      slider.onchange = () => {
+        if (matSliderBefore) {
+          this.controller.recordStateChange(`Change Path ${label.replace(':', '')}`, matSliderBefore);
+          matSliderBefore = null;
+        }
       };
 
       cnt.append(slider, num);
@@ -1970,8 +2035,10 @@ export class PathExtrusionStudio {
     reverseBtn.className = 'pes-btn small';
     reverseBtn.innerHTML = '🔄 Reverse Points';
     reverseBtn.onclick = () => {
+      const before = this.controller.captureUndoSnapshot();
       p.points.reverse();
       this.controller.refreshScene();
+      this.controller.recordStateChange('Reverse Path Points', before);
       this.renderActiveTab();
     };
 
@@ -2035,14 +2102,18 @@ export class PathExtrusionStudio {
           const target = e.target as HTMLInputElement;
           const idx = parseInt(target.dataset.idx!, 10);
           const coord = target.dataset.c as 'x' | 'y' | 'z';
+          const before = this.controller.captureUndoSnapshot();
           p.points[idx][coord] = parseFloat(target.value) || 0;
           this.controller.refreshScene();
+          this.controller.recordStateChange('Edit Path Waypoint', before);
         };
       });
 
       tr.querySelector('button')?.addEventListener('click', () => {
+        const before = this.controller.captureUndoSnapshot();
         p.points.splice(i, 1);
         this.controller.refreshScene();
+        this.controller.recordStateChange('Delete Path Waypoint', before);
         this.renderActiveTab();
       });
 

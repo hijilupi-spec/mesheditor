@@ -50,6 +50,8 @@ export class VoxelPainterController {
   private lastPickInfo: Nullable<PickingInfo> = null;
   private paintTimer: ReturnType<typeof setInterval> | null = null;
   private renderDirty: boolean = false;
+  private strokeBeforeBlocks: Map<string, VoxelBlock> | null = null;
+  private strokeMode: 'paint' | 'erase' = 'paint';
 
   // Listeners
   public onPaletteChanged?: (items: VoxelPaletteItem[]) => void;
@@ -126,6 +128,12 @@ export class VoxelPainterController {
             this.isPointerDown = true;
             this.lastPaintedKey = null;
             this.lastPickInfo = pointerInfo.pickInfo;
+            if (this.mode === 'paint' || this.mode === 'erase') {
+              this.strokeBeforeBlocks = this.cloneBlocksMap();
+              this.strokeMode = this.mode;
+            } else {
+              this.strokeBeforeBlocks = null;
+            }
             this.performAction(pointerInfo.pickInfo);
 
             if (this.paintTimer) clearInterval(this.paintTimer);
@@ -140,11 +148,7 @@ export class VoxelPainterController {
 
         case PointerEventTypes.POINTERUP:
           if (pointerInfo.event.button === 0) {
-            this.isPointerDown = false;
-            if (this.paintTimer) {
-              clearInterval(this.paintTimer);
-              this.paintTimer = null;
-            }
+            this.finalizePointerStroke();
           }
           break;
       }
@@ -158,8 +162,57 @@ export class VoxelPainterController {
     });
   }
 
+  private cloneBlocksMap(source: Map<string, VoxelBlock> = this.blocks): Map<string, VoxelBlock> {
+    const copy = new Map<string, VoxelBlock>();
+    for (const [k, v] of source.entries()) {
+      copy.set(k, { ...v });
+    }
+    return copy;
+  }
+
+  private areBlockMapsEqual(a: Map<string, VoxelBlock>, b: Map<string, VoxelBlock>): boolean {
+    if (a.size !== b.size) return false;
+    for (const [k, v] of a.entries()) {
+      const other = b.get(k);
+      if (!other || other.paletteId !== v.paletteId) return false;
+    }
+    return true;
+  }
+
+  private restoreBlocksMap(snapshot: Map<string, VoxelBlock>): void {
+    this.blocks = this.cloneBlocksMap(snapshot);
+    this.renderDirty = true;
+    this.updateThinInstances();
+    this.onBlocksChanged?.(this.blocks.size);
+  }
+
+  private finalizePointerStroke(): void {
+    this.isPointerDown = false;
+    if (this.paintTimer) {
+      clearInterval(this.paintTimer);
+      this.paintTimer = null;
+    }
+    if (this.strokeBeforeBlocks) {
+      const before = this.strokeBeforeBlocks;
+      this.strokeBeforeBlocks = null;
+      if (!this.areBlockMapsEqual(before, this.blocks)) {
+        const after = this.cloneBlocksMap();
+        const label = this.strokeMode === 'erase' ? 'Erase Voxels' : 'Paint Voxels';
+        this.service.recordAction({
+          name: label,
+          undo: () => this.restoreBlocksMap(before),
+          redo: () => this.restoreBlocksMap(after),
+        });
+      }
+    }
+  }
+
   public setActive(active: boolean): void {
     if (!active && !this.isActive) return;
+
+    if (!active) {
+      this.finalizePointerStroke();
+    }
 
     if (active) {
       this.service.deactivateOtherInteractive3DTools('voxel');
@@ -517,10 +570,34 @@ export class VoxelPainterController {
   public setBlock(x: number, y: number, z: number, paletteId?: string): void {
     const palId = paletteId || this.currentPaletteId;
     const key = `${x},${y},${z}`;
-    this.blocks.set(key, { x, y, z, paletteId: palId });
+    const prevBlock = this.blocks.get(key) ? { ...this.blocks.get(key)! } : undefined;
+    const nextBlock: VoxelBlock = { x, y, z, paletteId: palId };
+    this.blocks.set(key, nextBlock);
     this.renderDirty = true;
     this.onBlocksChanged?.(this.blocks.size);
     this.updateThinInstances();
+
+    if (!prevBlock || prevBlock.paletteId !== nextBlock.paletteId) {
+      this.service.recordAction({
+        name: `Place Voxel (${x}, ${y}, ${z})`,
+        undo: () => {
+          if (prevBlock) {
+            this.blocks.set(key, { ...prevBlock });
+          } else {
+            this.blocks.delete(key);
+          }
+          this.renderDirty = true;
+          this.updateThinInstances();
+          this.onBlocksChanged?.(this.blocks.size);
+        },
+        redo: () => {
+          this.blocks.set(key, { ...nextBlock });
+          this.renderDirty = true;
+          this.updateThinInstances();
+          this.onBlocksChanged?.(this.blocks.size);
+        },
+      });
+    }
   }
 
   public getBlock(x: number, y: number, z: number): VoxelBlock | undefined {
@@ -529,11 +606,28 @@ export class VoxelPainterController {
 
   public removeBlock(x: number, y: number, z: number): boolean {
     const key = `${x},${y},${z}`;
+    const existing = this.blocks.get(key);
+    const prevBlock = existing ? { ...existing } : undefined;
     const deleted = this.blocks.delete(key);
-    if (deleted) {
+    if (deleted && prevBlock) {
       this.renderDirty = true;
       this.onBlocksChanged?.(this.blocks.size);
       this.updateThinInstances();
+      this.service.recordAction({
+        name: `Remove Voxel (${x}, ${y}, ${z})`,
+        undo: () => {
+          this.blocks.set(key, { ...prevBlock });
+          this.renderDirty = true;
+          this.updateThinInstances();
+          this.onBlocksChanged?.(this.blocks.size);
+        },
+        redo: () => {
+          this.blocks.delete(key);
+          this.renderDirty = true;
+          this.updateThinInstances();
+          this.onBlocksChanged?.(this.blocks.size);
+        },
+      });
     }
     return deleted;
   }
@@ -653,31 +747,32 @@ export class VoxelPainterController {
       return null;
     }
 
+    const prevSelected = [...this.service.selectedNodes];
     this.service.importedMeshes.push(mesh);
     this.service.centerMeshPivot(mesh);
     this.service.selectMesh(mesh);
 
-    // Register Undo / Redo action
+    // Register Undo / Redo action (soft-disable/enable so repeated undo/redo stays consistent)
     this.service.recordAction({
       name: `Bake Voxel Mesh "${mesh.name}"`,
       undo: () => {
+        this.service.clearSelectionProxy();
+        if (!mesh.isDisposed()) mesh.setEnabled(false);
         const idx = this.service.importedMeshes.indexOf(mesh);
         if (idx !== -1) this.service.importedMeshes.splice(idx, 1);
-        mesh.dispose();
+        this.service.selectNodes(prevSelected.filter((n) => !n.isDisposed()));
         this.service.events.onSceneModified?.();
       },
       redo: () => {
-        // Re-build
-        const recreated = CustomVoxelMesher.build(this.scene, blocksArray, this.palette, {
-          voxelSize: this.voxelSize,
-          meshName: name,
-          atlas,
-        });
-        if (recreated) {
-          this.service.importedMeshes.push(recreated);
-          this.service.selectMesh(recreated);
-          this.service.events.onSceneModified?.();
+        this.service.clearSelectionProxy();
+        if (!mesh.isDisposed()) {
+          mesh.setEnabled(true);
+          if (!this.service.importedMeshes.includes(mesh)) {
+            this.service.importedMeshes.push(mesh);
+          }
+          this.service.selectMesh(mesh);
         }
+        this.service.events.onSceneModified?.();
       },
     });
 
@@ -694,7 +789,8 @@ export class VoxelPainterController {
    * Loads voxel data from RLE runs or standard coordinates (platformia3d compatible).
    */
   public loadVoxelData(data: VoxelData | any): number {
-    this.clear();
+    const before = this.cloneBlocksMap();
+    this.service.runWithoutRecording(() => this.clear());
 
     const filePalette: string[] = data.palette || [];
     const runs: number[] = data.runs || [];
@@ -724,7 +820,17 @@ export class VoxelPainterController {
     }
 
     this.renderDirty = true;
+    this.updateThinInstances();
     this.onBlocksChanged?.(this.blocks.size);
+
+    if (!this.areBlockMapsEqual(before, this.blocks)) {
+      const after = this.cloneBlocksMap();
+      this.service.recordAction({
+        name: `Load Voxel Data (${after.size} blocks)`,
+        undo: () => this.restoreBlocksMap(before),
+        redo: () => this.restoreBlocksMap(after),
+      });
+    }
     return this.blocks.size;
   }
 
@@ -780,6 +886,7 @@ export class VoxelPainterController {
   }
 
   public clear(): void {
+    const before = this.blocks.size > 0 ? this.cloneBlocksMap() : null;
     this.blocks.clear();
     for (const base of this.baseMeshes.values()) {
       base.thinInstanceCount = 0;
@@ -787,11 +894,20 @@ export class VoxelPainterController {
     }
     this.renderDirty = true;
     this.onBlocksChanged?.(0);
+
+    if (before) {
+      const empty = new Map<string, VoxelBlock>();
+      this.service.recordAction({
+        name: `Clear Voxels (${before.size} blocks)`,
+        undo: () => this.restoreBlocksMap(before),
+        redo: () => this.restoreBlocksMap(empty),
+      });
+    }
   }
 
   public dispose(): void {
     this.setActive(false);
-    this.clear();
+    this.service.runWithoutRecording(() => this.clear());
     for (const base of this.baseMeshes.values()) {
       base.dispose();
     }

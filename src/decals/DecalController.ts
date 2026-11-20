@@ -299,7 +299,7 @@ export class DecalController {
    */
   public getUnmergedDecals(targetMeshName?: string): Mesh[] {
     return this.service.scene.meshes.filter((m): m is Mesh => {
-      if (!this.isDecalMesh(m) || m.isDisposed()) return false;
+      if (!this.isDecalMesh(m) || m.isDisposed() || !m.isEnabled()) return false;
       if (targetMeshName && m.metadata?.targetMeshName !== targetMeshName) return false;
       return true;
     });
@@ -376,7 +376,43 @@ export class DecalController {
     }
 
     if (options.mergeImmediately) {
-      const merged = this.mergeDecalsIntoMesh(targetMesh, { recordUndo: true });
+      const merged = this.mergeDecalsIntoMesh(targetMesh, { recordUndo: false });
+      if (merged && merged !== targetMesh) {
+        const wasSelectedAfter = this.service.selectedMesh === merged;
+        this.service.recordAction({
+          name: `Place & Merge Decal (${resolvedTex.name})`,
+          undo: () => {
+            this.service.clearSelectionProxy();
+            if (!merged.isDisposed()) merged.setEnabled(false);
+            const mIdx = this.service.importedMeshes.indexOf(merged);
+            if (mIdx !== -1) this.service.importedMeshes.splice(mIdx, 1);
+            if (!decalMesh.isDisposed()) decalMesh.setEnabled(false);
+            if (!targetMesh.isDisposed()) {
+              targetMesh.setEnabled(true);
+              if (!this.service.importedMeshes.includes(targetMesh)) {
+                this.service.importedMeshes.push(targetMesh);
+              }
+              if (wasSelectedAfter) this.service.selectMesh(targetMesh);
+            }
+            this.onDecalsChanged?.();
+          },
+          redo: () => {
+            this.service.clearSelectionProxy();
+            if (!targetMesh.isDisposed()) targetMesh.setEnabled(false);
+            const tIdx = this.service.importedMeshes.indexOf(targetMesh);
+            if (tIdx !== -1) this.service.importedMeshes.splice(tIdx, 1);
+            if (!decalMesh.isDisposed()) decalMesh.setEnabled(false);
+            if (!merged.isDisposed()) {
+              merged.setEnabled(true);
+              if (!this.service.importedMeshes.includes(merged)) {
+                this.service.importedMeshes.push(merged);
+              }
+              if (wasSelectedAfter) this.service.selectMesh(merged);
+            }
+            this.onDecalsChanged?.();
+          },
+        });
+      }
       this.onDecalsChanged?.();
       this.service.updateStats();
       this.service.events.onSceneModified?.();
@@ -428,7 +464,27 @@ export class DecalController {
     if (idx !== -1) {
       this.service.importedMeshes.splice(idx, 1);
     }
-    decal.dispose(false, false);
+    decal.setEnabled(false);
+
+    this.service.recordAction({
+      name: `Remove Decal "${decal.name}"`,
+      undo: () => {
+        if (decal.isDisposed()) return;
+        decal.setEnabled(true);
+        if (!this.service.importedMeshes.includes(decal)) {
+          this.service.importedMeshes.push(decal);
+        }
+        this.onDecalsChanged?.();
+      },
+      redo: () => {
+        if (decal.isDisposed()) return;
+        decal.setEnabled(false);
+        const rIdx = this.service.importedMeshes.indexOf(decal);
+        if (rIdx !== -1) this.service.importedMeshes.splice(rIdx, 1);
+        this.onDecalsChanged?.();
+      },
+    });
+
     this.onDecalsChanged?.();
     this.service.updateStats();
     this.service.events.onSceneModified?.();
@@ -447,8 +503,32 @@ export class DecalController {
       if (idx !== -1) {
         this.service.importedMeshes.splice(idx, 1);
       }
-      d.dispose(false, false);
+      d.setEnabled(false);
     }
+
+    this.service.recordAction({
+      name: `Clear ${decals.length} Decal(s)`,
+      undo: () => {
+        for (const d of decals) {
+          if (d.isDisposed()) continue;
+          d.setEnabled(true);
+          if (!this.service.importedMeshes.includes(d)) {
+            this.service.importedMeshes.push(d);
+          }
+        }
+        this.onDecalsChanged?.();
+      },
+      redo: () => {
+        for (const d of decals) {
+          if (d.isDisposed()) continue;
+          d.setEnabled(false);
+          const rIdx = this.service.importedMeshes.indexOf(d);
+          if (rIdx !== -1) this.service.importedMeshes.splice(rIdx, 1);
+        }
+        this.onDecalsChanged?.();
+      },
+    });
+
     this.onDecalsChanged?.();
     this.service.updateStats();
     this.service.events.onSceneModified?.();
@@ -462,7 +542,7 @@ export class DecalController {
    */
   public mergeDecalsIntoMesh(
     targetMeshOrName?: Mesh | string,
-    _options: { recordUndo?: boolean } = {},
+    options: { recordUndo?: boolean } = {},
   ): Mesh | null {
     const targetMesh = this.resolveTargetMesh(targetMeshOrName);
     if (!targetMesh) return null;
@@ -475,7 +555,7 @@ export class DecalController {
       for (const d of decals) {
         const idx = this.service.importedMeshes.indexOf(d);
         if (idx !== -1) this.service.importedMeshes.splice(idx, 1);
-        d.dispose(false, false);
+        d.setEnabled(false);
       }
       this.onDecalsChanged?.();
       return targetMesh;
@@ -490,6 +570,15 @@ export class DecalController {
     if (wasSelected) {
       this.service.selectMesh(null);
     }
+
+    // Snapshot decal state before detaching / offsetting so Undo restores exact decals
+    const decalSnapshots = decals.map((d) => ({
+      mesh: d,
+      parent: d.parent,
+      positions: d.getVerticesData(VertexBuffer.PositionKind)
+        ? Array.from(d.getVerticesData(VertexBuffer.PositionKind)!)
+        : null,
+    }));
 
     // Remove decals from importedMeshes before merging
     for (const decal of decals) {
@@ -523,7 +612,7 @@ export class DecalController {
     try {
       merged = Mesh.MergeMeshes(
         allMeshes,
-        true, // disposeSource
+        false, // keep sources alive (soft-disabled) for Undo/Redo
         true, // allow32BitsIndices
         undefined,
         false,
@@ -536,6 +625,12 @@ export class DecalController {
 
     if (!merged) {
       return targetMesh;
+    }
+
+    // Soft-disable source mesh and decals
+    targetMesh.setEnabled(false);
+    for (const decal of decals) {
+      decal.setEnabled(false);
     }
 
     merged.name = originalName;
@@ -561,6 +656,63 @@ export class DecalController {
       this.service.selectMesh(merged);
     }
 
+    if (options.recordUndo !== false) {
+      const finalMerged = merged;
+      this.service.recordAction({
+        name: `Merge ${validDecals.length} Decal(s) into "${originalName}"`,
+        undo: () => {
+          this.service.clearSelectionProxy();
+          if (!finalMerged.isDisposed()) finalMerged.setEnabled(false);
+          const mIdx = this.service.importedMeshes.indexOf(finalMerged);
+          if (mIdx !== -1) this.service.importedMeshes.splice(mIdx, 1);
+
+          if (!targetMesh.isDisposed()) {
+            targetMesh.setEnabled(true);
+            if (!this.service.importedMeshes.includes(targetMesh)) {
+              this.service.importedMeshes.push(targetMesh);
+            }
+          }
+          for (const snap of decalSnapshots) {
+            if (snap.mesh.isDisposed()) continue;
+            if (snap.positions) {
+              snap.mesh.setVerticesData(VertexBuffer.PositionKind, [...snap.positions], true);
+            }
+            if (snap.parent && !(snap.parent as any).isDisposed?.()) {
+              snap.mesh.setParent(snap.parent);
+            }
+            snap.mesh.setEnabled(true);
+            if (!this.service.importedMeshes.includes(snap.mesh)) {
+              this.service.importedMeshes.push(snap.mesh);
+            }
+          }
+          if (wasSelected && !targetMesh.isDisposed()) {
+            this.service.selectMesh(targetMesh);
+          }
+          this.onDecalsChanged?.();
+        },
+        redo: () => {
+          this.service.clearSelectionProxy();
+          if (!targetMesh.isDisposed()) targetMesh.setEnabled(false);
+          const tIdx = this.service.importedMeshes.indexOf(targetMesh);
+          if (tIdx !== -1) this.service.importedMeshes.splice(tIdx, 1);
+          for (const snap of decalSnapshots) {
+            if (snap.mesh.isDisposed()) continue;
+            snap.mesh.setEnabled(false);
+            const dIdx = this.service.importedMeshes.indexOf(snap.mesh);
+            if (dIdx !== -1) this.service.importedMeshes.splice(dIdx, 1);
+          }
+          if (!finalMerged.isDisposed()) {
+            finalMerged.setEnabled(true);
+            if (!this.service.importedMeshes.includes(finalMerged)) {
+              this.service.importedMeshes.push(finalMerged);
+            }
+            if (wasSelected) this.service.selectMesh(finalMerged);
+          }
+          this.onDecalsChanged?.();
+        },
+      });
+    }
+
     this.onDecalsChanged?.();
     this.service.updateStats();
     this.service.events.onSceneModified?.();
@@ -571,7 +723,7 @@ export class DecalController {
    * Merges all unmerged decals across the entire scene into their respective target meshes.
    * Called automatically before exporting a model so decals are always fused with the exported mesh.
    */
-  public mergeAllDecalsIntoMeshes(_options: { recordUndo?: boolean } = {}): {
+  public mergeAllDecalsIntoMeshes(options: { recordUndo?: boolean } = {}): {
     mergedDecalCount: number;
     affectedMeshes: string[];
   } {
@@ -584,6 +736,11 @@ export class DecalController {
       new Set(allDecals.map((d) => d.metadata?.targetMeshName).filter((n): n is string => Boolean(n))),
     );
 
+    const recordUndo = options.recordUndo !== false;
+    if (recordUndo) {
+      this.service.beginActionCapture();
+    }
+
     let totalMerged = 0;
     const affectedMeshes: string[] = [];
 
@@ -592,7 +749,7 @@ export class DecalController {
       const count = targetDecals.length;
       if (count === 0) continue;
 
-      const merged = this.mergeDecalsIntoMesh(targetName, { recordUndo: false });
+      const merged = this.mergeDecalsIntoMesh(targetName, { recordUndo });
       if (merged) {
         totalMerged += count;
         affectedMeshes.push(merged.name);
@@ -604,7 +761,43 @@ export class DecalController {
     for (const orphan of remaining) {
       const oIdx = this.service.importedMeshes.indexOf(orphan);
       if (oIdx !== -1) this.service.importedMeshes.splice(oIdx, 1);
-      orphan.dispose(false, false);
+      orphan.setEnabled(false);
+    }
+
+    if (recordUndo) {
+      const subActions = this.service.endActionCapture();
+      if (subActions.length > 0 || remaining.length > 0) {
+        this.service.recordAction({
+          name: `Merge All Decals (${totalMerged})`,
+          undo: () => {
+            for (let i = subActions.length - 1; i >= 0; i--) {
+              subActions[i].undo();
+            }
+            for (const orphan of remaining) {
+              if (!orphan.isDisposed()) {
+                orphan.setEnabled(true);
+                if (!this.service.importedMeshes.includes(orphan)) {
+                  this.service.importedMeshes.push(orphan);
+                }
+              }
+            }
+            this.onDecalsChanged?.();
+          },
+          redo: () => {
+            for (const sub of subActions) {
+              sub.redo();
+            }
+            for (const orphan of remaining) {
+              if (!orphan.isDisposed()) {
+                orphan.setEnabled(false);
+                const oIdx = this.service.importedMeshes.indexOf(orphan);
+                if (oIdx !== -1) this.service.importedMeshes.splice(oIdx, 1);
+              }
+            }
+            this.onDecalsChanged?.();
+          },
+        });
+      }
     }
 
     this.onDecalsChanged?.();

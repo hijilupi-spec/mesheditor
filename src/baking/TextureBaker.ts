@@ -252,15 +252,35 @@ export class TextureBaker {
       throw new Error(`Low-poly mesh "${lowPoly.name}" has no valid geometry to bake.`);
     }
 
-    if (!lowUVs || lowUVs.length < (lowPos.length / 3) * 2) {
-      this.service.uvUnwrapController?.unwrapMesh(lowPoly);
-      lowUVs = lowPoly.getVerticesData(VertexBuffer.UVKind);
-    } else if (autoUnwrapIfOverlapping && this.service.uvUnwrapController) {
-      const stats = this.service.uvUnwrapController.analyzeUVs(lowPoly);
-      if (stats.overlapDetected) {
-        this.service.uvUnwrapController.unwrapMesh(lowPoly);
+    const prevBakeResult = this.lastBakeResult;
+    const prevMaterial = lowPoly.material;
+    const prevBump =
+      prevMaterial instanceof PBRMaterial || prevMaterial instanceof StandardMaterial
+        ? prevMaterial.bumpTexture
+        : null;
+    const prevAmbient =
+      prevMaterial instanceof PBRMaterial || prevMaterial instanceof StandardMaterial
+        ? prevMaterial.ambientTexture
+        : null;
+    const prevAmbientStrength =
+      prevMaterial instanceof PBRMaterial ? prevMaterial.ambientTextureStrength : 1.0;
+
+    // Capture any auto-UV unwrap sub-action so bake is 1 atomic undo step
+    this.service.beginActionCapture();
+    let capturedUnwrapActions: import('../types').ActionRecord[] = [];
+    try {
+      if (!lowUVs || lowUVs.length < (lowPos.length / 3) * 2) {
+        this.service.uvUnwrapController?.unwrapMesh(lowPoly);
         lowUVs = lowPoly.getVerticesData(VertexBuffer.UVKind);
+      } else if (autoUnwrapIfOverlapping && this.service.uvUnwrapController) {
+        const stats = this.service.uvUnwrapController.analyzeUVs(lowPoly);
+        if (stats.overlapDetected) {
+          this.service.uvUnwrapController.unwrapMesh(lowPoly);
+          lowUVs = lowPoly.getVerticesData(VertexBuffer.UVKind);
+        }
       }
+    } finally {
+      capturedUnwrapActions = this.service.endActionCapture();
     }
 
     const finalLowPos = lowPoly.getVerticesData(VertexBuffer.PositionKind)!;
@@ -587,7 +607,9 @@ export class TextureBaker {
     const aoMapDataUrl = this.rgbaBufferToDataURL(aoBuffer, res, res);
 
     if (applyToMaterial) {
-      this.applyBakedTexturesToMesh(lowPoly, normalBuffer, aoBuffer, res);
+      this.service.runWithoutRecording(() => {
+        this.applyBakedTexturesToMesh(lowPoly, normalBuffer, aoBuffer, res);
+      });
     }
 
     const coveragePercent = Math.round((coveredTexelCount / pixelCount) * 1000) / 10;
@@ -607,6 +629,63 @@ export class TextureBaker {
     };
 
     this.lastBakeResult = result;
+
+    if (applyToMaterial || capturedUnwrapActions.length > 0) {
+      const nextMaterial = lowPoly.material;
+      const nextBump =
+        nextMaterial instanceof PBRMaterial || nextMaterial instanceof StandardMaterial
+          ? nextMaterial.bumpTexture
+          : null;
+      const nextAmbient =
+        nextMaterial instanceof PBRMaterial || nextMaterial instanceof StandardMaterial
+          ? nextMaterial.ambientTexture
+          : null;
+      const nextAmbientStrength =
+        nextMaterial instanceof PBRMaterial ? nextMaterial.ambientTextureStrength : 1.0;
+
+      this.service.recordAction({
+        name: `Bake Normal & AO Maps "${lowPoly.name}"`,
+        undo: () => {
+          if (!lowPoly.isDisposed()) {
+            if (applyToMaterial) {
+              lowPoly.material = prevMaterial;
+              if (prevMaterial instanceof PBRMaterial) {
+                prevMaterial.bumpTexture = prevBump;
+                prevMaterial.ambientTexture = prevAmbient;
+                prevMaterial.ambientTextureStrength = prevAmbientStrength;
+              } else if (prevMaterial instanceof StandardMaterial) {
+                prevMaterial.bumpTexture = prevBump;
+                prevMaterial.ambientTexture = prevAmbient;
+              }
+            }
+          }
+          for (let i = capturedUnwrapActions.length - 1; i >= 0; i--) {
+            capturedUnwrapActions[i].undo();
+          }
+          this.lastBakeResult = prevBakeResult;
+          this.service.events.onTexturesChanged?.();
+        },
+        redo: () => {
+          for (const sub of capturedUnwrapActions) {
+            sub.redo();
+          }
+          if (!lowPoly.isDisposed() && applyToMaterial) {
+            lowPoly.material = nextMaterial;
+            if (nextMaterial instanceof PBRMaterial) {
+              nextMaterial.bumpTexture = nextBump;
+              nextMaterial.ambientTexture = nextAmbient;
+              nextMaterial.ambientTextureStrength = nextAmbientStrength;
+            } else if (nextMaterial instanceof StandardMaterial) {
+              nextMaterial.bumpTexture = nextBump;
+              nextMaterial.ambientTexture = nextAmbient;
+            }
+          }
+          this.lastBakeResult = result;
+          this.service.events.onTexturesChanged?.();
+        },
+      });
+    }
+
     return result;
   }
 
@@ -844,6 +923,18 @@ export class TextureBaker {
     );
     aoTex.name = `${mesh.name}_BakedAOMap`;
 
+    const prevMaterial = mesh.material;
+    const prevBump =
+      prevMaterial instanceof PBRMaterial || prevMaterial instanceof StandardMaterial
+        ? prevMaterial.bumpTexture
+        : null;
+    const prevAmbient =
+      prevMaterial instanceof PBRMaterial || prevMaterial instanceof StandardMaterial
+        ? prevMaterial.ambientTexture
+        : null;
+    const prevAmbientStrength =
+      prevMaterial instanceof PBRMaterial ? prevMaterial.ambientTextureStrength : 1.0;
+
     let mat = mesh.material;
     if (!mat || (!(mat instanceof PBRMaterial) && !(mat instanceof StandardMaterial))) {
       const pbr = new PBRMaterial(`${mesh.name}_BakedPBR`, this.scene);
@@ -862,6 +953,37 @@ export class TextureBaker {
       mat.bumpTexture = normalTex;
       mat.ambientTexture = aoTex;
     }
+
+    const nextMaterial = mesh.material;
+    this.service.recordAction({
+      name: `Apply Baked Maps "${mesh.name}"`,
+      undo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.material = prevMaterial;
+        if (prevMaterial instanceof PBRMaterial) {
+          prevMaterial.bumpTexture = prevBump;
+          prevMaterial.ambientTexture = prevAmbient;
+          prevMaterial.ambientTextureStrength = prevAmbientStrength;
+        } else if (prevMaterial instanceof StandardMaterial) {
+          prevMaterial.bumpTexture = prevBump;
+          prevMaterial.ambientTexture = prevAmbient;
+        }
+        this.service.events.onTexturesChanged?.();
+      },
+      redo: () => {
+        if (mesh.isDisposed()) return;
+        mesh.material = nextMaterial;
+        if (nextMaterial instanceof PBRMaterial) {
+          nextMaterial.bumpTexture = normalTex;
+          nextMaterial.ambientTexture = aoTex;
+          nextMaterial.ambientTextureStrength = 0.85;
+        } else if (nextMaterial instanceof StandardMaterial) {
+          nextMaterial.bumpTexture = normalTex;
+          nextMaterial.ambientTexture = aoTex;
+        }
+        this.service.events.onTexturesChanged?.();
+      },
+    });
   }
 
   /**
