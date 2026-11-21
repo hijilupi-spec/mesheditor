@@ -108,6 +108,7 @@ export interface MeshEditorAppHost {
   renderToolsMenu(): void;
   refreshAIEndpointBadge(): void;
   renderAISkills(): void;
+  renderAIToolSet(): void;
   setupAnimations(names: string[], currentGroup: any | null): void;
 
   // Modal & File triggers

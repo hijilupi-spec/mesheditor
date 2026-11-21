@@ -62,6 +62,7 @@ import {
 } from './geometry/facetSurfaceUtils';
 import { subdivideCatmullClarkMesh } from './geometry/organicGeometry';
 import { ColladaConverter } from './loaders/ColladaConverter';
+import { createProceduralEnvironmentTexture } from './utils/proceduralEnvironment';
 import { GridMaterial, TerrainMaterial } from '@babylonjs/materials';
 import { GLTF2Export, OBJExport, RegisterEXT_texture_webp, STLExport } from '@babylonjs/serializers';
 import { DataWriter } from '@babylonjs/serializers/glTF/2.0/dataWriter';
@@ -425,6 +426,17 @@ export class MeshEditorService {
 
     this.sunLight = new DirectionalLight('sunLight', new Vector3(-1, -2, 1), this.scene);
     this.sunLight.intensity = this.sceneParams.sunLight;
+
+    // Provide a procedural daytime IBL environment map so PBR glass, water, and metals show crisp reflections
+    const hasGpuContext = Boolean((this.engine as any)?._gl || (this.engine as any)?._device);
+    if (hasGpuContext) {
+      try {
+        this.scene.environmentTexture = createProceduralEnvironmentTexture(this.scene);
+        this.scene.environmentIntensity = 1.35;
+      } catch {
+        // Ignore in headless environments without full texture support
+      }
+    }
 
     this.gridMaterial = new GridMaterial('gridMat', this.scene);
     this.gridMaterial.majorUnitFrequency = 5;

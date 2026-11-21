@@ -299,10 +299,14 @@ export class GenerateTextureTool extends AbstractTool {
     }
 
     if (item.materialPreset || args.materialPreset) {
-      applyCanonicalPbrPreset(mat, args.materialPreset || item.materialPreset, {
+      const appliedPreset = applyCanonicalPbrPreset(mat, args.materialPreset || item.materialPreset, {
         roughness: item.roughness,
         metallic: item.metallic,
       });
+      // Preserve mirror-smooth roughness for glass/chrome presets instead of letting ORM green channel dull reflections
+      if (appliedPreset && appliedPreset.roughness <= 0.08) {
+        mat.useRoughnessFromMetallicTextureGreen = false;
+      }
     }
 
     let appliedMeshes: string[] = [];

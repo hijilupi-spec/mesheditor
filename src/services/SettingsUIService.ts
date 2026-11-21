@@ -298,9 +298,11 @@ export class SettingsUIService {
       neural3DProviders: createDefaultNeural3DProviders(),
       imageGeneratorProviders: defaultImageProviders,
       skillStates: {},
+      toolStates: {},
     });
     this.app.service.aiAgent.reloadSkills();
     this.app.renderAISkills();
+    this.app.renderAIToolSet();
     this.syncAISettingsControlsUI?.();
     this.app.refreshAIEndpointBadge();
 
@@ -345,6 +347,7 @@ export class SettingsUIService {
     if (tab === 'ai') {
       this.app.service.aiAgent.reloadSkills();
       this.app.renderAISkills();
+      this.app.renderAIToolSet();
       this.syncAISettingsControlsUI?.();
 
       const modelSelect = this.app.getElement<HTMLSelectElement>('aiModelSelect');
@@ -599,6 +602,8 @@ export class SettingsUIService {
     const minPolyVal = this.app.getElement<HTMLElement>('aiMinPolyVal');
     const maxPolyInput = this.app.getElement<HTMLInputElement>('aiMaxPolyInput');
     const maxPolyVal = this.app.getElement<HTMLElement>('aiMaxPolyVal');
+    const maxIterationsInput = this.app.getElement<HTMLInputElement>('aiMaxIterationsInput');
+    const maxIterationsVal = this.app.getElement<HTMLElement>('aiMaxIterationsVal');
     const createTexturesCheck = this.app.getElement<HTMLInputElement>('aiCreateTexturesCheck');
     const createTexturesCheckQuick = this.app.getElement<HTMLInputElement>('aiCreateTexturesCheckQuick');
     const createNormalMapsCheck = this.app.getElement<HTMLInputElement>('aiCreateNormalMapsCheck');
@@ -607,6 +612,8 @@ export class SettingsUIService {
     const visualCritiqueCheckQuick = this.app.getElement<HTMLInputElement>('aiVisualCritiqueCheckQuick');
     const checkZFightingCheck = this.app.getElement<HTMLInputElement>('aiCheckZFightingCheck');
     const checkZFightingCheckQuick = this.app.getElement<HTMLInputElement>('aiCheckZFightingCheckQuick');
+    const btnToolsCorePreset = this.app.getElement<HTMLButtonElement>('btnAIToolsCorePreset');
+    const btnToolsAllPreset = this.app.getElement<HTMLButtonElement>('btnAIToolsAllPreset');
     const promptSuffixInput = this.app.getElement<HTMLTextAreaElement>('aiPromptSuffixInput');
 
     const populateModelSelect = (models: string[], selectedModel?: string) => {
@@ -683,7 +690,7 @@ export class SettingsUIService {
     const syncImageGenUI = () => {
       const imgGenService = this.app.service.externalImageGenerator;
       const cfg = this.app.service.aiAgent.getConfig();
-      const isEnabled = cfg.imageGeneratorEnabled ?? true;
+      const isEnabled = !!cfg.imageGeneratorEnabled;
       const currentActive = imgGenService.getActiveBackend();
       const savedBackend = cfg.imageGeneratorActiveBackend;
       const targetBackend = (
@@ -856,7 +863,7 @@ export class SettingsUIService {
       syncProtocolAndPresetUI();
 
       const minPolys = cfg.minPolygons ?? 200;
-      const maxPolys = cfg.maxPolygons ?? 5000;
+      const maxPolys = Math.min(500000, cfg.maxPolygons ?? 25000);
       if (minPolyInput) {
         minPolyInput.value = String(minPolys);
         this.syncSliderVisual(minPolyInput, minPolys, 'polys');
@@ -867,6 +874,13 @@ export class SettingsUIService {
         this.syncSliderVisual(maxPolyInput, maxPolys, 'polys');
       }
       if (maxPolyVal) maxPolyVal.textContent = maxPolys.toLocaleString();
+
+      const maxIter = Math.max(1, Math.min(25, cfg.maxIterations ?? DEFAULT_AI_AGENT_CONFIG.maxIterations ?? 6));
+      if (maxIterationsInput) {
+        maxIterationsInput.value = String(maxIter);
+        this.syncSliderVisual(maxIterationsInput, maxIter, 'steps');
+      }
+      if (maxIterationsVal) maxIterationsVal.textContent = String(maxIter);
 
       const texturesOn = cfg.createTextures !== false;
       if (createTexturesCheck) createTexturesCheck.checked = texturesOn;
@@ -880,7 +894,7 @@ export class SettingsUIService {
       if (visualCritiqueCheck) visualCritiqueCheck.checked = critiqueOn;
       if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = critiqueOn;
 
-      const zFightOn = cfg.checkZFighting !== false;
+      const zFightOn = !!cfg.checkZFighting;
       if (checkZFightingCheck) checkZFightingCheck.checked = zFightOn;
       if (checkZFightingCheckQuick) checkZFightingCheckQuick.checked = zFightOn;
 
@@ -1023,7 +1037,7 @@ export class SettingsUIService {
     // Polygon budget sliders & preset chips (persist immediately to localStorage)
     const persistPolyBudget = () => {
       const minVal = minPolyInput ? Math.max(50, Number(minPolyInput.value) || 200) : 200;
-      const maxVal = maxPolyInput ? Math.max(minVal, Number(maxPolyInput.value) || 5000) : 5000;
+      const maxVal = maxPolyInput ? Math.max(minVal, Number(maxPolyInput.value) || 25000) : 25000;
       if (minPolyVal) minPolyVal.textContent = minVal.toLocaleString();
       if (maxPolyVal) maxPolyVal.textContent = maxVal.toLocaleString();
       if (minPolyInput) this.syncSliderVisual(minPolyInput, minVal, 'polys');
@@ -1060,6 +1074,25 @@ export class SettingsUIService {
         });
       });
 
+    maxIterationsInput?.addEventListener('input', () => {
+      const val = Math.max(1, Math.min(25, Math.round(Number(maxIterationsInput.value) || 6)));
+      if (maxIterationsVal) maxIterationsVal.textContent = String(val);
+      this.syncSliderVisual(maxIterationsInput, val, 'steps');
+      this.app.service.aiAgent.saveConfig({ maxIterations: val });
+    });
+
+    this.app.getElement('aiMaxIterationsChips')
+      ?.querySelectorAll<HTMLButtonElement>('[data-iterations]')
+      .forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const iter = btn.getAttribute('data-iterations');
+          if (iter && maxIterationsInput) {
+            maxIterationsInput.value = iter;
+            maxIterationsInput.dispatchEvent(new Event('input'));
+          }
+        });
+      });
+
     // Texture, Normal Map, Visual Critique checkboxes (synced with quick checkboxes & persisted)
     createTexturesCheck?.addEventListener('change', () => {
       const enabled = !!createTexturesCheck.checked;
@@ -1087,6 +1120,16 @@ export class SettingsUIService {
       if (checkZFightingCheckQuick) checkZFightingCheckQuick.checked = enabled;
       this.app.service.aiAgent.saveConfig({ checkZFighting: enabled });
       this.app.refreshAIEndpointBadge();
+    });
+
+    btnToolsCorePreset?.addEventListener('click', () => {
+      this.app.service.aiAgent.setToolPreset('core');
+      this.app.renderAIToolSet();
+    });
+
+    btnToolsAllPreset?.addEventListener('click', () => {
+      this.app.service.aiAgent.setToolPreset('all');
+      this.app.renderAIToolSet();
     });
 
     // Neural 3D Generators (TRELLIS 2, Hunyuan3D, Hi3D)
@@ -1338,6 +1381,7 @@ export class SettingsUIService {
 
     syncAllAIControls();
     this.app.renderAISkills();
+    this.app.renderAIToolSet();
     this.app.refreshAIEndpointBadge();
 
     // Refresh dynamic skills from local dev server/bridge if available

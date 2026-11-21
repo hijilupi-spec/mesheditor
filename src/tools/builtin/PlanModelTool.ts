@@ -73,7 +73,7 @@ export class PlanModelTool extends AbstractTool {
 
   public execute(args: any, context: ToolExecutionContext): string {
     const minBudget = context.aiAgent?.config?.minPolygons ?? 200;
-    const maxBudget = context.aiAgent?.config?.maxPolygons ?? 5000;
+    const maxBudget = context.aiAgent?.config?.maxPolygons ?? 25000;
     const targetMidBudget = Math.min(maxBudget, Math.max(minBudget, Math.round(maxBudget * 0.75)));
 
     const rawParts: PlannedPartSpec[] = Array.isArray(args.parts) ? args.parts : [];

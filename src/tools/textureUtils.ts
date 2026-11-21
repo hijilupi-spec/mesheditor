@@ -119,6 +119,7 @@ export type CanonicalMaterialPresetName =
   | 'marble'
   | 'glazed_ceramic'
   | 'clear_glass'
+  | 'architectural_glass'
   | 'frosted_glass'
   | 'gemstone'
   | 'foliage'
@@ -478,6 +479,16 @@ export const CANONICAL_MATERIAL_PRESETS: Record<CanonicalMaterialPresetName, Can
     alpha: 0.35,
     defaultColorHex: '#dcecf2',
   },
+  architectural_glass: {
+    name: 'architectural_glass',
+    metallic: 0.45,
+    roughness: 0.04,
+    clearcoat: 0.9,
+    clearcoatRoughness: 0.03,
+    ior: 1.52,
+    alpha: 1.0,
+    defaultColorHex: '#0f3356',
+  },
   frosted_glass: {
     name: 'frosted_glass',
     metallic: 0.0,
@@ -555,6 +566,11 @@ export function resolveCanonicalPreset(name?: string): CanonicalMaterialPreset |
     ceramic: 'glazed_ceramic',
     porcelain: 'glazed_ceramic',
     glass: 'clear_glass',
+    curtain_wall: 'architectural_glass',
+    curtain_wall_glass: 'architectural_glass',
+    tinted_glass: 'architectural_glass',
+    mirror_glass: 'architectural_glass',
+    window_glass: 'architectural_glass',
     crystal: 'gemstone',
     leaf: 'foliage',
     leaves: 'foliage',

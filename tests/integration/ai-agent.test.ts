@@ -105,20 +105,30 @@ describe('AI Mesh Agent (Text-to-Mesh, Image-to-Mesh & Mesh Update) Integration 
         'image-to-mesh',
         'figure-sculptor',
         'neural-3d-generator',
+        'six-pass-pipeline',
       ]);
+
+      expect(skills.find((s) => s.id === 'procedural-modeler')?.enabled).toBe(true);
+      expect(skills.find((s) => s.id === 'mesh-updater')?.enabled).toBe(true);
+      expect(skills.find((s) => s.id === 'image-to-mesh')?.enabled).toBe(true);
+      expect(skills.find((s) => s.id === 'figure-sculptor')?.enabled).toBe(true);
+      expect(skills.find((s) => s.id === 'voxel-painter')?.enabled).toBe(false);
+      expect(skills.find((s) => s.id === 'neural-3d-generator')?.enabled).toBe(false);
+      expect(skills.find((s) => s.id === 'six-pass-pipeline')?.enabled).toBe(false);
 
       const sysPrompt = service.aiAgent.buildSystemPrompt();
       expect(sysPrompt).toContain('Procedural Modeler (MeshBuilder, CSG2, Extrude, Lathe)');
-      expect(sysPrompt).toContain('Voxel & Block Modeler');
+      expect(sysPrompt).not.toContain('Voxel & Block Modeler');
       expect(sysPrompt).toContain('Mesh Updater & Scene Sculptor');
       expect(sysPrompt).toContain('Image to 3D Mesh Vision Analyzer');
       expect(sysPrompt).toContain('Figure Sculptor & Game Retopology');
-      expect(sysPrompt).toContain('Neural 3D Generator Delegation');
+      expect(sysPrompt).not.toContain('Neural 3D Generator Delegation');
+      expect(sysPrompt).not.toContain('6-Pass Staged Sculpting Pipeline');
 
-      // Disable voxel-painter and verify system prompt updates
-      service.aiAgent.setSkillEnabled('voxel-painter', false);
+      // Enable voxel-painter and verify system prompt updates
+      service.aiAgent.setSkillEnabled('voxel-painter', true);
       const updatedPrompt = service.aiAgent.buildSystemPrompt();
-      expect(updatedPrompt).not.toContain('Voxel & Block Modeler');
+      expect(updatedPrompt).toContain('Voxel & Block Modeler');
     });
 
     it('discovers skills from /skills directory and parses markdown with YAML frontmatter', () => {
@@ -616,14 +626,14 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       // Verify default values in service config
       const defaultCfg = app.service.aiAgent.getConfig();
       expect(defaultCfg.minPolygons).toBe(200);
-      expect(defaultCfg.maxPolygons).toBe(5000);
+      expect(defaultCfg.maxPolygons).toBe(25000);
       expect(defaultCfg.createTextures).toBe(true);
       expect(defaultCfg.createNormalMaps).toBe(true);
 
       // Verify default system prompt reflects constraints
       const defaultPrompt = app.service.aiAgent.buildSystemPrompt();
-      expect(defaultPrompt).toContain('200 to 5,000 triangles');
-      expect(defaultPrompt).toContain('Colors & Materials');
+      expect(defaultPrompt).toContain('200 to 25,000 triangles');
+      expect(defaultPrompt).toContain('Colors, Textures & Tasteful 4-Map PBR Materials');
       expect(defaultPrompt).toContain('Normal maps are ENABLED');
 
       // Verify UI controls exist in DOM
@@ -641,8 +651,8 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(minPolyVal?.textContent).toBe('200');
 
       expect(maxPolyInput).not.toBeNull();
-      expect(maxPolyInput?.value).toBe('5000');
-      expect(maxPolyVal?.textContent).toBe('5,000');
+      expect(maxPolyInput?.value).toBe('25000');
+      expect(maxPolyVal?.textContent).toBe('25,000');
 
       expect(createTexturesCheck?.checked).toBe(true);
       expect(createTexturesCheckQuick?.checked).toBe(true);
@@ -749,26 +759,26 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(tabBtnAI?.getAttribute('aria-selected')).toBe('true');
       expect(tabPanelAI?.hidden).toBe(false);
 
-      // 3. Test Maximum Polygons up to 1,000,000 and budget chips (persists immediately)
+      // 3. Test Maximum Polygons up to 500,000 and budget chips (persists immediately)
       const maxPolyInput = container.querySelector('#aiMaxPolyInput') as HTMLInputElement | null;
       const maxPolyVal = container.querySelector('#aiMaxPolyVal') as HTMLElement | null;
-      expect(maxPolyInput?.max).toBe('1000000');
+      expect(maxPolyInput?.max).toBe('500000');
 
-      const chip1M = container.querySelector('#aiMaxPolyChips button[data-poly="1000000"]') as HTMLButtonElement | null;
-      expect(chip1M).toBeTruthy();
-      chip1M?.click();
-      expect(maxPolyInput?.value).toBe('1000000');
-      expect(maxPolyVal?.textContent).toContain('1');
-      expect(app.service.aiAgent.getConfig().maxPolygons).toBe(1000000);
+      const chip500K = container.querySelector('#aiMaxPolyChips button[data-poly="500000"]') as HTMLButtonElement | null;
+      expect(chip500K).toBeTruthy();
+      chip500K?.click();
+      expect(maxPolyInput?.value).toBe('500000');
+      expect(maxPolyVal?.textContent).toContain('500');
+      expect(app.service.aiAgent.getConfig().maxPolygons).toBe(500000);
 
       // 4. Close central Settings modal via Done button
       const btnDone = container.querySelector('#btnSettingsDone') as HTMLButtonElement | null;
       btnDone?.click();
       expect(settingsModal?.hasAttribute('open')).toBe(false);
 
-      // Verify endpoint summary badge reflects 1Mp ceiling
+      // Verify endpoint summary badge reflects 500kp ceiling
       const endpointSummary = container.querySelector('#aiEndpointSummaryBar') as HTMLElement | null;
-      expect(endpointSummary?.textContent).toContain('1Mp');
+      expect(endpointSummary?.textContent).toContain('500kp');
 
       // 5. Test Model selector dropdown and custom input toggle
       const modelSelect = container.querySelector('#aiModelSelect') as HTMLSelectElement | null;
@@ -885,16 +895,17 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       ) as HTMLInputElement;
       expect(voxelCheckbox).not.toBeNull();
       expect(sculptorCheckbox).not.toBeNull();
-      expect(voxelCheckbox.checked).toBe(true);
+      expect(voxelCheckbox.checked).toBe(false);
+      expect(sculptorCheckbox.checked).toBe(true);
 
-      // Toggle both skills off via change event — persists immediately to localStorage
-      voxelCheckbox.checked = false;
+      // Toggle skills via change event — persists immediately to localStorage
+      voxelCheckbox.checked = true;
       voxelCheckbox.dispatchEvent(new Event('change'));
       sculptorCheckbox.checked = false;
       sculptorCheckbox.dispatchEvent(new Event('change'));
 
       const savedConfig = JSON.parse(localStorage.getItem('mesheditor_ai_agent_config') || '{}');
-      expect(savedConfig.skillStates?.['voxel-painter']).toBe(false);
+      expect(savedConfig.skillStates?.['voxel-painter']).toBe(true);
       expect(savedConfig.skillStates?.['figure-sculptor']).toBe(false);
 
       app1.dispose();
@@ -946,10 +957,10 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
           '#aiSkillsList input[type="checkbox"][data-skill-id="procedural-modeler"]'
         ) as HTMLInputElement;
 
-        expect(restoredVoxel.checked).toBe(false);
+        expect(restoredVoxel.checked).toBe(true);
         expect(restoredSculptor.checked).toBe(false);
         expect(restoredModeler.checked).toBe(true);
-        expect(app2.service.aiAgent.getSkills().find((s) => s.id === 'voxel-painter')?.enabled).toBe(false);
+        expect(app2.service.aiAgent.getSkills().find((s) => s.id === 'voxel-painter')?.enabled).toBe(true);
         expect(app2.service.aiAgent.getSkills().find((s) => s.id === 'figure-sculptor')?.enabled).toBe(false);
 
         app2.dispose();
@@ -976,9 +987,11 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       const enabledCheck1 = container1.querySelector('#aiImageGenEnabled') as HTMLInputElement;
 
       expect(backendSelect1).not.toBeNull();
-      expect(enabledCheck1.checked).toBe(true);
+      expect(enabledCheck1.checked).toBe(false);
 
-      // Switch external image generator to OpenAI and set custom fields (persists on change)
+      // Enable external image generator, switch to OpenAI, and set custom fields (persists on change)
+      enabledCheck1.checked = true;
+      enabledCheck1.dispatchEvent(new Event('change'));
       backendSelect1.value = 'openai';
       backendSelect1.dispatchEvent(new Event('change'));
       modelInput1.value = 'gpt-image-1';
@@ -2635,20 +2648,24 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
 
       const quickChk = container.querySelector('#aiCheckZFightingCheckQuick') as HTMLInputElement;
       const modalChk = container.querySelector('#aiCheckZFightingCheck') as HTMLInputElement;
+      const visualQuickChk = container.querySelector('#aiVisualCritiqueCheckQuick') as HTMLInputElement;
+      const viewportQuickChk = container.querySelector('#aiIncludeViewportCheck') as HTMLInputElement;
       expect(quickChk).not.toBeNull();
       expect(modalChk).not.toBeNull();
-      expect(quickChk.checked).toBe(true);
+      expect(quickChk.checked).toBe(false);
+      expect(modalChk.checked).toBe(false);
+      expect(visualQuickChk?.checked).toBe(false);
+      expect(viewportQuickChk?.checked).toBe(false);
+
+      quickChk.checked = true;
+      quickChk.dispatchEvent(new Event('change'));
+      expect(app.service.aiAgent.getConfig().checkZFighting).toBe(true);
       expect(modalChk.checked).toBe(true);
 
-      quickChk.checked = false;
-      quickChk.dispatchEvent(new Event('change'));
-      expect(app.service.aiAgent.getConfig().checkZFighting).toBe(false);
-      expect(modalChk.checked).toBe(false);
-
-      modalChk.checked = true;
+      modalChk.checked = false;
       modalChk.dispatchEvent(new Event('change'));
-      expect(app.service.aiAgent.getConfig().checkZFighting).toBe(true);
-      expect(quickChk.checked).toBe(true);
+      expect(app.service.aiAgent.getConfig().checkZFighting).toBe(false);
+      expect(quickChk.checked).toBe(false);
 
       app.dispose();
       container.remove();
@@ -2874,6 +2891,306 @@ Build low-poly trees using cylinder trunks and icosphere foliage.`;
       expect(previewImg.src).toBe(sampleDataUrl);
 
       runSpy.mockRestore();
+      app.dispose();
+      container.remove();
+    });
+  });
+
+  describe('11. Pipeline Speed Optimizations (Contextual Skills & Configurable Tool Set)', () => {
+    it('filters irrelevant skills contextually and defaults to CORE_TOOLS with user-configurable Tool Set in Settings', async () => {
+      const container = document.createElement('div');
+      container.style.width = '1024px';
+      container.style.height = '768px';
+      document.body.appendChild(container);
+      const app = new MeshEditorApp({
+        container,
+        engine: new NullEngine(),
+      });
+      app.service.clearModel();
+
+      // 1. Contextual filtering: simple text-only architectural prompt on empty scene
+      const contextualPrompt = app.service.aiAgent.buildSystemPrompt({
+        prompt: 'Build a wooden table with 4 legs',
+        hasImages: false,
+        sceneMeshCount: 0,
+      });
+      expect(contextualPrompt).toContain('SKILL: Procedural Modeler');
+      expect(contextualPrompt).not.toContain('SKILL: Image to 3D Mesh Vision Analyzer');
+      expect(contextualPrompt).not.toContain('SKILL: Mesh Updater');
+      expect(contextualPrompt).not.toContain('SKILL: Voxel & Block Modeler');
+      expect(contextualPrompt).not.toContain('SKILL: Figure');
+
+      // When images + existing meshes are present, image-to-mesh and mesh-updater are included
+      const imagePrompt = app.service.aiAgent.buildSystemPrompt({
+        prompt: 'Update this character from the screenshot',
+        hasImages: true,
+        sceneMeshCount: 2,
+      });
+      expect(imagePrompt).toContain('SKILL: Image to 3D Mesh Vision Analyzer');
+      expect(imagePrompt).toContain('SKILL: Mesh Updater');
+
+      // 2. Default Tool Set = CORE_TOOLS only
+      const allDefs = app.service.aiAgent.getToolDefinitions();
+      const defaultTools = app.service.aiAgent.getOpenAITools();
+      expect(defaultTools.length).toBeLessThan(allDefs.length);
+      expect(defaultTools.some((t) => t.function?.name === 'modeler_execute_babylon_code')).toBe(true);
+      expect(defaultTools.some((t) => t.function?.name === 'modeler_create_arch')).toBe(false);
+
+      // 3. Tool Set UI in Settings (#aiToolSetList, #btnAIToolsAllPreset, #btnAIToolsCorePreset)
+      const toolList = container.querySelector('#aiToolSetList') as HTMLElement;
+      const btnAll = container.querySelector('#btnAIToolsAllPreset') as HTMLButtonElement;
+      const btnCore = container.querySelector('#btnAIToolsCorePreset') as HTMLButtonElement;
+      expect(toolList).toBeTruthy();
+      expect(btnAll).toBeTruthy();
+      expect(btnCore).toBeTruthy();
+
+      const archCheckbox = toolList.querySelector('input[data-tool-name="modeler_create_arch"]') as HTMLInputElement;
+      expect(archCheckbox).toBeTruthy();
+      expect(archCheckbox.checked).toBe(false);
+
+      // Enable modeler_create_arch individually and verify persistence
+      archCheckbox.checked = true;
+      archCheckbox.dispatchEvent(new Event('change'));
+      expect(app.service.aiAgent.getConfig().toolStates?.['modeler_create_arch']).toBe(true);
+      expect(app.service.aiAgent.getOpenAITools().some((t) => t.function?.name === 'modeler_create_arch')).toBe(true);
+
+      // Enable All preset -> all tools enabled (when checkZFighting is enabled)
+      app.service.aiAgent.saveConfig({ checkZFighting: true });
+      btnAll.click();
+      expect(app.service.aiAgent.getOpenAITools().length).toBe(allDefs.length);
+
+      // Core Tools preset -> back to CORE_TOOLS
+      btnCore.click();
+      expect(app.service.aiAgent.getOpenAITools().length).toBe(defaultTools.length);
+
+      // 4. Verify checkZFighting: false disables modeler_check_z_fighting in prompt & tools
+      app.service.aiAgent.saveConfig({ checkZFighting: false });
+      btnAll.click();
+      expect(app.service.aiAgent.getOpenAITools().some((t) => t.function?.name === 'modeler_check_z_fighting')).toBe(
+        false
+      );
+      const noZfPrompt = app.service.aiAgent.buildSystemPrompt({ checkZFighting: false });
+      expect(noZfPrompt).toContain('Z-Fighting Check DISABLED');
+      btnCore.click();
+
+      // 4b. Verify maxIterations slider (including --control-value binding) and six-pass-pipeline opt-in skill
+      const maxIterInput = container.querySelector('#aiMaxIterationsInput') as HTMLInputElement;
+      const maxIterVal = container.querySelector('#aiMaxIterationsVal') as HTMLElement;
+      expect(maxIterInput).toBeTruthy();
+      expect(maxIterInput.value).toBe('6');
+      expect(maxIterInput.style.getPropertyValue('--control-value')).toBe('6');
+      maxIterInput.value = '3';
+      maxIterInput.dispatchEvent(new Event('input'));
+      expect(app.service.aiAgent.getConfig().maxIterations).toBe(3);
+      expect(maxIterVal.textContent).toBe('3');
+      expect(maxIterInput.style.getPropertyValue('--control-value')).toBe('3');
+
+      // 4c. Verify ArrowUp/ArrowDown prompt history paging (text + attached images)
+      const promptInput = container.querySelector('#aiPromptInput') as HTMLTextAreaElement;
+      const img1 = 'data:image/png;base64,AAAA';
+      await app.aiAgentUI.promptHistoryStore.addEntry('First prompt', []);
+      await app.aiAgentUI.promptHistoryStore.addEntry('Second prompt with image', [img1]);
+
+      expect(promptInput.value).toBe('');
+      promptInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(promptInput.value).toBe('Second prompt with image');
+      expect(app.aiAgentUI.aiPendingImages).toEqual([img1]);
+
+      promptInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(promptInput.value).toBe('First prompt');
+      expect(app.aiAgentUI.aiPendingImages).toEqual([]);
+
+      promptInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(promptInput.value).toBe('Second prompt with image');
+      expect(app.aiAgentUI.aiPendingImages).toEqual([img1]);
+
+      promptInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(promptInput.value).toBe('');
+      expect(app.aiAgentUI.aiPendingImages).toEqual([]);
+
+      const sixPassChk = container.querySelector(
+        '#aiSkillsList input[data-skill-id="six-pass-pipeline"]'
+      ) as HTMLInputElement;
+      expect(sixPassChk).toBeTruthy();
+      expect(sixPassChk.checked).toBe(false);
+      sixPassChk.checked = true;
+      sixPassChk.dispatchEvent(new Event('change'));
+      expect(app.service.aiAgent.buildSystemPrompt()).toContain('6-Pass Staged Sculpting Pipeline');
+      sixPassChk.checked = false;
+      sixPassChk.dispatchEvent(new Event('change'));
+
+      // 5. Verify runPrompt sends only the enabled tools
+      let capturedToolCount = 0;
+      const fetchSpy = vi.fn(async (_url: any, init: any) => {
+        const body = JSON.parse(init.body);
+        capturedToolCount = Array.isArray(body.tools) ? body.tools.length : 0;
+        if (body.messages.every((m: any) => m.role !== 'tool')) {
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_core_1',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_execute_babylon_code',
+                          arguments: JSON.stringify({
+                            code: 'const b = MeshBuilder.CreateBox("CoreBox", { size: 1 }, scene); registerMesh(b);',
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'Created CoreBox.' } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      });
+
+      app.service.aiAgent.saveConfig({
+        protocol: 'openai',
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'test-key',
+      });
+      (app.service.aiAgent as any).customFetch = fetchSpy;
+
+      const res = await app.service.aiAgent.runPrompt({
+        prompt: 'Create a box',
+      });
+
+      expect(res.content).toContain('Created CoreBox');
+      expect(capturedToolCount).toBe(defaultTools.length);
+
+      app.dispose();
+      container.remove();
+    });
+
+    it('preserves existing meshes in create_or_update mode and blocks service.clearModel() inside modeler_execute_babylon_code', async () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const app = new MeshEditorApp({
+        container,
+        engine: new NullEngine(),
+      });
+      app.service.clearModel();
+
+      await app.service.aiAgent.executeToolCall('modeler_create_primitive', {
+        type: 'box',
+        name: 'FirstModelBox',
+      });
+      expect(app.service.importedMeshes.some((m) => m.name === 'FirstModelBox')).toBe(true);
+
+      const sysPromptCreateOrUpdate = app.service.aiAgent.buildSystemPrompt({
+        prompt: 'Create a sphere',
+        sceneMeshCount: 1,
+        mode: 'create_or_update',
+      });
+      expect(sysPromptCreateOrUpdate).toContain('Scene Mode: Create / Update in Scene (Preserve Existing Meshes)');
+      expect(sysPromptCreateOrUpdate).toContain('NEVER delete, dispose, hide, or clear existing scene meshes');
+
+      const sysPromptReplace = app.service.aiAgent.buildSystemPrompt({
+        prompt: 'Create a sphere',
+        sceneMeshCount: 1,
+        mode: 'replace_scene',
+      });
+      expect(sysPromptReplace).not.toContain('Scene Mode: Create / Update in Scene');
+
+      let turn = 0;
+      const fetchSpy = vi.fn(async () => {
+        turn++;
+        if (turn === 1) {
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_clear_attempt',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_execute_babylon_code',
+                          arguments: JSON.stringify({
+                            code: 'service.clearModel(); const s = MeshBuilder.CreateSphere("SecondModelSphere", { diameter: 1 }, scene); registerMesh(s);',
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (turn === 2) {
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_add_sphere',
+                        type: 'function',
+                        function: {
+                          name: 'modeler_create_primitive',
+                          arguments: JSON.stringify({
+                            type: 'sphere',
+                            name: 'SecondModelSphere',
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'Added SecondModelSphere.' } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      });
+
+      app.service.aiAgent.saveConfig({
+        protocol: 'openai',
+        baseUrl: 'https://example.invalid/v1',
+        apiKey: 'test-key',
+        checkZFighting: false,
+      });
+      (app.service.aiAgent as any).customFetch = fetchSpy;
+
+      const res = await app.service.aiAgent.runPrompt({
+        prompt: 'Create a sphere',
+        mode: 'create_or_update',
+      });
+
+      expect(res.toolSteps?.[0]?.isError).toBe(true);
+      expect(res.toolSteps?.[0]?.result).toContain('Create / Update in Scene');
+      expect(app.service.importedMeshes.some((m) => m.name === 'FirstModelBox' && !m.isDisposed())).toBe(true);
+      expect(app.service.importedMeshes.some((m) => m.name === 'SecondModelSphere' && !m.isDisposed())).toBe(true);
+
       app.dispose();
       container.remove();
     });

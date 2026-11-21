@@ -22,6 +22,7 @@
 
             <!-- Dedicated Checkbox Options Row -->
             <div class="ai-checkbox-row" id="aiCheckboxRow">
+              <div>
               <label class="ai-checkbox-label" title="Generate procedural and seamless textures on created meshes">
                 <input type="checkbox" id="aiCreateTexturesCheckQuick" checked />
                 <span>Textures</span>
@@ -30,18 +31,21 @@
                 <input type="checkbox" id="aiCreateNormalMapsCheckQuick" checked />
                 <span>Normal Maps</span>
               </label>
+              </div>
+              <div>
               <label class="ai-checkbox-label" title="Multi-View Visual Critique: AI inspects a 4-angle + wireframe render of its generation and self-corrects">
                 <input type="checkbox" id="aiVisualCritiqueCheckQuick" />
                 <span>Visual Check</span>
               </label>
               <label class="ai-checkbox-label" title="Automatically check generated meshes for coplanar Z-fighting / texture bleeding and self-correct">
-                <input type="checkbox" id="aiCheckZFightingCheckQuick" checked />
+                <input type="checkbox" id="aiCheckZFightingCheckQuick" />
                 <span>Z-Fight Check</span>
               </label>
               <label class="ai-checkbox-label" title="Send a screenshot of the current 3D viewport to the vision model">
                 <input type="checkbox" id="aiIncludeViewportCheck" />
                 <span>+ 3D View</span>
               </label>
+              </div>
             </div>
 
             <div class="ai-endpoint-summary" id="aiEndpointSummaryBar">
@@ -93,7 +97,7 @@
                 id="aiPromptInput"
                 class="ai-prompt-textarea"
                 rows="5"
-                placeholder="Enter a prompt (e.g. 'Build a stone archway' or 'Add a roof to selected mesh')... Sometimes image-to-model works better than text-to-model, use the image tools below. Attach images via button, Drag & Drop or Cmd+V."
+                placeholder="Enter a prompt (e.g. 'Build a stone archway' or 'Add a roof to selected mesh')... Sometimes image-to-model works better than text-to-model, use the image tools below. Attach images via button, Drag & Drop or Cmd+V. ⬆ and ⬇ to cycle previous prompts."
               ></textarea>
               <div class="ai-controls-row">
                 <div class="ai-controls-left">

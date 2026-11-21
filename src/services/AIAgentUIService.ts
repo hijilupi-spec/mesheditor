@@ -10,6 +10,7 @@ import {
 } from '../tools/editor/aiQuickPrompts';
 import type { AIAgentProtocol, AIAgentToolExecutionStep } from '../types';
 import type { MeshEditorAppHost } from './MeshEditorAppHost';
+import { PromptHistoryStore } from './PromptHistoryStore';
 
 export class AIAgentUIService {
   public aiPendingImages: string[] = [];
@@ -22,6 +23,9 @@ export class AIAgentUIService {
   private hasInitializedImagePreviewModal: boolean = false;
   private supportsDisplayTransitionCache: boolean | undefined;
   public syncAIAgentImageGenUI: (() => void) | null = null;
+  public readonly promptHistoryStore = new PromptHistoryStore();
+  private promptHistoryCursor: number = -1;
+  private promptHistoryDraft: { prompt: string; images: string[] } | null = null;
 
   constructor(private readonly app: MeshEditorAppHost) {}
 
@@ -52,6 +56,42 @@ export class AIAgentUIService {
         this.app.service.aiAgent.setSkillEnabled(skill.id, !!checkbox.checked);
       });
       skillsList.appendChild(label);
+    }
+  }
+
+  public renderAIToolSet(): void {
+    const toolList = this.app.getElement<HTMLElement>('aiToolSetList');
+    const countEl = this.app.getElement<HTMLElement>('aiToolSetCount');
+    const tools = this.app.service.aiAgent.getToolDefinitions();
+    const enabledCount = tools.filter((t) => t.enabled).length;
+    if (countEl) {
+      countEl.textContent = `(${enabledCount} / ${tools.length} enabled)`;
+    }
+    if (!toolList) return;
+    toolList.innerHTML = '';
+    for (const tool of tools) {
+      const label = document.createElement('label');
+      label.className = 'ai-skill-item';
+      label.title = tool.description;
+      const coreBadge = tool.isCore
+        ? ' <span style="font-size: 10px; opacity: 0.75; font-weight: 500;">(Core)</span>'
+        : '';
+      label.innerHTML = `
+        <input type="checkbox" data-tool-name="${tool.name}" ${tool.enabled ? 'checked' : ''} />
+        <span class="ai-skill-info">
+          <span class="ai-skill-name">${tool.name}${coreBadge}</span>
+          <span class="ai-skill-desc">${tool.description}</span>
+        </span>
+      `;
+      const checkbox = label.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+      checkbox?.addEventListener('change', () => {
+        this.app.service.aiAgent.setToolEnabled(tool.name, !!checkbox.checked);
+        if (countEl) {
+          const updated = this.app.service.aiAgent.getToolDefinitions();
+          countEl.textContent = `(${updated.filter((t) => t.enabled).length} / ${updated.length} enabled)`;
+        }
+      });
+      toolList.appendChild(label);
     }
   }
 
@@ -90,7 +130,7 @@ export class AIAgentUIService {
             ? 'Local'
             : 'No Key';
     const minP = cfg.minPolygons ?? 200;
-    const maxP = cfg.maxPolygons ?? 5000;
+    const maxP = cfg.maxPolygons ?? 25000;
     const formatPoly = (n: number) => {
       if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M';
       if (n >= 1000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'k';
@@ -176,7 +216,7 @@ export class AIAgentUIService {
     if (createTexturesCheckQuick) createTexturesCheckQuick.checked = initialConfig.createTextures !== false;
     if (createNormalMapsCheckQuick) createNormalMapsCheckQuick.checked = initialConfig.createNormalMaps !== false;
     if (visualCritiqueCheckQuick) visualCritiqueCheckQuick.checked = !!initialConfig.visualCritique;
-    if (checkZFightingCheckQuick) checkZFightingCheckQuick.checked = initialConfig.checkZFighting !== false;
+    if (checkZFightingCheckQuick) checkZFightingCheckQuick.checked = !!initialConfig.checkZFighting;
 
     createTexturesCheckQuick?.addEventListener('change', () => {
       this.app.service.aiAgent.saveConfig({ createTextures: !!createTexturesCheckQuick.checked });
@@ -214,6 +254,9 @@ export class AIAgentUIService {
 
     // Initialize AI Image Preview Lightbox modal
     this.ensureAIImagePreviewModal();
+
+    // Load persisted prompt history (text + images) from IndexedDB
+    void this.promptHistoryStore.init();
 
     // Image attachments (Upload File, Capture 3D Viewport, Paste)
     this.app.getElement('btnAIAttachImage')?.addEventListener('click', () => {
@@ -306,10 +349,57 @@ export class AIAgentUIService {
       this.stopAIGeneration();
     });
 
+    promptInput?.addEventListener('input', () => {
+      this.promptHistoryCursor = -1;
+      this.promptHistoryDraft = null;
+    });
+
     promptInput?.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter' && (!e.shiftKey || e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         this.runAIAgentPrompt();
+        return;
+      }
+
+      if (e.key === 'ArrowUp' && promptInput) {
+        const entries = this.promptHistoryStore.getEntries();
+        const canStartPaging = this.promptHistoryCursor === -1 && promptInput.value === '';
+        if (entries.length > 0 && (this.promptHistoryCursor !== -1 || canStartPaging)) {
+          e.preventDefault();
+          if (this.promptHistoryCursor === -1) {
+            this.promptHistoryDraft = {
+              prompt: promptInput.value,
+              images: [...this.aiPendingImages],
+            };
+            this.promptHistoryCursor = entries.length - 1;
+          } else if (this.promptHistoryCursor > 0) {
+            this.promptHistoryCursor -= 1;
+          }
+          const entry = entries[this.promptHistoryCursor];
+          promptInput.value = entry.prompt;
+          this.aiPendingImages = [...entry.images];
+          this.renderAIAttachments();
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowDown' && promptInput && this.promptHistoryCursor !== -1) {
+        e.preventDefault();
+        const entries = this.promptHistoryStore.getEntries();
+        if (this.promptHistoryCursor < entries.length - 1) {
+          this.promptHistoryCursor += 1;
+          const entry = entries[this.promptHistoryCursor];
+          promptInput.value = entry.prompt;
+          this.aiPendingImages = [...entry.images];
+          this.renderAIAttachments();
+        } else {
+          const draft = this.promptHistoryDraft || { prompt: '', images: [] };
+          promptInput.value = draft.prompt;
+          this.aiPendingImages = [...draft.images];
+          this.renderAIAttachments();
+          this.promptHistoryCursor = -1;
+          this.promptHistoryDraft = null;
+        }
       }
     });
   }
@@ -888,6 +978,11 @@ export class AIAgentUIService {
       this.app.showToast('Please enter a prompt or attach a reference image.', 'warning');
       return;
     }
+
+    // Save prompt + attached images to IndexedDB history and reset paging cursor
+    void this.promptHistoryStore.addEntry(promptText, images);
+    this.promptHistoryCursor = -1;
+    this.promptHistoryDraft = null;
 
     // Sync any edits in the settings inputs before calling the endpoint
     const protocolSelect = this.app.getElement<HTMLSelectElement>('aiProtocolSelect');

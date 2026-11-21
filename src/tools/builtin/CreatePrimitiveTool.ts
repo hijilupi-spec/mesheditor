@@ -11,7 +11,7 @@ import { ToolExecutionContext } from '../ToolExecutionContext';
 export function computeAdaptiveTessellation(
   shapeType: string,
   maxWorldDimension: number,
-  maxPolygonBudget = 5000,
+  maxPolygonBudget = 25000,
   detailTier?: string
 ): number {
   const tier = (detailTier || '').toLowerCase();
@@ -160,7 +160,7 @@ export class CreatePrimitiveTool extends AbstractTool {
         : [Number(args.scaling.x ?? 1) || 1, Number(args.scaling.y ?? 1) || 1, Number(args.scaling.z ?? 1) || 1]
       : [1, 1, 1];
     const maxScale = Math.max(Math.abs(sc[0]), Math.abs(sc[1]), Math.abs(sc[2]));
-    const budget = context.aiAgent?.config?.maxPolygons ?? 5000;
+    const budget = context.aiAgent?.config?.maxPolygons ?? 25000;
     const detailTier = opts.detailTier;
 
     let mesh: Mesh;

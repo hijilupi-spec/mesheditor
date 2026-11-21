@@ -49,6 +49,7 @@ body {
 input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
+  box-sizing: border-box;
   width: 14px;
   height: 14px;
   border-radius: 3px;
@@ -56,11 +57,10 @@ input[type="checkbox"] {
   background: #161b22;
   outline: none;
   cursor: pointer;
-  display: inline-grid;
-  place-content: center;
+  display: inline-block;
   vertical-align: middle;
   flex-shrink: 0;
-  transition: all 0.15s ease-in-out;
+  transition: background 0.15s ease-in-out, border-color 0.15s ease-in-out;
   position: relative;
   margin: 0;
 }
@@ -75,13 +75,23 @@ input[type="checkbox"]:checked {
   border-color: var(--accent-active, #1f6feb);
 }
 
-input[type="checkbox"]:checked::before {
+input[type="checkbox"]::before {
   content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 7px;
   height: 4px;
   border-left: 2px solid #ffffff;
   border-bottom: 2px solid #ffffff;
-  transform: rotate(-45deg) translate(0.5px, -0.5px);
+  transform: translate(-50%, -62%) rotate(-45deg) scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
+
+input[type="checkbox"]:checked::before {
+  transform: translate(-50%, -62%) rotate(-45deg) scale(1);
+  opacity: 1;
 }
 
 input[type="checkbox"]:focus-visible {

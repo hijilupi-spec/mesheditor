@@ -983,6 +983,25 @@ export class AITextureGenerator {
 
     const base = { ...defaultPalettes[style] };
 
+    // Override physical glass / water / pool prompts so they never fall back to matte stone
+    if (/(glass|curtain\s*wall|glazing|window\s*pane|mirror|skyscraper\s*facade)/i.test(lower)) {
+      base.primary = '#0f3356';
+      base.secondary = '#1b4f7a';
+      base.accent = '#9ecae6';
+      base.roughness = 0.04;
+      base.metallic = 0.45;
+      base.normalStrength = 0.35;
+      base.preset = 'architectural_glass';
+    } else if (/\b(water|pool|ocean|swimming|pond|lake)\b/i.test(lower)) {
+      base.primary = '#0c7fa6';
+      base.secondary = '#085e7d';
+      base.accent = '#7ae0f5';
+      base.roughness = 0.04;
+      base.metallic = 0.15;
+      base.normalStrength = 0.3;
+      base.preset = 'clear_glass';
+    }
+
     // 3. Override colors from prompt keywords if not explicitly provided
     const keywordColors: Array<{ regex: RegExp; hex: string }> = [
       { regex: /\b(crimson|blood|scarlet)\b/i, hex: '#991b1b' },

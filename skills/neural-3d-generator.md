@@ -2,7 +2,7 @@
 id: neural-3d-generator
 name: Neural 3D Generator Delegation (TRELLIS 2, Hunyuan3D & Hi3D)
 description: Guidance for delegating full 3D assets or complex organic subtasks to external Neural 3D Generators (TRELLIS 2, Hunyuan3D, Hi3D) via oMLX, local endpoints, or cloud APIs.
-enabled: true
+enabled: false
 ---
 
 # Neural 3D Generator Delegation Skill (TRELLIS 2 / Hunyuan3D / Hi3D)

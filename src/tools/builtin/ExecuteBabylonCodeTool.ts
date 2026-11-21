@@ -157,10 +157,42 @@ export class ExecuteBabylonCodeTool extends AbstractTool {
 
     const autoUV = (m: Mesh, scale: number = 1.0) => {
       if (m && m instanceof Mesh && !m.isDisposed()) {
-        const prev = context.service.selectedMesh;
-        context.service.selectedMesh = m;
-        context.service.applyTriplanarUVs(scale);
-        context.service.selectedMesh = prev;
+        // Preserve and scale existing clean UVs on curved meshes (e.g. cylinders, spheres, lathes)
+        // because triplanar projection swaps X/Z axes at 45° and creates diagonal triangle seams.
+        const existingUvs = m.getVerticesData(VertexBuffer.UVKind);
+        const normals = m.getVerticesData(VertexBuffer.NormalKind);
+        const indices = m.getIndices();
+        let hasCurvedSeam = false;
+        if (existingUvs && normals && indices && indices.length >= 3) {
+          const dominantAxis = (idx: number): number => {
+            const nx = Math.abs(normals[idx * 3]);
+            const ny = Math.abs(normals[idx * 3 + 1]);
+            const nz = Math.abs(normals[idx * 3 + 2]);
+            if (ny >= nx && ny >= nz) return 1;
+            return nx >= nz ? 0 : 2;
+          };
+          for (let t = 0; t + 2 < indices.length; t += 3) {
+            const a = dominantAxis(indices[t]);
+            const b = dominantAxis(indices[t + 1]);
+            const c = dominantAxis(indices[t + 2]);
+            if (a !== b || b !== c) {
+              hasCurvedSeam = true;
+              break;
+            }
+          }
+        }
+        if (hasCurvedSeam && existingUvs) {
+          const scaled = new Float32Array(existingUvs.length);
+          for (let i = 0; i < existingUvs.length; i++) {
+            scaled[i] = existingUvs[i] * scale;
+          }
+          m.setVerticesData(VertexBuffer.UVKind, scaled);
+        } else {
+          const prev = context.service.selectedMesh;
+          context.service.selectedMesh = m;
+          context.service.applyTriplanarUVs(scale);
+          context.service.selectedMesh = prev;
+        }
       }
       return m;
     };

@@ -10,7 +10,9 @@ enabled: true
 Use this skill when meshes already exist in the scene and the user wants to adapt, extend, repair, recolor, hollow out, or rebuild an existing model ("Text to Mesh Update" / "Image to Mesh Update").
 
 ## Rules for Updating Existing Meshes
-1. **Check Scene & Selection**:
+1. **Preserve Existing Meshes**:
+   - In **Create / Update in Scene** mode, NEVER delete, dispose, or clear existing scene meshes unless the user explicitly asks to remove or replace them. When adding a new object to a non-empty scene, keep all existing meshes intact.
+2. **Check Scene & Selection**:
    - Inspect active meshes via context or `modeler_get_scene_info` for exact bounding boxes (`min`, `max`, `center`, `size`).
 2. **Accurate Placement relative to existing meshes**:
    - Use the bounding box of existing meshes to accurately position additions (e.g. roof on a house, handle on a cup, wheels on a vehicle, battlements on a tower).

@@ -2,7 +2,7 @@
 id: voxel-painter
 name: Voxel & Block Modeler (3D Voxel Grids & 2D-to-3D Extrusion)
 description: Guidance for generating 3D voxel models, blocky characters, pixel-art extrusions, and modular terrain blocks using palette-based voxel runs or box regions.
-enabled: true
+enabled: false
 ---
 
 # Voxel & Block Modeler Skill

@@ -119,6 +119,25 @@ if (typeof globalThis !== 'undefined') {
 
 export const AI_AGENT_STORAGE_KEY = 'mesheditor_ai_agent_config';
 
+export const CORE_TOOL_NAMES: readonly string[] = [
+  'modeler_execute_babylon_code',
+  'modeler_get_scene_info',
+  'modeler_create_primitive',
+  'modeler_create_rounded_box',
+  'modeler_create_sdf_mesh',
+  'modeler_create_lathe',
+  'modeler_create_tube',
+  'modeler_boolean_operation',
+  'modeler_create_material',
+  'modeler_apply_material',
+  'modeler_transform_mesh',
+  'modeler_merge_meshes',
+  'modeler_generate_texture',
+  'modeler_generate_neural_mesh',
+];
+
+export const CORE_TOOL_SET: ReadonlySet<string> = new Set(CORE_TOOL_NAMES);
+
 export const DEFAULT_AI_AGENT_CONFIG: AIAgentEndpointConfig = {
   protocol: 'openai',
   baseUrl: '/api/antigravity/v1',
@@ -130,19 +149,20 @@ export const DEFAULT_AI_AGENT_CONFIG: AIAgentEndpointConfig = {
   ollamaNumCtx: DEFAULT_OLLAMA_NUM_CTX,
   azureApiVersion: DEFAULT_AZURE_API_VERSION,
   reasoningEffort: '',
-  maxIterations: 12,
+  maxIterations: 6,
   minPolygons: 200,
-  maxPolygons: 5000,
+  maxPolygons: 25000,
   createTextures: true,
   createNormalMaps: true,
   visualCritique: false,
-  checkZFighting: true,
+  checkZFighting: false,
   promptSuffix: '',
   neural3DProviders: createDefaultNeural3DProviders(),
-  imageGeneratorEnabled: true,
+  imageGeneratorEnabled: false,
   imageGeneratorActiveBackend: 'pollinations',
   imageGeneratorProviders: createDefaultImageGeneratorProviders(),
   skillStates: {},
+  toolStates: {},
 };
 
 /* =========================================================================
@@ -161,6 +181,7 @@ export class AIAgentService {
   public chatHistory: AIAgentChatMessage[] = [];
   public toolRegistry: ToolRegistry;
   private materialRegistry: Map<string, PBRMaterial> = new Map();
+  private customRegisteredTools: Set<string> = new Set();
   public customFetch: typeof fetch | null = null;
   private currentRequestImages: string[] = [];
   private currentRequestSignal?: AbortSignal;
@@ -221,7 +242,7 @@ export class AIAgentService {
       for (const [id, prov] of Object.entries(providers)) {
         this.service.externalImageGenerator.updateProvider(id as any, prov);
       }
-      const isEnabled = this.config.imageGeneratorEnabled ?? true;
+      const isEnabled = !!this.config.imageGeneratorEnabled;
       const activeBackend = this.config.imageGeneratorActiveBackend || 'pollinations';
       this.service.externalImageGenerator.setActiveBackend(
         isEnabled && activeBackend !== 'procedural' ? (activeBackend as any) : 'procedural'
@@ -242,6 +263,7 @@ export class AIAgentService {
    * Registers a custom modeling tool into the agent registry.
    */
   public registerTool(tool: ToolInterface): void {
+    this.customRegisteredTools.add(tool.name);
     this.toolRegistry.register(tool);
   }
 
@@ -379,6 +401,8 @@ export class AIAgentService {
         imageGeneratorProviders: normalizeImageGeneratorProviders(parsed.imageGeneratorProviders),
         skillStates:
           parsed.skillStates && typeof parsed.skillStates === 'object' ? { ...parsed.skillStates } : {},
+        toolStates:
+          parsed.toolStates && typeof parsed.toolStates === 'object' ? { ...parsed.toolStates } : {},
       };
     } catch {
       return {};
@@ -490,7 +514,7 @@ export class AIAgentService {
   }
 
   public getActiveExternalImageGenerator(): ImageGeneratorProviderConfig | null {
-    if (this.config.imageGeneratorEnabled === false) {
+    if (!this.config.imageGeneratorEnabled) {
       return null;
     }
     const serviceBackend = this.service?.externalImageGenerator?.getActiveBackend();
@@ -1038,7 +1062,7 @@ export class AIAgentService {
     return detectZFighting(validMeshes, options);
   }
 
-  public buildSceneSummary(): Record<string, any> {
+  public buildSceneSummary(options?: { skipZFighting?: boolean }): Record<string, any> {
     const validMeshes = this.service.importedMeshes.filter(
       (m) => !this.service.isEditorHelper(m) && !m.isDisposed()
     );
@@ -1141,7 +1165,7 @@ export class AIAgentService {
     }
 
     const minPoly = typeof this.config.minPolygons === 'number' ? this.config.minPolygons : 200;
-    const maxPoly = typeof this.config.maxPolygons === 'number' ? this.config.maxPolygons : 5000;
+    const maxPoly = typeof this.config.maxPolygons === 'number' ? this.config.maxPolygons : 25000;
     const budgetStatus =
       totalSceneTriangles === 0
         ? 'empty'
@@ -1161,7 +1185,9 @@ export class AIAgentService {
           .map((cm) => cm.name),
       }));
 
-    const zFightingReport = this.checkSceneZFighting({ maxIssues: 12 });
+    const zFightingReport = options?.skipZFighting
+      ? { hasIssues: false, issueCount: 0, issues: [] }
+      : this.checkSceneZFighting({ maxIssues: 12 });
 
     return {
       totalMeshes: meshes.length,
@@ -1193,20 +1219,73 @@ export class AIAgentService {
     };
   }
 
-  public buildSystemPrompt(): string {
-    const activeSkillsText = this.skills
-      .filter((s) => s.enabled)
+  private selectRelevantSkills(context?: {
+    prompt?: string;
+    hasImages?: boolean;
+    sceneMeshCount?: number;
+  }): AIAgentSkillDefinition[] {
+    const enabled = this.skills.filter((s) => s.enabled);
+    if (!context) return enabled;
+
+    const promptText = context.prompt || '';
+    const hasImages = !!context.hasImages;
+    const sceneMeshCount = context.sceneMeshCount ?? 0;
+    const hasNeural = this.getEnabledNeural3DProviders().length > 0;
+
+    return enabled.filter((skill) => {
+      switch (skill.id) {
+        case 'image-to-mesh':
+          return (
+            hasImages ||
+            /\b(image|photo|picture|screenshot|reference|concept\s*art|reconstruct)\b/i.test(promptText)
+          );
+        case 'mesh-updater':
+          return sceneMeshCount > 0;
+        case 'neural-3d-generator':
+          return hasNeural;
+        case 'voxel-painter':
+          return /\b(voxel|pixel|blocky|minecraft|sprite|8-bit|retro)\b/i.test(promptText);
+        case 'figure-sculptor':
+          return (
+            hasImages ||
+            /\b(character|creature|figure|human|person|man|woman|boy|girl|hero|warrior|knight|monster|dragon|frog|cat|dog|animal|bust|face|head|body|statue|sculpt|organic|mascot|mario|npc|skeleton|rig)\b/i.test(
+              promptText
+            )
+          );
+        default:
+          return true;
+      }
+    });
+  }
+
+  public buildSystemPrompt(context?: {
+    prompt?: string;
+    hasImages?: boolean;
+    sceneMeshCount?: number;
+    checkZFighting?: boolean;
+    mode?: 'create_or_update' | 'replace_scene';
+  }): string {
+    const selectedSkills = this.selectRelevantSkills(context);
+    const activeSkillsText = selectedSkills
       .map((s) => `--- SKILL: ${s.name} (${s.id}) ---\n${s.instructions}`)
       .join('\n\n');
 
-    const sceneStateJson = JSON.stringify(this.buildSceneSummary(), null, 2);
+    const checkZFightingEnabled =
+      context?.checkZFighting !== undefined ? context.checkZFighting : !!this.config.checkZFighting;
+
+    const sceneStateJson = JSON.stringify(
+      this.buildSceneSummary({ skipZFighting: !checkZFightingEnabled }),
+      null,
+      2
+    );
 
     const minPoly = typeof this.config.minPolygons === 'number' ? this.config.minPolygons : 200;
-    const maxPoly = typeof this.config.maxPolygons === 'number' ? this.config.maxPolygons : 5000;
+    const maxPoly = typeof this.config.maxPolygons === 'number' ? this.config.maxPolygons : 25000;
     const createTextures = this.config.createTextures !== false;
     const createNormalMaps = this.config.createNormalMaps !== false && createTextures;
 
     const activeImageGenerator = createTextures ? this.getActiveExternalImageGenerator() : null;
+    const enabledNeural = this.getEnabledNeural3DProviders();
 
     const normalMapRule = createNormalMaps
       ? ` Normal maps are ENABLED: use \`normalMapUrl\` / \`bumpTextureUrl\`, \`modeler_generate_texture\` (automatic 4-map de-lit Albedo + Sobel Normal + ORM + Cavity AO), or \`withProceduralMaps: true\` in \`modeler_create_material\` (with \`bumpLevel\`, \`invertNormalMapY\`, or \`useParallax\`) to add realistic tactile depth and surface micro-relief.`
@@ -1238,7 +1317,6 @@ The user has configured and enabled the following external AI Image Generator:
 - Reuse generated textures across matching parts via \`materialName\`, and use \`modeler_create_material\` (solid PBR color / \`materialPreset\`) for tiny tertiary details (eyes, pupils, eyebrows, spots, buttons, rivets) instead of generating redundant textures.\n`
       : '';
 
-    const enabledNeural = this.getEnabledNeural3DProviders();
     const neuralDelegationSection =
       enabledNeural.length > 0
         ? `\n## Active Neural 3D Generators (Available via \`modeler_generate_neural_mesh\`)
@@ -1253,13 +1331,22 @@ ${enabledNeural
 When requested to create complex organic figures, creatures, statues, busts, monsters, detailed props, or Image-to-3D reconstructions, delegate full tasks or organic hero subtasks to \`modeler_generate_neural_mesh\` (\`backend: "trellis" | "hunyuan3d" | "hi3d" | "auto"\`). For architectural or composite scenes, build walls/columns/stairs/pedestals procedurally and delegate only the organic hero elements to \`modeler_generate_neural_mesh\`.\n`
         : '';
 
+    const sceneMeshCount = context?.sceneMeshCount ?? 0;
+    const preserveSceneSection =
+      context?.mode !== 'replace_scene' && sceneMeshCount > 0
+        ? `\n## Scene Mode: Create / Update in Scene (Preserve Existing Meshes)
+- The user has selected **"Create / Update in Scene"** (NOT "Replace Scene"). There are currently **${sceneMeshCount}** existing mesh(es) in the scene.
+- **CRITICAL**: **NEVER delete, dispose, hide, or clear existing scene meshes** (do NOT call \`modeler_delete_mesh\`, \`service.clearModel()\`, or \`.dispose()\` on existing meshes) unless the user **explicitly** asks to delete, remove, or replace a specific mesh.
+- If the user asks to create a new object or model while other meshes already exist in the scene, **keep all existing meshes intact** and add the new meshes alongside them (offsetting their position if needed so they do not overlap existing geometry, unless exact coordinates are requested).\n`
+        : '';
+
     return `You are the built-in 3D AI Mesh Agent in **Mesh Editor**.
 Your mission is to procedurally build high-quality 3D meshes or accurately update existing meshes directly in the active Babylon.js 3D scene from text prompts and/or reference images ("Text-to-Mesh", "Image-to-Mesh", "Text/Image-to-Mesh Update").
 
 You have built-in Babylon.js modeling tools (\`modeler_*\`) and the following built-in skills available:
 
 ${activeSkillsText}
-${externalImageGenSection}${neuralDelegationSection}
+${externalImageGenSection}${neuralDelegationSection}${preserveSceneSection}
 ## Current 3D Scene State
 \`\`\`json
 ${sceneStateJson}
@@ -1267,6 +1354,7 @@ ${sceneStateJson}
 
 ## Key Execution Rules
 1. **Actively call the provided tools** to create or modify geometry in the scene! Never reply with text alone when the user requests a 3D model or modification.
+   - **Batch & Script Efficiency**: Minimize sequential LLM round-trips! Either batch multiple \`modeler_*\` tool calls in the same turn OR use \`modeler_execute_babylon_code\` to construct multi-part geometry and materials in a single script instead of creating 1 part per turn.
 2. **Descriptive Naming**: Give every created mesh and material a meaningful name (e.g., \`"stone_pillar_base"\`, \`"gear_wheel"\`, \`"oak_wood_mat"\`).
 ${textureRule}
 4. **Right Tool for the Job & 5 Surface Topology Archetypes (Avoid Wooden / Blocky Results)**:
@@ -1295,14 +1383,55 @@ ${textureRule}
 8. **Zero Z-Fighting & Texture Bleeding Mandate**:
    - NEVER place two faces on the exact same geometric plane (e.g. a flush panel, door, window, trim, sign, or rug at \`0.000m\` offset on a wall or floor face). Coplanar overlapping faces cause Z-fighting and texture bleeding.
    - To add recessed or raised surface detail (windows, doors, panels, screens, inlays), prefer \`modeler_facet_inset\` (with non-zero \`depth\`, e.g. \`depth: -0.02\` or \`0.02\`) and \`modeler_facet_extrude\` (e.g. \`distance: 0.02\`), OR offset secondary meshes by at least \`0.01\` to \`0.03m\` along the face normal, OR carve cleanly with \`modeler_boolean_operation\`.
-   - Call \`modeler_check_z_fighting\` after assembling multi-part geometry to verify zero coplanar overlaps remain, and fix any flagged faces via \`modeler_facet_extrude\`, \`modeler_facet_inset\`, or \`modeler_transform_mesh\`.`;
+   ${checkZFightingEnabled ? `- Call \`modeler_check_z_fighting\` after assembling multi-part geometry to verify zero coplanar overlaps remain, and fix any flagged faces via \`modeler_facet_extrude\`, \`modeler_facet_inset\`, or \`modeler_transform_mesh\`.` : `- **Z-Fighting Check DISABLED by user**: Do NOT call \`modeler_check_z_fighting\`.`}`;
   }
 
   /* =========================================================================
      OPENAI-COMPATIBLE TOOL DEFINITIONS
      ========================================================================= */
+  public isToolEnabled(toolName: string): boolean {
+    if (toolName === 'modeler_check_z_fighting' && !this.config.checkZFighting) {
+      return false;
+    }
+    const states = this.config.toolStates;
+    if (states && typeof states[toolName] === 'boolean') {
+      return states[toolName];
+    }
+    if (this.customRegisteredTools.has(toolName)) {
+      return true;
+    }
+    return CORE_TOOL_SET.has(toolName);
+  }
+
+  public getToolDefinitions(): Array<{
+    name: string;
+    description: string;
+    isCore: boolean;
+    enabled: boolean;
+  }> {
+    return this.toolRegistry.getAll().map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      isCore: CORE_TOOL_SET.has(tool.name),
+      enabled: this.isToolEnabled(tool.name),
+    }));
+  }
+
+  public setToolEnabled(toolName: string, enabled: boolean): void {
+    const nextStates = { ...(this.config.toolStates || {}), [toolName]: enabled };
+    this.saveConfig({ toolStates: nextStates });
+  }
+
+  public setToolPreset(preset: 'core' | 'all'): void {
+    const nextStates: Record<string, boolean> = {};
+    for (const tool of this.toolRegistry.getAll()) {
+      nextStates[tool.name] = preset === 'all' ? true : CORE_TOOL_SET.has(tool.name) || this.customRegisteredTools.has(tool.name);
+    }
+    this.saveConfig({ toolStates: nextStates });
+  }
+
   public getOpenAITools(): any[] {
-    return this.toolRegistry.getOpenAITools();
+    return this.toolRegistry.getOpenAITools().filter((t) => this.isToolEnabled(t?.function?.name || ''));
   }
 
   /* =========================================================================
@@ -1733,7 +1862,10 @@ ${textureRule}
 
     const prompt = rawPrompt ? (promptSuffix ? `${rawPrompt}\n\n${promptSuffix}` : rawPrompt) : '';
 
-    if (options.mode === 'replace_scene') {
+    const mode: 'create_or_update' | 'replace_scene' =
+      options.mode === 'replace_scene' ? 'replace_scene' : 'create_or_update';
+
+    if (mode === 'replace_scene') {
       this.service.clearModel();
     }
 
@@ -1747,11 +1879,27 @@ ${textureRule}
     };
     this.chatHistory.push(userMsg);
 
+    // Snapshot scene meshes before agent execution for 1-click Undo/Redo support
+    const meshesBeforeRun = new Set(
+      this.service.importedMeshes.filter((m) => !this.service.isEditorHelper(m) && !m.isDisposed())
+    );
+
+    const enableVisualCritique =
+      options.visualCritique !== undefined ? options.visualCritique : !!this.config.visualCritique;
+    const enableZFightingCheck =
+      options.checkZFighting !== undefined ? options.checkZFighting : !!this.config.checkZFighting;
+
     // Build OpenAI messages payload
     const apiMessages: any[] = [
       {
         role: 'system',
-        content: this.buildSystemPrompt(),
+        content: this.buildSystemPrompt({
+          prompt,
+          hasImages: images.length > 0,
+          sceneMeshCount: meshesBeforeRun.size,
+          checkZFighting: enableZFightingCheck,
+          mode,
+        }),
       },
     ];
 
@@ -1794,10 +1942,6 @@ ${textureRule}
       });
     }
 
-    // Snapshot scene meshes before agent execution for 1-click Undo/Redo support
-    const meshesBeforeRun = new Set(
-      this.service.importedMeshes.filter((m) => !this.service.isEditorHelper(m) && !m.isDisposed())
-    );
     const preRunTransforms = new Map<
       Mesh,
       { pos: Vector3; rot: Vector3; scale: Vector3; mat: Material | null; visible: boolean; enabled: boolean }
@@ -1815,10 +1959,6 @@ ${textureRule}
 
     const executedSteps: AIAgentToolExecutionStep[] = [];
     const maxIterations = Math.max(1, Math.min(25, this.config.maxIterations || 12));
-    const enableVisualCritique =
-      options.visualCritique !== undefined ? options.visualCritique : !!this.config.visualCritique;
-    const enableZFightingCheck =
-      options.checkZFighting !== undefined ? options.checkZFighting : this.config.checkZFighting !== false;
     let critiqueCompleted = false;
     let zFightingCheckCompleted = false;
     let finalAssistantText = '';
@@ -1840,6 +1980,15 @@ ${textureRule}
       }
       return capturedSubActions;
     };
+
+    const originalClearModel = this.service.clearModel;
+    if (mode !== 'replace_scene') {
+      (this.service as any).clearModel = () => {
+        throw new Error(
+          'service.clearModel() is disabled in "Create / Update in Scene" mode. Keep existing meshes intact or switch to "Replace Scene (Clear First)".'
+        );
+      };
+    }
 
     try {
       for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -2036,7 +2185,7 @@ ${textureRule}
           const multiViewUrl = this.captureMultiViewDataUrl();
           const summary = this.buildSceneSummary();
           const minPoly = typeof this.config.minPolygons === 'number' ? this.config.minPolygons : 200;
-          const maxPoly = typeof this.config.maxPolygons === 'number' ? this.config.maxPolygons : 5000;
+          const maxPoly = typeof this.config.maxPolygons === 'number' ? this.config.maxPolygons : 25000;
 
           if (assistantContent) {
             apiMessages.push({
@@ -2177,6 +2326,10 @@ Fix EVERY issue listed above NOW using the appropriate \`modeler_*\` tools:
       this.service.events.onStatusChanged?.('Ready', false);
       this.service.events.onToast?.(`AI Agent error: ${err?.message || err}`, 'error');
       throw err;
+    } finally {
+      if (mode !== 'replace_scene') {
+        (this.service as any).clearModel = originalClearModel;
+      }
     }
   }
 

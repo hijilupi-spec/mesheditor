@@ -192,6 +192,7 @@ export interface AIAgentEndpointConfig {
   imageGeneratorActiveBackend?: ImageGeneratorBackendId | 'procedural';
   imageGeneratorProviders?: ImageGeneratorProvidersMap;
   skillStates?: Record<string, boolean>;
+  toolStates?: Record<string, boolean>;
 }
 
 export interface AIAgentSkillDefinition {

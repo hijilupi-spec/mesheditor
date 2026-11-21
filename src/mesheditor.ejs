@@ -1315,6 +1315,24 @@
                 <div id="aiSkillsList" class="ai-skills-list settings-ai-skills-grid"></div>
               </div>
 
+              <!-- Section 2b: AI Tool Set -->
+              <div class="settings-section">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+                  <h4 class="settings-section-title" style="margin: 0;">
+                    <i class="app-icon" data-lucide="wrench"></i> Tool Set
+                    <span id="aiToolSetCount" class="ai-slider-subtext" style="font-weight: 400; margin-left: 6px;"></span>
+                  </h4>
+                  <div class="ai-preset-chips" style="margin: 0;">
+                    <button type="button" class="ai-chip-btn" id="btnAIToolsCorePreset">Core Tools (Default)</button>
+                    <button type="button" class="ai-chip-btn" id="btnAIToolsAllPreset">Enable All</button>
+                  </div>
+                </div>
+                <div class="ai-slider-subtext" style="margin-bottom: 8px;">
+                  Choose which <code>modeler_*</code> tools are sent to the AI model. Keeping only Core Tools enabled reduces prompt size and speeds up generation.
+                </div>
+                <div id="aiToolSetList" class="ai-skills-list settings-ai-skills-grid"></div>
+              </div>
+
               <!-- Section 3: Global Prompt Suffix -->
               <div class="settings-section">
                 <h4 class="settings-section-title"><i class="app-icon" data-lucide="wand-2"></i> Global Prompt Suffix</h4>
@@ -1357,26 +1375,50 @@
                   <div class="setting-item">
                     <div class="ai-slider-header">
                       <label class="setting-label" for="aiMaxPolyInput">Maximum Polygons</label>
-                      <span class="ai-slider-value" id="aiMaxPolyVal">5,000</span>
+                      <span class="ai-slider-value" id="aiMaxPolyVal">25,000</span>
                     </div>
                     <input
                       type="range"
                       id="aiMaxPolyInput"
                       class="ai-slider setting-range"
                       min="500"
-                      max="1000000"
+                      max="500000"
                       step="500"
-                      value="5000"
+                      value="25000"
                     />
                     <div class="ai-preset-chips" id="aiMaxPolyChips" style="margin-top: 2px;">
                       <button type="button" class="ai-chip-btn" data-poly="2500">2.5k</button>
-                      <button type="button" class="ai-chip-btn" data-poly="5000">5k (Default)</button>
-                      <button type="button" class="ai-chip-btn" data-poly="25000">25k</button>
-                      <button type="button" class="ai-chip-btn" data-poly="100000">100k</button>
-                      <button type="button" class="ai-chip-btn" data-poly="500000">500k</button>
-                      <button type="button" class="ai-chip-btn" data-poly="1000000">1M</button>
+                      <button type="button" class="ai-chip-btn" data-poly="5000">5k</button>
+                      <button type="button" class="ai-chip-btn" data-poly="25000">25K (Default)</button>
+                      <button type="button" class="ai-chip-btn" data-poly="50000">50K</button>
+                      <button type="button" class="ai-chip-btn" data-poly="100000">100K</button>
+                      <button type="button" class="ai-chip-btn" data-poly="250000">250K</button>
+                      <button type="button" class="ai-chip-btn" data-poly="500000">500K</button>
                     </div>
-                    <div class="ai-slider-subtext">Target geometric complexity ceiling (500 to 1,000,000 polygons).</div>
+                    <div class="ai-slider-subtext">Target geometric complexity ceiling (500 to 500,000 polygons).</div>
+                  </div>
+
+                  <div class="setting-item">
+                    <div class="ai-slider-header">
+                      <label class="setting-label" for="aiMaxIterationsInput">Max Agent Steps (Iterations)</label>
+                      <span class="ai-slider-value" id="aiMaxIterationsVal">6</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="aiMaxIterationsInput"
+                      class="ai-slider setting-range"
+                      min="1"
+                      max="25"
+                      step="1"
+                      value="6"
+                    />
+                    <div class="ai-preset-chips" id="aiMaxIterationsChips" style="margin-top: 2px;">
+                      <button type="button" class="ai-chip-btn" data-iterations="3">3 (Fast)</button>
+                      <button type="button" class="ai-chip-btn" data-iterations="6">6 (Default)</button>
+                      <button type="button" class="ai-chip-btn" data-iterations="12">12</button>
+                      <button type="button" class="ai-chip-btn" data-iterations="20">20 (Deep)</button>
+                    </div>
+                    <div class="ai-slider-subtext">Maximum LLM tool-calling turns per request (1–25). Lower values keep generation fast.</div>
                   </div>
                 </div>
 
@@ -1407,7 +1449,7 @@
 
                   <div class="setting-item">
                     <label class="ai-checkbox-label" for="aiCheckZFightingCheck" style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                      <input type="checkbox" id="aiCheckZFightingCheck" checked />
+                      <input type="checkbox" id="aiCheckZFightingCheck" />
                       <span><strong>Z-Fighting &amp; Texture Bleeding Check</strong></span>
                     </label>
                     <div class="ai-slider-subtext">Automatically checks generated meshes for coplanar overlapping faces so the AI can fix Z-fighting via facet extrude/inset or offset.</div>
@@ -1516,7 +1558,7 @@
                 <div class="ai-neural-provider-card">
                   <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
                     <label class="ai-checkbox-label" for="aiImageGenEnabled" style="cursor: pointer; display: flex; align-items: center; gap: 8px; margin: 0;">
-                      <input type="checkbox" id="aiImageGenEnabled" checked />
+                      <input type="checkbox" id="aiImageGenEnabled" />
                       <span><strong>Enable AI Image Generator</strong></span>
                     </label>
                     <button type="button" class="ai-chip-btn" id="btnTestImageGenGlobal" title="Test Generator Endpoint Connection">Test</button>

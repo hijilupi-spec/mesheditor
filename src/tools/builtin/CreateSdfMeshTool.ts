@@ -251,7 +251,7 @@ export class CreateSdfMeshTool extends AbstractTool {
     const compiledParts = compileSdfParts(rawParts, symmetryX);
 
     // Budget-aware default resolution
-    const maxBudget = context.aiAgent?.config?.maxPolygons || 5000;
+    const maxBudget = context.aiAgent?.config?.maxPolygons || 25000;
     let defaultRes = 48;
     if (maxBudget <= 1500) defaultRes = 28;
     else if (maxBudget <= 3500) defaultRes = 38;

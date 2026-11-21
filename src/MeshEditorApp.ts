@@ -1807,6 +1807,10 @@ export class MeshEditorApp {
     this.aiAgentUI.renderAISkills();
   }
 
+  public renderAIToolSet(): void {
+    this.aiAgentUI.renderAIToolSet();
+  }
+
   /**
    * Refreshes the AI endpoint summary bar inside the AI Mesh Agent dialog.
    */
