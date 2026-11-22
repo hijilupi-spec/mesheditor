@@ -121,8 +121,12 @@ export interface MeshEditorAppHost {
   openScreenshotDialog(): void;
   closeScreenshotDialog(): void;
   setScreenshotMode(mode: ScreenshotMode): void;
-  openHelpModal(): void;
+  openHelpModal(initialTopicId?: string): void;
   closeHelpModal(): void;
+  isHelpModalOpen(): boolean;
+  startGuidedTour(startIndex?: number): void;
+  closeGuidedTour(restoreFocus?: boolean): void;
+  isGuidedTourOpen(): boolean;
   openAboutModal(): void;
   closeAboutModal(): void;
   showToolHelp(toolOrId: string | ToolInterface): void;

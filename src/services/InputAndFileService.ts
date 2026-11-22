@@ -445,7 +445,9 @@ export class InputAndFileService {
           inDropdownMenu ||
           Boolean(this.app.getElement('exportModal')?.classList.contains('active')) ||
           Boolean((this.app.getElement('aboutModal') || document.getElementById('aboutModal'))?.classList.contains('active')) ||
-          Boolean((this.app.getElement('helpModal') || document.getElementById('helpModal'))?.classList.contains('active')) ||
+          this.app.isHelpModalOpen() ||
+          this.app.helpModals.wasRecentlyClosedByEscape() ||
+          this.app.isGuidedTourOpen() ||
           Boolean(this.app.getElement('toolHelpModal')?.classList.contains('active')) ||
           Boolean((this.app.getElement('promptHelpModal') || document.getElementById('promptHelpModal'))?.classList.contains('active')) ||
           Boolean(this.app.getElement('heightmapPaintModal')?.classList.contains('active'));
@@ -454,6 +456,7 @@ export class InputAndFileService {
         this.app.closeExportDialog();
         this.app.closeAboutModal();
         this.app.closeHelpModal();
+        this.app.closeGuidedTour(true);
         this.app.hidePromptHelp();
 
         if (hadOpenOverlay) {

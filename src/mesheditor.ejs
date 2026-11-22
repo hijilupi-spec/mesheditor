@@ -230,7 +230,7 @@
         </div>
 
         <div class="btn-group panel-group">
-          <button class="tool-btn panel-btn" id="btnHelp" title="Help & Keyboard Shortcuts">
+          <button class="tool-btn panel-btn" id="btnHelp" title="Help Assistant & Guided Tour">
             <span class="btn-icon"><i class="app-icon" data-lucide="help-circle"></i></span>
           </button>
           <button class="tool-btn panel-btn" id="btnSettings" title="Settings" aria-label="Settings">
@@ -644,173 +644,102 @@
         </div>
       </div>
 
-      <!-- Help Modal Dialog -->
-      <div id="helpModal">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h3><i class="app-icon" data-lucide="help-circle"></i> Mesh Editor Guide & Shortcuts</h3>
-            <button class="dialog-btn btn-close" id="btnCloseHelp"><i class="app-icon" data-lucide="x"></i></button>
-          </div>
-          <div class="modal-body">
-            <div class="help-section">
-              <h4><i class="app-icon" data-lucide="mouse"></i> Mouse Controls & Selection</h4>
-              <table class="help-table">
-                <tr>
-                  <td>Left Click</td>
-                  <td>Select mesh or facet & drag transform gizmos</td>
-                </tr>
-                <tr>
-                  <td>Shift+Click / Cmd+Click</td>
-                  <td>Toggle selection / multi-select individual meshes</td>
-                </tr>
-                <tr>
-                  <td>Click & Drag (Viewport)</td>
-                  <td>Marquee / rectangle box select multiple meshes (Shift/Cmd for additive)</td>
-                </tr>
-                <tr>
-                  <td>Click on Ground / Empty Space</td>
-                  <td>Clear selection (unless Shift or Cmd is held)</td>
-                </tr>
-                <tr>
-                  <td>Right Click (Hold & Drag)</td>
-                  <td>Orbit & rotate camera freely in 3D</td>
-                </tr>
-                
-              </table>
-            </div>
-
-            <div class="help-section">
-              <h4><i class="app-icon" data-lucide="smartphone"></i> Touch &amp; Mobile Controls</h4>
-              <table class="help-table">
-                <tr>
-                  <td>Tap (1 Finger)</td>
-                  <td>Select mesh, facet, or drag 3D transform gizmo handles</td>
-                </tr>
-                <tr>
-                  <td>Drag (1 Finger)</td>
-                  <td>Orbit camera around the scene (or drag selection box in <em>Box Select</em> mode)</td>
-                </tr>
-                <tr>
-                  <td>Pinch &amp; Drag (2 Fingers)</td>
-                  <td>Zoom in/out and pan camera smoothly</td>
-                </tr>
-                <tr>
-                  <td>Touch Bar (Bottom Left)</td>
-                  <td>Switch <em>Orbit / Box Select</em>, toggle <em>+Select</em> (multi-select), <em>Snap</em>, and <em>Focus</em> without a keyboard</td>
-                </tr>
-              </table>
-            </div>
-
-            <div class="help-section">
-              <h4><i class="app-icon" data-lucide="keyboard"></i> Keyboard Shortcuts & Snapping</h4>
-              <table class="help-table">
-                <tr>
-                  <td><span class="shortcut-tag">W, A, S, D</span> / <span class="shortcut-tag">Arrows</span></td>
-                  <td>Fly camera through the 3D scene (no gizmo conflict)</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">M</span></td>
-                  <td>Activate Move (Translate) gizmo</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">E</span></td>
-                  <td>Activate Rotate gizmo</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">R</span></td>
-                  <td>Activate Scale gizmo</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">B</span></td>
-                  <td>Activate Bounds (Bounding Box) gizmo</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd / Ctrl</span> (Hold while dragging)</td>
-                  <td>Snap movement to Move Grid (default: 0.1) or rotation to angle steps (default: 5°)</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">F</span></td>
-                  <td>Focus camera on selected object(s)</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+Z / Ctrl+Z</span></td>
-                  <td>Undo last action</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+Shift+Z / Cmd+Y</span></td>
-                  <td>Redo action</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+G / Ctrl+G</span></td>
-                  <td>Group selected meshes (Shift+Cmd+G to ungroup)</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+C / Ctrl+C</span></td>
-                  <td>Copy selected mesh(es)</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+V / Ctrl+V</span></td>
-                  <td>Paste copied mesh(es) at 3D cursor position</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+D / Ctrl+D</span></td>
-                  <td>Duplicate selected mesh(es)</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+E / Ctrl+E</span></td>
-                  <td>Open Export 3D Model dialog</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Cmd+P / Ctrl+P</span></td>
-                  <td>Capture Screenshot (Current / 4 / 8 Directions)</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Del / Backspace</span></td>
-                  <td>Delete selected mesh(es) or facet</td>
-                </tr>
-                <tr>
-                  <td><span class="shortcut-tag">Escape</span></td>
-                  <td>Cancel active tool / deselect / close dialogs</td>
-                </tr>
-              </table>
-            </div>
-
-            <div class="help-section">
-              <h4><i class="app-icon" data-lucide="layers"></i> Multi-Selection & Scene Tree</h4>
-              <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5">
-                • <strong>Unified Multi-Transform:</strong> When multiple meshes are selected, a bounding proxy gizmo moves, rotates, and scales all items together with undo/redo support.<br />
-                • <strong>Outliner Tree Selection:</strong> Click any mesh in the Scene Outliner to select it. Use <span class="shortcut-tag" style="font-size:10px">Cmd/Ctrl+Click</span> to toggle multi-selection or <span class="shortcut-tag" style="font-size:10px">Shift+Click</span> for range selection.<br />
-                • <strong>Gizmo Switching:</strong> Switch gizmos (Move, Rotate, Scale, Bounds) at any time without losing your current selection.
-              </p>
-            </div>
-
-            <div class="help-section">
-              <h4><i class="app-icon" data-lucide="sparkles"></i> 3D Modeling & AI Workflow Tips</h4>
-              <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5">
-                • <strong>Separate Loose Parts:</strong> AI-generated meshes often merge all pieces into one mesh. Click "Separate" to split disconnected parts into distinct objects.<br />
-                • <strong>Merge Meshes:</strong> Combine multiple selected meshes into a single unified object while preserving all material channels.<br />
-                • <strong>Center Pivot:</strong> Click "Center Pivot" if gizmos appear offset from the mesh visual geometry.<br />
-                • <strong>Pick & Place:</strong> In the Tools menu, choose "Create Mesh" and click on any surface to spawn new primitives precisely in 3D.<br />
-                • <strong>Snapping Increments:</strong> Open <strong>Settings</strong> (gear icon in the top-right toolbar) to adjust Move Snap distance (units) and Rotate Snap angle (degrees).
-              </p>
-            </div>
-
-            <div class="help-section">
-              <h4><i class="app-icon" data-lucide="bot"></i> AI Prompting &amp; Modeling Tools Directory</h4>
-              <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px;">
-                The AI Mesh Agent provides 40+ specialized Babylon.js modeling tools (lathes, CSG booleans, architectural walls, roofs, columns, SDF clay, UV unwrap, baking, voxel grids, and PBR textures) that you can reference directly in your prompts.
-              </p>
-              <button type="button" class="tool-btn btn-primary" id="btnOpenPromptHelpFromGeneralHelp" style="display: inline-flex; align-items: center; gap: 6px;">
-                <span class="btn-icon"><i class="app-icon" data-lucide="book-open"></i></span>
-                <span class="btn-label">Open AI Prompting &amp; Tools Directory</span>
-              </button>
+      <!-- Help Assistant Modal Dialog (Task Guides, Search & Guided Tour Launcher) -->
+      <dialog id="helpModal" class="help-assistant-dialog" closedby="any" aria-labelledby="helpAssistantTitle">
+        <div class="modal-header help-assistant-header">
+          <div class="help-assistant-title-group">
+            <span class="help-assistant-badge-icon"><i class="app-icon" data-lucide="graduation-cap"></i></span>
+            <div class="help-assistant-title-col">
+              <div class="help-assistant-title-row">
+                <h3 id="helpAssistantTitle">Mesh Editor Help Assistant</h3>
+                <span class="help-assistant-pill">Task Guides &amp; Tour</span>
+              </div>
+              <p class="help-assistant-subtitle">Plain-English guides organized by what you want to create, edit, convert, or automate.</p>
             </div>
           </div>
-          <div class="modal-footer">
-            <button class="tool-btn btn-primary" id="btnHelpDone">Got it!</button>
+          <div class="help-assistant-header-actions">
+            <button type="button" class="tool-btn help-tour-launch-btn" id="btnHelpStartTourHeader">
+              <span class="btn-icon"><i class="app-icon" data-lucide="play"></i></span>
+              <span class="btn-label">Start Guided Tour</span>
+            </button>
+            <button type="button" class="dialog-btn btn-close" id="btnCloseHelp" title="Close Help Assistant" aria-label="Close Help Assistant">
+              <i class="app-icon" data-lucide="x"></i>
+            </button>
           </div>
         </div>
-      </div>
+
+        <div class="help-assistant-shell">
+          <aside class="help-assistant-sidebar" aria-label="Help Topics">
+            <div class="help-search-wrap">
+              <i class="app-icon help-search-icon" data-lucide="search"></i>
+              <input
+                type="search"
+                id="helpAssistantSearchInput"
+                class="tool-input help-search-input"
+                placeholder="Search tasks, tools, keys..."
+                aria-label="Search help topics and shortcuts"
+                autocomplete="off"
+                spellcheck="false"
+                autofocus
+              />
+              <button type="button" class="help-search-clear" id="btnClearHelpSearch" title="Clear search" aria-label="Clear search" style="display: none;">&times;</button>
+            </div>
+
+            <div class="help-nav-list" id="helpAssistantNav" role="tablist" focusgroup="tablist nomemory" aria-label="Help Topics" aria-orientation="vertical">
+              <!-- Populated dynamically by HelpModalService.initHelpAssistant() -->
+            </div>
+          </aside>
+
+          <main class="help-assistant-stage" id="helpAssistantStage">
+            <div id="helpAssistantPanes" class="help-assistant-panes">
+              <!-- Populated dynamically by HelpModalService.initHelpAssistant() -->
+            </div>
+            <div id="helpSearchResultsPane" class="help-search-results" style="display: none;"></div>
+          </main>
+        </div>
+
+        <div class="modal-footer help-assistant-footer">
+          <label class="help-first-visit-toggle" for="chkHelpShowOnNextVisit">
+            <input type="checkbox" id="chkHelpShowOnNextVisit" />
+            <span>Show Help Assistant again on next visit</span>
+          </label>
+          <div class="help-assistant-footer-actions">
+            <button type="button" class="tool-btn" id="btnHelpStartTourFooter">
+              <span class="btn-icon"><i class="app-icon" data-lucide="compass"></i></span>
+              <span class="btn-label">Guided Tour</span>
+            </button>
+            <button type="button" class="tool-btn btn-primary" id="btnHelpDone">Got it!</button>
+          </div>
+        </div>
+      </dialog>
+
+      <!-- Non-Modal Interactive Guided Tour Spotlight & Popover -->
+      <div id="helpTourSpotlight" class="help-tour-spotlight" aria-hidden="true" style="display: none;"></div>
+      <dialog id="helpTourPopover" class="help-tour-popover" popover="manual" aria-labelledby="helpTourStepTitle">
+        <div class="help-tour-header">
+          <div class="help-tour-badge-row">
+            <span class="help-tour-icon" id="helpTourStepIcon"><i class="app-icon" data-lucide="compass"></i></span>
+            <span class="help-tour-badge" id="helpTourStepBadge">1 of 6</span>
+          </div>
+          <button type="button" class="dialog-btn btn-close" id="btnCloseTour" title="Exit Guided Tour" aria-label="Exit Guided Tour">
+            <i class="app-icon" data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="help-tour-body">
+          <h4 class="help-tour-title" id="helpTourStepTitle">Your 3D Workspace</h4>
+          <p class="help-tour-desc" id="helpTourStepDesc"></p>
+          <div class="help-tour-tip" id="helpTourStepTip"></div>
+          <div class="help-tour-step-action" id="helpTourStepActionWrap" style="display: none;"></div>
+        </div>
+        <div class="help-tour-footer">
+          <div class="help-tour-dots" id="helpTourDots" aria-label="Tour progress"></div>
+          <div class="help-tour-nav">
+            <button type="button" class="tool-btn help-tour-btn-ghost" id="btnTourOpenHub">Help Hub</button>
+            <button type="button" class="tool-btn" id="btnTourPrev">Back</button>
+            <button type="button" class="tool-btn btn-primary" id="btnTourNext">Next</button>
+          </div>
+        </div>
+      </dialog>
 
       <!-- About Modal Dialog -->
       <div id="aboutModal" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">

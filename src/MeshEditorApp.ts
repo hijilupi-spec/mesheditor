@@ -88,6 +88,12 @@ export interface MeshEditorAppOptions {
    * Optional custom Babylon Engine instance (e.g. `NullEngine` for headless integration testing).
    */
   engine?: Engine;
+
+  /**
+   * Whether the Help Assistant should open automatically when the user has never seen it before.
+   * Defaults to true.
+   */
+  autoShowHelpOnFirstVisit?: boolean;
 }
 
 export class MeshEditorApp {
@@ -226,6 +232,7 @@ export class MeshEditorApp {
   private toastTimerId: ReturnType<typeof setTimeout> | null = null;
   private initialFocusRafId: number | null = null;
   private isDisposed: boolean = false;
+  private autoShowHelpOnFirstVisit: boolean = true;
   private globalListenerCleanups: Array<() => void> = [];
   public lastEscapeClosedOverlayEvent: KeyboardEvent | null = null;
   public isTogglingToolFromMenu: boolean = false;
@@ -322,6 +329,8 @@ export class MeshEditorApp {
       e.stopPropagation();
       this.stopAIGeneration();
     });
+
+    this.autoShowHelpOnFirstVisit = options.autoShowHelpOnFirstVisit ?? true;
 
     this.setStartupProgress(35, 'Initializing Babylon 3D Engine...');
     this.showSceneLoader('Initializing Babylon 3D Scene...', 'WEBGL2 ENGINE • SHADER PIPELINE • MESH GEOMETRY');
@@ -611,6 +620,7 @@ export class MeshEditorApp {
       this.toastTimerId = null;
     }
     this.toolsMenu.dispose();
+    this.helpModals.dispose();
     this.tooltipManager?.dispose();
     this.tooltipManager = null;
     this.aiAgentUI.dispose();
@@ -895,8 +905,8 @@ export class MeshEditorApp {
         );
         const promptHelpModal = this.getElement('promptHelpModal') || document.getElementById('promptHelpModal');
         const hadPromptHelp = Boolean(promptHelpModal?.classList.contains('active'));
-        const helpModal = this.getElement('helpModal') || document.getElementById('helpModal');
-        const hadHelpModal = Boolean(helpModal?.classList.contains('active'));
+        const hadHelpModal = this.isHelpModalOpen() || this.helpModals.wasRecentlyClosedByEscape();
+        const hadGuidedTour = this.isGuidedTourOpen();
         const toolHelpModal = this.getElement('toolHelpModal');
         const hadToolHelpModal = Boolean(toolHelpModal?.classList.contains('active'));
         const aboutModal = this.getElement('aboutModal') || document.getElementById('aboutModal');
@@ -910,6 +920,9 @@ export class MeshEditorApp {
         this.hidePromptHelp();
         if (hadHelpModal) {
           this.closeHelpModal();
+        }
+        if (hadGuidedTour) {
+          this.closeGuidedTour(true);
         }
         if (hadToolHelpModal && toolHelpModal) {
           toolHelpModal.classList.remove('active');
@@ -926,6 +939,7 @@ export class MeshEditorApp {
           hadScreenshotModal ||
           hadPromptHelp ||
           hadHelpModal ||
+          hadGuidedTour ||
           hadToolHelpModal ||
           hadAboutModal ||
           hadHeightmapPaintModal
@@ -967,28 +981,8 @@ export class MeshEditorApp {
     this.restoreDialogLayout();
     this.updatePanelButtonStates();
 
-    // Help Modal
-    const helpModal = document.getElementById('helpModal');
-    document.getElementById('btnHelp')?.addEventListener('click', () => helpModal?.classList.add('active'));
-    document.getElementById('btnCloseHelp')?.addEventListener('click', () => {
-      helpModal?.classList.remove('active');
-      this.canvas?.focus();
-    });
-    document.getElementById('btnHelpDone')?.addEventListener('click', () => {
-      helpModal?.classList.remove('active');
-      this.canvas?.focus();
-    });
-    helpModal?.addEventListener('click', (e) => {
-      if (e.target === helpModal) {
-        helpModal.classList.remove('active');
-        this.canvas?.focus();
-      }
-    });
-
-    document.getElementById('btnOpenPromptHelpFromGeneralHelp')?.addEventListener('click', () => {
-      helpModal?.classList.remove('active');
-      this.showPromptHelp('guide');
-    });
+    // Help Assistant Modal & Guided Tour
+    this.helpModals.initHelpAssistant();
 
     // About Modal
     const aboutModal = this.getElement('aboutModal') || document.getElementById('aboutModal');
@@ -1204,17 +1198,33 @@ export class MeshEditorApp {
   }
 
   /**
-   * Opens the main in-app help modal.
+   * Opens the main in-app Help Assistant modal, optionally jumping to a specific topic.
    */
-  public openHelpModal(): void {
-    this.helpModals.openHelpModal();
+  public openHelpModal(initialTopicId?: string): void {
+    this.helpModals.openHelpModal(initialTopicId);
   }
 
   /**
-   * Closes the main in-app help modal and refocuses the canvas.
+   * Closes the main in-app Help Assistant modal and refocuses the canvas.
    */
   public closeHelpModal(): void {
     this.helpModals.closeHelpModal();
+  }
+
+  public isHelpModalOpen(): boolean {
+    return this.helpModals.isHelpModalOpen();
+  }
+
+  public startGuidedTour(startIndex = 0): void {
+    this.helpModals.startGuidedTour(startIndex);
+  }
+
+  public closeGuidedTour(restoreFocus = true): void {
+    this.helpModals.stopGuidedTour(restoreFocus);
+  }
+
+  public isGuidedTourOpen(): boolean {
+    return this.helpModals.isGuidedTourOpen();
   }
 
   /**
@@ -1646,6 +1656,11 @@ export class MeshEditorApp {
 
     this.startupTimerIds.push(t1, t2);
 
+    const scheduleFirstVisitHelp = () => {
+      if (!this.autoShowHelpOnFirstVisit || this.isDisposed) return;
+      this.helpModals.maybeAutoStartHelpAssistant();
+    };
+
     const scene = this.service.getScene();
     const finalizeSceneInit = () => {
       if (autoLoadUrl) return;
@@ -1653,8 +1668,14 @@ export class MeshEditorApp {
       this.sceneLoaderTimerId = setTimeout(() => {
         this.hideSceneLoader();
         this.focusCanvasIfIdle();
+        scheduleFirstVisitHelp();
       }, 1050);
     };
+
+    if (this.autoShowHelpOnFirstVisit) {
+      const tHelp = setTimeout(() => scheduleFirstVisitHelp(), 1200);
+      this.startupTimerIds.push(tHelp);
+    }
 
     if (scene) {
       scene.executeWhenReady(() => {

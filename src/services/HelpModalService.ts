@@ -1,25 +1,980 @@
 import { createDefaultToolRegistry, ToolInterface } from '../tools';
 import { AIQuickPrompt, getAllQuickPrompts, normalizePromptImageUrl } from '../tools/editor/aiQuickPrompts';
+import {
+  HELP_ASSISTANT_STORAGE_KEY,
+  HELP_ASSISTANT_TOPICS,
+  HELP_TOUR_STEPS,
+  HelpActionButton,
+  HelpActionId,
+  HelpSectionBlock,
+  HelpTopicDefinition,
+  HelpTopicId,
+} from './helpAssistantContent';
 import type { MeshEditorAppHost } from './MeshEditorAppHost';
+
+export { HELP_ASSISTANT_STORAGE_KEY };
 
 export class HelpModalService {
   private hasInitializedPromptHelpModal = false;
+  private hasInitializedHelpAssistant = false;
+  private activeHelpTopic: HelpTopicId = 'welcome';
+  private activeTourIndex = -1;
+  private lastEscapeClosedAt = 0;
+  private tourRepositionHandler: (() => void) | null = null;
+  private tourKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(private readonly app: MeshEditorAppHost) {}
 
-  public openHelpModal(): void {
-    const helpModal = this.app.getElement('helpModal') || document.getElementById('helpModal');
-    if (helpModal) {
-      helpModal.classList.add('active');
+  private escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  public hasSeenHelpAssistant(): boolean {
+    if (typeof localStorage === 'undefined') return true;
+    try {
+      return localStorage.getItem(HELP_ASSISTANT_STORAGE_KEY) === '1';
+    } catch {
+      return false;
     }
+  }
+
+  public markHelpAssistantSeen(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(HELP_ASSISTANT_STORAGE_KEY, '1');
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  public resetHelpAssistantSeen(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(HELP_ASSISTANT_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  public maybeAutoStartHelpAssistant(): boolean {
+    if (this.hasSeenHelpAssistant()) return false;
+    if (this.isHelpModalOpen() || this.isGuidedTourOpen()) return false;
+    this.openHelpModal('welcome');
+    return true;
+  }
+
+  public isHelpModalOpen(): boolean {
+    const helpModal = (this.app.getElement('helpModal') || document.getElementById('helpModal')) as
+      | (HTMLElement & { open?: boolean })
+      | null;
+    if (!helpModal) return false;
+    return Boolean(helpModal.open || helpModal.hasAttribute('open') || helpModal.classList.contains('active'));
+  }
+
+  public wasRecentlyClosedByEscape(): boolean {
+    return Date.now() - this.lastEscapeClosedAt < 80;
+  }
+
+  public isGuidedTourOpen(): boolean {
+    return this.activeTourIndex >= 0;
+  }
+
+  public initHelpAssistant(): void {
+    const helpModal = this.app.getElement('helpModal') || document.getElementById('helpModal');
+    if (!helpModal || this.hasInitializedHelpAssistant) return;
+    this.hasInitializedHelpAssistant = true;
+
+    this.renderHelpAssistantNav(helpModal);
+    this.renderHelpAssistantPanes(helpModal);
+    this.switchHelpTopic('welcome', { focusNav: false });
+
+    const btnHelp = this.app.getElement('btnHelp') || document.getElementById('btnHelp');
+    btnHelp?.addEventListener('click', () => this.openHelpModal());
+
+    const btnClose = helpModal.querySelector('#btnCloseHelp');
+    const btnDone = helpModal.querySelector('#btnHelpDone');
+    btnClose?.addEventListener('click', () => this.closeHelpModal());
+    btnDone?.addEventListener('click', () => this.closeHelpModal());
+
+    helpModal.querySelector('#btnHelpStartTourHeader')?.addEventListener('click', () => {
+      this.startGuidedTour(0);
+    });
+    helpModal.querySelector('#btnHelpStartTourFooter')?.addEventListener('click', () => {
+      this.startGuidedTour(0);
+    });
+
+    const chkShowNext = helpModal.querySelector<HTMLInputElement>('#chkHelpShowOnNextVisit');
+    chkShowNext?.addEventListener('change', () => {
+      if (chkShowNext.checked) {
+        this.resetHelpAssistantSeen();
+      } else {
+        this.markHelpAssistantSeen();
+      }
+    });
+
+    helpModal.addEventListener('cancel', () => {
+      this.lastEscapeClosedAt = Date.now();
+    });
+
+    helpModal.addEventListener('close', () => {
+      if ('returnValue' in helpModal) {
+        (helpModal as HTMLDialogElement).returnValue = '';
+      }
+      helpModal.classList.remove('active');
+      if (!this.isGuidedTourOpen()) {
+        this.app.canvas?.focus();
+      }
+    });
+
+    // Light-dismiss fallback when closedby="any" is unsupported (e.g. Safari)
+    if (typeof HTMLDialogElement === 'undefined' || !('closedBy' in HTMLDialogElement.prototype)) {
+      const isOutsideDialog = (e: PointerEvent | MouseEvent) => {
+        const rect = helpModal.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return e.target === helpModal;
+        return e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+      };
+      let pressedOutside = false;
+      helpModal.addEventListener('pointerdown', (e) => {
+        pressedOutside = isOutsideDialog(e as PointerEvent);
+      });
+      helpModal.addEventListener('pointerup', (e) => {
+        if (pressedOutside && isOutsideDialog(e as PointerEvent)) {
+          this.closeHelpModal();
+        }
+      });
+      helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal && isOutsideDialog(e as MouseEvent)) {
+          this.closeHelpModal();
+        }
+      });
+    }
+
+    // Topic navigation & keyboard accessibility
+    const navList = helpModal.querySelector<HTMLElement>('#helpAssistantNav');
+    navList?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-help-topic]');
+      if (!btn) return;
+      const topicId = btn.getAttribute('data-help-topic') as HelpTopicId | null;
+      if (topicId) {
+        this.clearHelpSearch(helpModal);
+        this.switchHelpTopic(topicId, { focusNav: false });
+      }
+    });
+
+    navList?.addEventListener('keydown', (e: KeyboardEvent) => {
+      const tabs = Array.from(navList.querySelectorAll<HTMLButtonElement>('[data-help-topic]'));
+      if (tabs.length < 2) return;
+      const currentIdx = tabs.findIndex((b) => b === document.activeElement);
+      if (currentIdx === -1) return;
+      let nextIdx = -1;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextIdx = (currentIdx + 1) % tabs.length;
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') nextIdx = (currentIdx - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') nextIdx = 0;
+      else if (e.key === 'End') nextIdx = tabs.length - 1;
+      if (nextIdx >= 0) {
+        e.preventDefault();
+        const nextBtn = tabs[nextIdx];
+        const topicId = nextBtn.getAttribute('data-help-topic') as HelpTopicId | null;
+        nextBtn.focus();
+        if (topicId) {
+          this.clearHelpSearch(helpModal);
+          this.switchHelpTopic(topicId, { focusNav: false });
+        }
+      }
+    });
+
+    // Delegate jump-to-topic cards and interactive "Try it" actions inside stage
+    const stage = helpModal.querySelector<HTMLElement>('#helpAssistantStage');
+    stage?.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      const jumpBtn = target.closest<HTMLElement>('[data-jump-topic]');
+      if (jumpBtn) {
+        const topicId = jumpBtn.getAttribute('data-jump-topic') as HelpTopicId | null;
+        if (topicId) {
+          this.clearHelpSearch(helpModal);
+          this.switchHelpTopic(topicId, { focusNav: false });
+        }
+        return;
+      }
+      const actionBtn = target.closest<HTMLElement>('[data-help-action]');
+      if (actionBtn) {
+        const actionId = actionBtn.getAttribute('data-help-action') as HelpActionId | null;
+        if (actionId) {
+          this.handleHelpAction(actionId);
+        }
+      }
+    });
+
+    // Search filtering
+    const searchInput = helpModal.querySelector<HTMLInputElement>('#helpAssistantSearchInput');
+    const clearSearchBtn = helpModal.querySelector<HTMLButtonElement>('#btnClearHelpSearch');
+    searchInput?.addEventListener('input', () => {
+      this.filterHelpContent(helpModal, searchInput.value);
+    });
+    clearSearchBtn?.addEventListener('click', () => {
+      this.clearHelpSearch(helpModal);
+      searchInput?.focus();
+    });
+
+    // Sync find-in-page reveal (hidden="until-found")
+    helpModal.querySelectorAll<HTMLElement>('.help-topic-pane').forEach((pane) => {
+      pane.addEventListener('beforematch', () => {
+        const topicId = pane.getAttribute('data-topic-pane') as HelpTopicId | null;
+        if (topicId) {
+          this.clearHelpSearch(helpModal);
+          this.switchHelpTopic(topicId, { focusNav: false });
+        }
+      });
+    });
+
+    this.initGuidedTourEvents();
+  }
+
+  private renderHelpAssistantNav(helpModal: HTMLElement): void {
+    const nav = helpModal.querySelector<HTMLElement>('#helpAssistantNav');
+    if (!nav) return;
+
+    nav.innerHTML = HELP_ASSISTANT_TOPICS.map((topic, index) => {
+      const isSelected = index === 0;
+      const badgeHtml = topic.badge ? `<span class="help-nav-badge">${this.escapeHtml(topic.badge)}</span>` : '';
+      return `
+        <button
+          type="button"
+          role="tab"
+          class="help-nav-btn${isSelected ? ' active' : ''}"
+          id="helpTab-${topic.id}"
+          data-help-topic="${topic.id}"
+          aria-selected="${isSelected ? 'true' : 'false'}"
+          ${isSelected ? 'focusgroupstart' : 'tabindex="-1"'}
+        >
+          <span class="help-nav-icon"><i class="app-icon" data-lucide="${topic.icon}"></i></span>
+          <span class="help-nav-text">
+            <span class="help-nav-title-row">
+              <span class="help-nav-label">${this.escapeHtml(topic.navLabel)}</span>
+              ${badgeHtml}
+            </span>
+            <span class="help-nav-sub">${this.escapeHtml(topic.navSubtitle)}</span>
+          </span>
+        </button>
+      `;
+    }).join('');
+  }
+
+  private renderActionButtons(actions?: HelpActionButton[]): string {
+    if (!actions || actions.length === 0) return '';
+    return `
+      <div class="help-action-row">
+        ${actions
+          .map((btn) => {
+            const idAttr = btn.id ? ` id="${this.escapeHtml(btn.id)}"` : '';
+            const variantClass = btn.variant === 'primary' ? ' btn-primary' : '';
+            return `
+              <button type="button" class="tool-btn help-action-btn${variantClass}"${idAttr} data-help-action="${btn.action}">
+                <span class="btn-icon"><i class="app-icon" data-lucide="${btn.icon}"></i></span>
+                <span class="btn-label">${this.escapeHtml(btn.label)}</span>
+              </button>
+            `;
+          })
+          .join('')}
+      </div>
+    `;
+  }
+
+  private renderSectionBlock(section: HelpSectionBlock): string {
+    let bodyHtml = '';
+    if (section.customHtml) {
+      bodyHtml = section.customHtml;
+    } else if (section.items && section.items.length > 0) {
+      const gridClass =
+        section.layout === 'steps' ? 'help-cards-grid help-cards-steps' : 'help-cards-grid';
+      bodyHtml = `
+        <div class="${gridClass}">
+          ${section.items
+            .map((item) => {
+              const iconHtml = item.icon
+                ? `<span class="help-card-icon"><i class="app-icon" data-lucide="${item.icon}"></i></span>`
+                : '';
+              const badgeHtml = item.badge ? `<span class="help-card-badge">${this.escapeHtml(item.badge)}</span>` : '';
+              const tipHtml = item.tip
+                ? `<div class="help-card-tip"><i class="app-icon" data-lucide="lightbulb"></i><span>${this.escapeHtml(item.tip)}</span></div>`
+                : '';
+              const actionsHtml = this.renderActionButtons(item.actions);
+              return `
+                <article class="help-card">
+                  <div class="help-card-head">
+                    <div class="help-card-title-wrap">
+                      ${iconHtml}
+                      <h5>${this.escapeHtml(item.title)}</h5>
+                    </div>
+                    ${badgeHtml}
+                  </div>
+                  <p class="help-card-desc">${item.descriptionHtml}</p>
+                  ${tipHtml}
+                  ${actionsHtml}
+                </article>
+              `;
+            })
+            .join('')}
+        </div>
+      `;
+    }
+
+    return `
+      <section class="help-section">
+        <h4><i class="app-icon" data-lucide="${section.icon}"></i> ${this.escapeHtml(section.title)}</h4>
+        ${section.introHtml ? `<p class="help-prose">${section.introHtml}</p>` : ''}
+        ${bodyHtml}
+      </section>
+    `;
+  }
+
+  private renderHelpAssistantPanes(helpModal: HTMLElement): void {
+    const panesWrap = helpModal.querySelector<HTMLElement>('#helpAssistantPanes');
+    if (!panesWrap) return;
+
+    panesWrap.innerHTML = HELP_ASSISTANT_TOPICS.map((topic, index) => {
+      const isActive = index === 0;
+      const heroActionsHtml = this.renderActionButtons(topic.heroActions);
+      const sectionsHtml = topic.sections.map((s) => this.renderSectionBlock(s)).join('');
+      return `
+        <div
+          class="help-topic-pane${isActive ? ' active' : ''}"
+          id="helpPane-${topic.id}"
+          data-topic-pane="${topic.id}"
+          role="tabpanel"
+          aria-labelledby="helpTab-${topic.id}"
+          ${isActive ? 'tabindex="0"' : 'hidden="until-found"'}
+        >
+          <div class="help-topic-pane-inner">
+            <div class="help-hero-card">
+              <div class="help-hero-main">
+                <span class="help-hero-icon"><i class="app-icon" data-lucide="${topic.icon}"></i></span>
+                <div class="help-hero-copy">
+                  <h4 class="help-hero-title">${this.escapeHtml(topic.heroTitle)}</h4>
+                  <p class="help-hero-summary">${this.escapeHtml(topic.heroSummary)}</p>
+                </div>
+              </div>
+              ${heroActionsHtml}
+            </div>
+            ${sectionsHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  public switchHelpTopic(topicId: HelpTopicId, options: { focusNav?: boolean } = {}): void {
+    const helpModal = this.app.getElement('helpModal') || document.getElementById('helpModal');
+    if (!helpModal) return;
+
+    const validTopic = HELP_ASSISTANT_TOPICS.some((t) => t.id === topicId) ? topicId : 'welcome';
+    this.activeHelpTopic = validTopic;
+
+    const navBtns = Array.from(helpModal.querySelectorAll<HTMLButtonElement>('[data-help-topic]'));
+    for (const btn of navBtns) {
+      const matches = btn.getAttribute('data-help-topic') === validTopic;
+      btn.classList.toggle('active', matches);
+      btn.setAttribute('aria-selected', matches ? 'true' : 'false');
+      if (matches) {
+        btn.setAttribute('focusgroupstart', '');
+        btn.removeAttribute('tabindex');
+        if (options.focusNav) btn.focus();
+      } else {
+        btn.removeAttribute('focusgroupstart');
+        btn.setAttribute('tabindex', '-1');
+      }
+    }
+
+    const panes = Array.from(helpModal.querySelectorAll<HTMLElement>('.help-topic-pane'));
+    for (const pane of panes) {
+      const isMatch = pane.getAttribute('data-topic-pane') === validTopic;
+      pane.classList.toggle('active', isMatch);
+      if (isMatch) {
+        pane.removeAttribute('hidden');
+        pane.setAttribute('tabindex', '0');
+      } else {
+        pane.setAttribute('hidden', 'until-found');
+        pane.removeAttribute('tabindex');
+      }
+    }
+
+    const stage = helpModal.querySelector<HTMLElement>('#helpAssistantStage');
+    if (stage) stage.scrollTop = 0;
+
+    this.app.refreshIcons(helpModal);
+  }
+
+  private clearHelpSearch(helpModal: HTMLElement): void {
+    const input = helpModal.querySelector<HTMLInputElement>('#helpAssistantSearchInput');
+    const clearBtn = helpModal.querySelector<HTMLButtonElement>('#btnClearHelpSearch');
+    const panesWrap = helpModal.querySelector<HTMLElement>('#helpAssistantPanes');
+    const resultsPane = helpModal.querySelector<HTMLElement>('#helpSearchResultsPane');
+
+    if (input) input.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (panesWrap) panesWrap.style.display = 'block';
+    if (resultsPane) {
+      resultsPane.style.display = 'none';
+      resultsPane.innerHTML = '';
+    }
+  }
+
+  private stripHtml(html: string): string {
+    return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  public filterHelpContent(helpModal: HTMLElement, rawQuery: string): void {
+    const query = rawQuery.trim().toLowerCase();
+    const clearBtn = helpModal.querySelector<HTMLButtonElement>('#btnClearHelpSearch');
+    const panesWrap = helpModal.querySelector<HTMLElement>('#helpAssistantPanes');
+    const resultsPane = helpModal.querySelector<HTMLElement>('#helpSearchResultsPane');
+
+    if (!query) {
+      this.clearHelpSearch(helpModal);
+      return;
+    }
+
+    if (clearBtn) clearBtn.style.display = 'flex';
+    if (panesWrap) panesWrap.style.display = 'none';
+    if (!resultsPane) return;
+
+    const terms = query.split(/\s+/).filter(Boolean);
+    const matchesAllTerms = (haystack: string) => terms.every((t) => haystack.includes(t));
+
+    const matchedTopics: Array<{ topic: HelpTopicDefinition; matchedSnippets: string[] }> = [];
+
+    for (const topic of HELP_ASSISTANT_TOPICS) {
+      const snippets: string[] = [];
+      const baseText = [
+        topic.navLabel,
+        topic.navSubtitle,
+        topic.heroTitle,
+        topic.heroSummary,
+        ...topic.keywords,
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      for (const section of topic.sections) {
+        if (section.items) {
+          for (const item of section.items) {
+            const itemText = `${item.title} ${this.stripHtml(item.descriptionHtml)} ${item.tip || ''}`.toLowerCase();
+            if (matchesAllTerms(itemText) || matchesAllTerms(`${baseText} ${itemText}`)) {
+              snippets.push(`${item.title}: ${this.stripHtml(item.descriptionHtml)}`);
+            }
+          }
+        }
+        if (section.customHtml) {
+          const plain = this.stripHtml(section.customHtml).toLowerCase();
+          if (matchesAllTerms(`${baseText} ${section.title.toLowerCase()} ${plain}`)) {
+            snippets.push(`${section.title}: ${this.stripHtml(section.customHtml).slice(0, 160)}...`);
+          }
+        }
+      }
+
+      if (matchesAllTerms(baseText) || snippets.length > 0) {
+        matchedTopics.push({
+          topic,
+          matchedSnippets: snippets.slice(0, 3),
+        });
+      }
+    }
+
+    if (matchedTopics.length === 0) {
+      resultsPane.innerHTML = `
+        <div class="help-search-empty">
+          <i class="app-icon" data-lucide="search"></i>
+          <h4>No matching guides for "${this.escapeHtml(rawQuery.trim())}"</h4>
+          <p>Try everyday words like <em>move</em>, <em>ai</em>, <em>ollama</em>, <em>stl</em>, <em>compress</em>, <em>paint</em>, or <em>undo</em>.</p>
+        </div>
+      `;
+    } else {
+      resultsPane.innerHTML = `
+        <div class="help-search-header">
+          <span>Found <strong>${matchedTopics.length}</strong> topic${matchedTopics.length === 1 ? '' : 's'} matching "${this.escapeHtml(rawQuery.trim())}"</span>
+        </div>
+        <div class="help-search-list">
+          ${matchedTopics
+            .map(({ topic, matchedSnippets }) => {
+              const snippetHtml =
+                matchedSnippets.length > 0
+                  ? `<ul class="help-search-snippets">${matchedSnippets
+                      .map((s) => `<li>${this.escapeHtml(s.length > 170 ? `${s.slice(0, 167)}...` : s)}</li>`)
+                      .join('')}</ul>`
+                  : `<p class="help-search-summary">${this.escapeHtml(topic.heroSummary)}</p>`;
+              return `
+                <div class="help-search-result-card">
+                  <div class="help-search-result-head">
+                    <div class="help-search-result-title">
+                      <span class="help-card-icon"><i class="app-icon" data-lucide="${topic.icon}"></i></span>
+                      <div>
+                        <h5>${this.escapeHtml(topic.navLabel)}</h5>
+                        <span>${this.escapeHtml(topic.navSubtitle)}</span>
+                      </div>
+                    </div>
+                    <button type="button" class="tool-btn btn-primary" data-jump-topic="${topic.id}">
+                      <span class="btn-label">Open Guide</span>
+                      <span class="btn-icon"><i class="app-icon" data-lucide="arrow-right"></i></span>
+                    </button>
+                  </div>
+                  ${snippetHtml}
+                </div>
+              `;
+            })
+            .join('')}
+        </div>
+      `;
+    }
+
+    resultsPane.style.display = 'block';
+    this.app.refreshIcons(resultsPane);
+  }
+
+  private openToolDialogFromHelp(dialogId: string, label: string): void {
+    this.closeHelpModal();
+    this.app.toggleDialog(dialogId, true);
+    const dlg = this.app.getElement(dialogId);
+    if (dlg && dlg.classList.contains('minimized')) {
+      this.app.toggleDialogMinimize(dlg, false);
+    }
+    this.app.showToast(`Opened ${label}.`, 'info');
+  }
+
+  public handleHelpAction(actionId: HelpActionId): void {
+    switch (actionId) {
+      case 'start-tour':
+        this.startGuidedTour(0);
+        break;
+      case 'open-create-mesh':
+        this.openToolDialogFromHelp('dialog-create-primitive', 'Create Mesh');
+        break;
+      case 'open-voxel-painter':
+        this.openToolDialogFromHelp('dialog-voxel-painter', 'Voxel Painter');
+        break;
+      case 'open-path-extrusion':
+        this.openToolDialogFromHelp('dialog-path-extrusion', 'Path Extrusion');
+        break;
+      case 'open-text-mesh':
+        this.openToolDialogFromHelp('dialog-text-mesh', '3D Text');
+        break;
+      case 'open-heightmap':
+        this.openToolDialogFromHelp('dialog-heightmap', 'Heightmap Terrain');
+        break;
+      case 'open-sculpt':
+        this.openToolDialogFromHelp('dialog-sculpt', 'Figure Sculpt & Retopo');
+        break;
+      case 'open-csg':
+        this.openToolDialogFromHelp('dialog-csg', 'Constructive Solid Geometry');
+        break;
+      case 'open-facet':
+        this.openToolDialogFromHelp('dialog-facet', 'Facet & Vertex Editor');
+        break;
+      case 'open-material':
+        this.openToolDialogFromHelp('dialog-material', 'Material & Texture');
+        break;
+      case 'open-texture-paint':
+        this.openToolDialogFromHelp('dialog-texture-paint', '3D Texture Painter');
+        break;
+      case 'open-decal':
+        this.openToolDialogFromHelp('dialog-decal', 'Decal Painter');
+        break;
+      case 'open-ai-settings':
+        this.closeHelpModal();
+        this.stopGuidedTour(false);
+        this.app.openSettingsModal('ai');
+        break;
+      case 'open-ai-agent':
+        this.openToolDialogFromHelp('dialog-ai-agent', 'AI Mesh Agent');
+        break;
+      case 'open-ai-texture':
+        this.openToolDialogFromHelp('dialog-ai-texture', 'AI Texture Generator');
+        break;
+      case 'open-prompt-guide':
+        this.closeHelpModal();
+        this.showPromptHelp('guide');
+        break;
+      case 'open-file':
+        this.closeHelpModal();
+        this.app.triggerOpenModel();
+        break;
+      case 'import-file':
+        this.closeHelpModal();
+        this.app.triggerImportModel();
+        break;
+      case 'open-export':
+        this.closeHelpModal();
+        this.app.openExportDialog();
+        break;
+      case 'open-compress':
+        this.openToolDialogFromHelp('dialog-compress-model', 'Compress Model');
+        break;
+      case 'open-texture-optimizer':
+        this.openToolDialogFromHelp('dialog-textures', 'Texture Optimizer');
+        break;
+    }
+  }
+
+  public openHelpModal(initialTopicId?: HelpTopicId | string): void {
+    this.app.closeAllDropdowns();
+    if (this.isGuidedTourOpen()) {
+      this.stopGuidedTour(false);
+    }
+    this.initHelpAssistant();
+    this.markHelpAssistantSeen();
+
+    const helpModal = this.app.getElement('helpModal') || document.getElementById('helpModal');
+    if (!helpModal) return;
+
+    const chkShowNext = helpModal.querySelector<HTMLInputElement>('#chkHelpShowOnNextVisit');
+    if (chkShowNext) {
+      chkShowNext.checked = !this.hasSeenHelpAssistant();
+    }
+
+    if (initialTopicId && HELP_ASSISTANT_TOPICS.some((t) => t.id === initialTopicId)) {
+      this.clearHelpSearch(helpModal);
+      this.switchHelpTopic(initialTopicId as HelpTopicId, { focusNav: false });
+    }
+
+    const dialogEl = helpModal as HTMLDialogElement;
+    if (typeof dialogEl.showModal === 'function') {
+      try {
+        if (!dialogEl.open) {
+          dialogEl.showModal();
+        }
+      } catch {
+        helpModal.setAttribute('open', '');
+      }
+    } else {
+      helpModal.setAttribute('open', '');
+    }
+    helpModal.classList.add('active');
+    this.app.refreshIcons(helpModal);
   }
 
   public closeHelpModal(): void {
     const helpModal = this.app.getElement('helpModal') || document.getElementById('helpModal');
-    if (helpModal && helpModal.classList.contains('active')) {
-      helpModal.classList.remove('active');
+    if (!helpModal) return;
+
+    const wasOpen = this.isHelpModalOpen();
+    const dialogEl = helpModal as HTMLDialogElement;
+    if (typeof dialogEl.close === 'function') {
+      try {
+        if (dialogEl.open) {
+          dialogEl.close();
+        }
+      } catch {
+        helpModal.removeAttribute('open');
+      }
+    } else {
+      helpModal.removeAttribute('open');
+    }
+    helpModal.classList.remove('active');
+    if (wasOpen && !this.isGuidedTourOpen()) {
       this.app.canvas?.focus();
     }
+  }
+
+  /* =========================================================================
+     INTERACTIVE GUIDED TOUR (NON-MODAL POPOVER + SPOTLIGHT)
+     ========================================================================= */
+  private initGuidedTourEvents(): void {
+    const popover = this.app.getElement('helpTourPopover') || document.getElementById('helpTourPopover');
+    if (!popover) return;
+
+    popover.querySelector('#btnCloseTour')?.addEventListener('click', () => this.stopGuidedTour(true));
+    popover.querySelector('#btnTourPrev')?.addEventListener('click', () => this.prevTourStep());
+    popover.querySelector('#btnTourNext')?.addEventListener('click', () => this.nextTourStep());
+    popover.querySelector('#btnTourOpenHub')?.addEventListener('click', () => {
+      this.stopGuidedTour(false);
+      this.openHelpModal('welcome');
+    });
+
+    popover.querySelector('#helpTourDots')?.addEventListener('click', (e) => {
+      const dot = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-tour-step]');
+      if (!dot) return;
+      const idx = Number(dot.getAttribute('data-tour-step'));
+      if (Number.isFinite(idx)) {
+        this.goToTourStep(idx);
+      }
+    });
+
+    popover.querySelector('#helpTourStepActionWrap')?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-help-action]');
+      if (!btn) return;
+      const actionId = btn.getAttribute('data-help-action') as HelpActionId | null;
+      if (actionId) {
+        this.handleHelpAction(actionId);
+      }
+    });
+  }
+
+  public startGuidedTour(startIndex = 0): void {
+    this.initHelpAssistant();
+    this.markHelpAssistantSeen();
+    this.closeHelpModal();
+
+    const popover = this.app.getElement('helpTourPopover') || document.getElementById('helpTourPopover');
+    if (!popover) return;
+
+    if (!this.tourRepositionHandler) {
+      this.tourRepositionHandler = () => {
+        if (this.isGuidedTourOpen()) {
+          this.positionTourStep();
+        }
+      };
+      window.addEventListener('resize', this.tourRepositionHandler);
+    }
+
+    if (!this.tourKeydownHandler) {
+      this.tourKeydownHandler = (e: KeyboardEvent) => {
+        if (!this.isGuidedTourOpen()) return;
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.lastEscapeClosedAt = Date.now();
+          this.stopGuidedTour(true);
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          this.nextTourStep();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          this.prevTourStep();
+        }
+      };
+      document.addEventListener('keydown', this.tourKeydownHandler);
+    }
+
+    if (typeof (popover as any).showPopover === 'function') {
+      try {
+        if (!popover.matches(':popover-open')) {
+          (popover as any).showPopover();
+        }
+      } catch {
+        popover.classList.add('is-open');
+        popover.setAttribute('open', '');
+      }
+    } else {
+      popover.classList.add('is-open');
+      popover.setAttribute('open', '');
+    }
+
+    this.goToTourStep(startIndex);
+    const nextBtn = popover.querySelector<HTMLButtonElement>('#btnTourNext');
+    nextBtn?.focus();
+  }
+
+  public stopGuidedTour(restoreFocus = true): void {
+    if (this.activeTourIndex < 0) return;
+    this.activeTourIndex = -1;
+
+    const popover = this.app.getElement('helpTourPopover') || document.getElementById('helpTourPopover');
+    const spotlight = this.app.getElement('helpTourSpotlight') || document.getElementById('helpTourSpotlight');
+
+    if (popover) {
+      if (typeof (popover as any).hidePopover === 'function') {
+        try {
+          if (popover.matches(':popover-open')) {
+            (popover as any).hidePopover();
+          }
+        } catch {
+          // Ignore
+        }
+      }
+      popover.classList.remove('is-open');
+      popover.removeAttribute('open');
+    }
+
+    if (spotlight) {
+      spotlight.style.display = 'none';
+    }
+
+    if (this.tourRepositionHandler) {
+      window.removeEventListener('resize', this.tourRepositionHandler);
+      this.tourRepositionHandler = null;
+    }
+    if (this.tourKeydownHandler) {
+      document.removeEventListener('keydown', this.tourKeydownHandler);
+      this.tourKeydownHandler = null;
+    }
+
+    if (restoreFocus) {
+      this.app.canvas?.focus();
+    }
+  }
+
+  public nextTourStep(): void {
+    if (this.activeTourIndex >= HELP_TOUR_STEPS.length - 1) {
+      this.stopGuidedTour(true);
+      this.app.showToast('Guided tour complete! Click "?" anytime to reopen the Help Assistant.', 'success');
+      return;
+    }
+    this.goToTourStep(this.activeTourIndex + 1);
+  }
+
+  public prevTourStep(): void {
+    if (this.activeTourIndex <= 0) return;
+    this.goToTourStep(this.activeTourIndex - 1);
+  }
+
+  public goToTourStep(index: number): void {
+    const clamped = Math.max(0, Math.min(HELP_TOUR_STEPS.length - 1, index));
+    this.activeTourIndex = clamped;
+    const step = HELP_TOUR_STEPS[clamped];
+
+    const popover = this.app.getElement('helpTourPopover') || document.getElementById('helpTourPopover');
+    if (!popover) return;
+
+    const iconEl = popover.querySelector('#helpTourStepIcon');
+    const badgeEl = popover.querySelector('#helpTourStepBadge');
+    const titleEl = popover.querySelector('#helpTourStepTitle');
+    const descEl = popover.querySelector('#helpTourStepDesc');
+    const tipEl = popover.querySelector('#helpTourStepTip');
+    const actionWrap = popover.querySelector<HTMLElement>('#helpTourStepActionWrap');
+    const dotsEl = popover.querySelector<HTMLElement>('#helpTourDots');
+    const prevBtn = popover.querySelector<HTMLButtonElement>('#btnTourPrev');
+    const nextBtn = popover.querySelector<HTMLButtonElement>('#btnTourNext');
+
+    if (iconEl) iconEl.innerHTML = `<i class="app-icon" data-lucide="${step.icon}"></i>`;
+    if (badgeEl) badgeEl.textContent = step.badge;
+    if (titleEl) titleEl.textContent = step.title;
+    if (descEl) descEl.textContent = step.description;
+    if (tipEl) {
+      tipEl.innerHTML = `<i class="app-icon" data-lucide="lightbulb"></i><span>${this.escapeHtml(step.tip)}</span>`;
+    }
+
+    if (actionWrap) {
+      if (step.action) {
+        actionWrap.innerHTML = this.renderActionButtons([step.action]);
+        actionWrap.style.display = 'block';
+      } else {
+        actionWrap.innerHTML = '';
+        actionWrap.style.display = 'none';
+      }
+    }
+
+    if (dotsEl) {
+      dotsEl.innerHTML = HELP_TOUR_STEPS.map(
+        (s, idx) =>
+          `<button type="button" class="help-tour-dot${idx === clamped ? ' active' : ''}" data-tour-step="${idx}" aria-label="Step ${idx + 1}: ${this.escapeHtml(s.title)}" ${idx === clamped ? 'aria-current="step"' : ''}></button>`
+      ).join('');
+    }
+
+    if (prevBtn) prevBtn.disabled = clamped === 0;
+    if (nextBtn) {
+      const isLast = clamped === HELP_TOUR_STEPS.length - 1;
+      nextBtn.textContent = isLast ? 'Finish Tour' : 'Next';
+    }
+
+    this.app.refreshIcons(popover);
+    this.positionTourStep();
+  }
+
+  private resolveTourTarget(selector: string, fallbackSelector?: string): HTMLElement | null {
+    const findVisible = (sel?: string): HTMLElement | null => {
+      if (!sel) return null;
+      const el =
+        (this.app.rootContainer?.querySelector(sel) as HTMLElement | null) ||
+        (document.querySelector(sel) as HTMLElement | null);
+      if (!el) return null;
+      const style = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
+      if (style && (style.display === 'none' || style.visibility === 'hidden')) return null;
+      return el;
+    };
+    return findVisible(selector) || findVisible(fallbackSelector);
+  }
+
+  private positionTourStep(): void {
+    if (this.activeTourIndex < 0) return;
+    const step = HELP_TOUR_STEPS[this.activeTourIndex];
+    const popover = this.app.getElement('helpTourPopover') || document.getElementById('helpTourPopover');
+    const spotlight = this.app.getElement('helpTourSpotlight') || document.getElementById('helpTourSpotlight');
+    if (!popover || !spotlight) return;
+
+    const target = this.resolveTourTarget(step.targetSelector, step.fallbackSelector);
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+
+    if (!target || step.placement === 'center') {
+      if (target && step.id === 'canvas') {
+        const r = target.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          spotlight.style.display = 'block';
+          spotlight.style.left = `${Math.max(4, r.left + 8)}px`;
+          spotlight.style.top = `${Math.max(4, r.top + 8)}px`;
+          spotlight.style.width = `${Math.max(40, r.width - 16)}px`;
+          spotlight.style.height = `${Math.max(40, r.height - 16)}px`;
+        } else {
+          spotlight.style.display = 'none';
+        }
+      } else {
+        spotlight.style.display = 'none';
+      }
+
+      popover.style.left = '50%';
+      popover.style.top = '50%';
+      popover.style.transform = 'translate(-50%, -50%)';
+      return;
+    }
+
+    const rect = target.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      spotlight.style.display = 'none';
+      popover.style.left = '50%';
+      popover.style.top = '50%';
+      popover.style.transform = 'translate(-50%, -50%)';
+      return;
+    }
+
+    const pad = 6;
+    spotlight.style.display = 'block';
+    spotlight.style.left = `${Math.max(2, rect.left - pad)}px`;
+    spotlight.style.top = `${Math.max(2, rect.top - pad)}px`;
+    spotlight.style.width = `${rect.width + pad * 2}px`;
+    spotlight.style.height = `${rect.height + pad * 2}px`;
+
+    popover.style.transform = 'none';
+    const cardW = Math.min(360, vw - 24);
+    const cardH = popover.offsetHeight || 240;
+    const gap = 14;
+
+    let left = vw / 2 - cardW / 2;
+    let top = vh / 2 - cardH / 2;
+
+    if (step.placement === 'bottom') {
+      left = rect.left + rect.width / 2 - cardW / 2;
+      top = rect.bottom + gap;
+      if (top + cardH > vh - 16) {
+        top = Math.max(16, rect.top - cardH - gap);
+      }
+    } else if (step.placement === 'right') {
+      left = rect.right + gap;
+      top = rect.top;
+      if (left + cardW > vw - 16) {
+        left = Math.max(16, rect.left - cardW - gap);
+      }
+    } else if (step.placement === 'left') {
+      left = rect.left - cardW - gap;
+      top = rect.top;
+      if (left < 16) {
+        left = Math.min(vw - cardW - 16, rect.right + gap);
+      }
+    } else if (step.placement === 'top') {
+      left = rect.left + rect.width / 2 - cardW / 2;
+      top = rect.top - cardH - gap;
+    }
+
+    left = Math.max(12, Math.min(vw - cardW - 12, left));
+    top = Math.max(12, Math.min(vh - cardH - 12, top));
+
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+  }
+
+  public dispose(): void {
+    this.stopGuidedTour(false);
   }
 
   public openAboutModal(): void {

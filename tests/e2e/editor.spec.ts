@@ -28,6 +28,7 @@ test.describe('Mesh Editor E2E Tests', () => {
   test('2. activates all tools by default on first run and creates a 3D primitive via Create Mesh dialog', async ({
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.goto('/');
 
     await expect(page.locator('#statsMeshes')).toHaveText('0');
@@ -56,6 +57,7 @@ test.describe('Mesh Editor E2E Tests', () => {
   });
 
   test('3. deletes a selected mesh and restores it using Undo / Redo', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.goto('/');
 
     // Spawn a mesh via the editor API
@@ -99,6 +101,7 @@ test.describe('Mesh Editor E2E Tests', () => {
   });
 
   test('4. switches layout modes (Floating vs Stackpanel) and Gizmo modes', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.goto('/');
 
     // Switch to Stackpanel mode via View menu
@@ -122,12 +125,45 @@ test.describe('Mesh Editor E2E Tests', () => {
     await expect(page.locator('#btnGizmoTranslate')).toHaveClass(/active/);
   });
 
-  test('5. opens and closes the Help & Keyboard Shortcuts modal', async ({ page }) => {
+  test('5. auto-starts Help Assistant on first visit, runs Guided Tour, and re-opens via Help button', async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
     await page.goto('/');
 
+    // 1. First visit auto-launches the Help Assistant once startup completes
     const helpModal = page.locator('#helpModal');
+    await expect(helpModal).toBeVisible({ timeout: 5000 });
+
+    // 2. Verify task-oriented sections & search
+    await page.locator('#helpTab-setup-ai').click();
+    await expect(page.locator('#helpPane-setup-ai')).toBeVisible();
+    await expect(page.locator('#helpPane-setup-ai')).toContainText('How to Setup AI');
+
+    await page.locator('#helpAssistantSearchInput').fill('draco');
+    await expect(page.locator('#helpSearchResultsPane')).toBeVisible();
+    await expect(page.locator('#helpSearchResultsPane')).toContainText('Compress Models');
+
+    // 3. Launch Interactive Guided Tour from header CTA
+    await page.locator('#btnHelpStartTourHeader').click();
     await expect(helpModal).not.toBeVisible();
 
+    const tourPopover = page.locator('#helpTourPopover');
+    await expect(tourPopover).toBeVisible();
+    await expect(page.locator('#helpTourStepTitle')).toContainText('Your 3D Workspace');
+    await page.locator('#btnTourNext').click();
+    await expect(page.locator('#helpTourStepTitle')).toContainText('File, Actions, Tools & View');
+
+    // Close Guided Tour
+    await page.locator('#btnCloseTour').click();
+    await expect(tourPopover).not.toBeVisible();
+
+    // 4. Reloading as a returning user must NOT auto-open Help Assistant
+    await page.reload();
+    await page.waitForTimeout(1400);
+    await expect(helpModal).not.toBeVisible();
+
+    // 5. Clicking #btnHelp re-opens it, and #btnHelpDone closes it
     await page.locator('#btnHelp').click();
     await expect(helpModal).toBeVisible();
 
@@ -138,6 +174,7 @@ test.describe('Mesh Editor E2E Tests', () => {
   test('6. Heightmap terrain supports post-creation AI textures and preserves textures on GLB export & reload', async ({
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.goto('/');
 
     const result = await page.evaluate(async () => {
@@ -213,6 +250,7 @@ test.describe('Mesh Editor E2E Tests', () => {
   test('7. organizes Tools menu into category submenus with keyboard navigation, hover safe-triangle, and narrow-screen fallback', async ({
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/');
 
@@ -315,6 +353,7 @@ test.describe('Mesh Editor E2E Tests', () => {
     page,
   }) => {
     test.setTimeout(60000);
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.goto('/');
 
     const btnHelp = page.locator('#btnHelp');
@@ -403,6 +442,7 @@ test.describe('Mesh Editor E2E Tests', () => {
   test('10. imports a textured Collada (.dae) model together with companion textures in one batch', async ({
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.goto('/');
 
     const result = await page.evaluate(async () => {
@@ -558,6 +598,7 @@ test.describe('Mesh Editor E2E Tests', () => {
   test('13. keeps stackpanel panel widths stable when scrollbar activates and toggles drawer collapse', async ({
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem('mesheditor_help_assistant_seen', '1'));
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/');
 
