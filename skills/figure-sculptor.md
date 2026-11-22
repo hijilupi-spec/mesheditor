@@ -77,6 +77,9 @@ When asked to create stylized cartoon characters, mascots, dwarves, toons, or ic
 2. **Spawning the Cartoon Base Mesh**:
    - Call `modeler_spawn_base_mesh` with `type: "chibi"`, `pose: "t_pose"`, and `materialStyle: "colored"`.
    - This automatically creates the 3.5-head cartoon blockout in true T-Pose with pre-assigned PBR materials for skin, clothing, gloves, and boots!
+3. **Smooth Cartoon Surfaces & Thin Crest/Fin Rule**:
+   - For smooth cartoon/mascot heads, helmets, and suits, use `subdivide: 1..2` on `modeler_create_sdf_mesh` (or `modeler_subd_smooth` on parametric spheres/lathes) and keep normal/bump relief minimal (`bumpLevel: 0.05..0.15` or omit noisy procedural normal maps).
+   - **NEVER** model thin helmet fins, crests, capes, or straps as thin SDF parts (`< 3` voxel cells thick tears in Surface Nets). Build fins/crests as a tapered elliptical `modeler_create_tube` along a curved spine embedded into the helmet, or a thick `modeler_extrude_polygon` + `modeler_subd_smooth`.
 
 ---
 

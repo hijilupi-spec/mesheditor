@@ -19,7 +19,7 @@ import { applyCanonicalPbrPreset, CANONICAL_MATERIAL_PRESETS } from '../textureU
 export class CreateSdfMeshTool extends AbstractTool {
   public readonly name = 'modeler_create_sdf_mesh';
   public readonly description =
-    'Creates a seamless, watertight organic 3D clay/metaball mesh using Signed Distance Fields (SDF), smooth polynomial blending, optional quad-aware Catmull-Clark subdivision, canonical PBR material presets, root-to-tip gradients, 3D vertex paint regions, and standProud surface clearance.';
+    'Creates a seamless, watertight organic 3D clay/metaball mesh using Signed Distance Fields (SDF), smooth polynomial blending, optional quad-aware Catmull-Clark subdivision, canonical PBR material presets, root-to-tip gradients, 3D vertex paint regions, and standProud surface clearance. Note: avoid razor-thin SDF shells or fins thinner than ~3 voxel cells (use modeler_create_tube or ExtrudePolygon + modeler_subd_smooth for thin fins, crests, and straps).';
 
   public readonly parameters = {
     type: 'object',
@@ -260,7 +260,7 @@ export class CreateSdfMeshTool extends AbstractTool {
     else defaultRes = 80;
 
     const resolution = args.resolution !== undefined ? Number(args.resolution) : defaultRes;
-    const smoothIterations = args.smoothIterations !== undefined ? Number(args.smoothIterations) : 2;
+    const smoothIterations = args.smoothIterations !== undefined ? Number(args.smoothIterations) : 4;
     const defaultHex = context.normalizeHex(args.color || '#d9b38c');
 
     const extracted = extractSdfSurfaceNets(compiledParts, {
@@ -277,7 +277,13 @@ export class CreateSdfMeshTool extends AbstractTool {
       applyStandProudOffset(mesh, args.standProud as StandProudOptions);
     }
 
-    const subdividePasses = args.subdivide !== undefined ? Math.max(0, Math.min(2, Math.round(Number(args.subdivide)))) : 0;
+    const extractedTris = Math.floor((extracted.vertexData.indices?.length ?? 0) / 3);
+    const subdividePasses =
+      args.subdivide !== undefined
+        ? Math.max(0, Math.min(2, Math.round(Number(args.subdivide))))
+        : args.targetTriangles === undefined && maxBudget >= 8000 && extractedTris > 0 && extractedTris <= 3500
+          ? 1
+          : 0;
     if (subdividePasses > 0) {
       subdivideCatmullClarkMesh(mesh, subdividePasses, true);
     }

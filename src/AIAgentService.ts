@@ -1288,7 +1288,7 @@ export class AIAgentService {
     const enabledNeural = this.getEnabledNeural3DProviders();
 
     const normalMapRule = createNormalMaps
-      ? ` Normal maps are ENABLED: use \`normalMapUrl\` / \`bumpTextureUrl\`, \`modeler_generate_texture\` (automatic 4-map de-lit Albedo + Sobel Normal + ORM + Cavity AO), or \`withProceduralMaps: true\` in \`modeler_create_material\` (with \`bumpLevel\`, \`invertNormalMapY\`, or \`useParallax\`) to add realistic tactile depth and surface micro-relief.`
+      ? ` Normal maps are ENABLED: use \`normalMapUrl\` / \`bumpTextureUrl\`, \`modeler_generate_texture\` (automatic 4-map de-lit Albedo + Sobel Normal + ORM + Cavity AO), or \`withProceduralMaps: true\` in \`modeler_create_material\` (with \`bumpLevel\`, \`invertNormalMapY\`, or \`useParallax\`) to add realistic tactile depth and surface micro-relief (for smooth cartoon/stylized characters, keep \`bumpLevel\` subtle at \`0.05..0.15\` or omit noisy normal relief on smooth helmets/skin).`
       : ` Normal maps are DISABLED by the user: do not apply bump or normal maps.`;
 
     const textureGuidance = activeImageGenerator

@@ -285,8 +285,8 @@ export function extractSdfSurfaceNets(
   const vertCount = posArray.length / 3;
   let positions = new Float32Array(posArray);
 
-  // 5. Optional Taubin / Laplacian surface smoothing + SDF re-projection
-  const smoothIterations = Math.max(0, Math.min(5, options.smoothIterations ?? 1));
+  // 5. Optional Laplacian surface smoothing + damped Newton SDF re-projection
+  const smoothIterations = Math.max(0, Math.min(8, options.smoothIterations ?? 2));
   if (smoothIterations > 0 && vertCount > 0 && indices.length > 0) {
     const adjOffsets = new Int32Array(vertCount + 1);
     const degCounts = new Int32Array(vertCount);
@@ -316,7 +316,7 @@ export function extractSdfSurfaceNets(
     }
 
     const nextPositions = new Float32Array(positions.length);
-    const lambda = 0.35;
+    const lambda = 0.45;
     for (let iter = 0; iter < smoothIterations; iter++) {
       for (let v = 0; v < vertCount; v++) {
         const start = adjOffsets[v];
@@ -346,13 +346,15 @@ export function extractSdfSurfaceNets(
         let nyPos = positions[idx + 1] + (ay - positions[idx + 1]) * lambda;
         let nzPos = positions[idx + 2] + (az - positions[idx + 2]) * lambda;
 
-        // Re-project toward exact SDF surface so volume never shrinks
-        const dVal = evaluateSdfScene(parts, nxPos, nyPos, nzPos);
-        if (Math.abs(dVal) < cellSize) {
+        // Re-project onto exact SDF zero-isosurface (2 damped Newton steps) so volume stays crisp
+        for (let pStep = 0; pStep < 2; pStep++) {
+          const dVal = evaluateSdfScene(parts, nxPos, nyPos, nzPos);
+          if (Math.abs(dVal) >= cellSize * 1.25) break;
           const n = computeSdfNormal(parts, nxPos, nyPos, nzPos, eps);
-          nxPos -= n.x * dVal * 0.6;
-          nyPos -= n.y * dVal * 0.6;
-          nzPos -= n.z * dVal * 0.6;
+          const clampStep = Math.max(-cellSize * 0.6, Math.min(cellSize * 0.6, dVal * 0.85));
+          nxPos -= n.x * clampStep;
+          nyPos -= n.y * clampStep;
+          nzPos -= n.z * clampStep;
         }
 
         nextPositions[idx] = nxPos;
