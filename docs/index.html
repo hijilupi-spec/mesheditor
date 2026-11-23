@@ -72,6 +72,7 @@
           <li><a href="#adapters" class="nav-link">Adapters</a></li>
           <li><a href="#plugin-system" class="nav-link">Plugin System</a></li>
           <li><a href="#features" class="nav-link">Features</a></li>
+          <li><a href="#gaussian-splatting" class="nav-link">Gaussian Splats</a></li>
           <li><a href="#workflows" class="nav-link">Workflows</a></li>
           <li><a href="#roadmap" class="nav-link">Roadmap</a></li>
         </ul>
@@ -146,8 +147,7 @@
                 <span class="dot dot-green"></span>
               </div>
               <span class="hero-window-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                Mesh Editor Studio &bull; <span id="heroShowcaseTitle">Ancient Fluted Pillar</span>
+                <span id="heroShowcaseTitle">GTA Tower</span>
               </span>
               <div style="display: flex; align-items: center; gap: 10px;">
                 <button type="button" class="hero-open-3d-btn" id="heroOpen3dTrigger" title="Click to inspect this 3D model in Babylon.js">
@@ -452,15 +452,35 @@
               <span class="format-ext-badge">.ply</span>
               <div class="format-io-pills">
                 <span class="format-pill pill-import">Import</span>
+                <span class="format-pill pill-export">Export</span>
               </div>
             </div>
-            <h3 class="format-card-title">Polygon File Format</h3>
+            <h3 class="format-card-title">Polygon &amp; 3DGS PLY</h3>
             <p class="format-card-desc">
-              High-density 3D scanner captures, photogrammetry assets, and raw vertex-colored polygon meshes.
+              3D Gaussian Splatting captures (standard &amp; compressed PLY + SH) as well as vertex-colored polygon meshes and 3D scans.
             </p>
             <div class="format-card-tags">
+              <span>3DGS + SH</span>
               <span>3D Scans</span>
-              <span>Vertex Colors</span>
+            </div>
+          </article>
+
+          <!-- GAUSSIAN SPLATTING -->
+          <article class="format-card format-accent-cyan">
+            <div class="format-card-top">
+              <span class="format-ext-badge">.splat / .spz / .sog</span>
+              <div class="format-io-pills">
+                <span class="format-pill pill-import">Import</span>
+                <span class="format-pill pill-export">Export .splat</span>
+              </div>
+            </div>
+            <h3 class="format-card-title">Gaussian Splatting</h3>
+            <p class="format-card-desc">
+              Real-time 3D Gaussian Splatting clouds with Spherical Harmonics, RAM editing, floater cleanup, Mesh-to-Splats conversion, and binary export.
+            </p>
+            <div class="format-card-tags">
+              <span>.splat / .spz / .sog</span>
+              <span>RAM Editable</span>
             </div>
           </article>
 
@@ -475,7 +495,7 @@
             </div>
             <h3 class="format-card-title">Babylon.js Project Scene</h3>
             <p class="format-card-desc">
-              Full scene state archives preserving Voxel Painter grids, Path Extrusion curves, and Heightmap Terrain splats.
+              Full scene state archives preserving Gaussian Splatting clouds, Voxel Painter grids, Path Extrusion curves, and Heightmap Terrain splats.
             </p>
             <div class="format-card-tags">
               <span>Full Editor State</span>
@@ -533,7 +553,7 @@
             <span class="pipeline-step-num">04</span>
             <div class="pipeline-step-body">
               <strong>Clean Export</strong>
-              <span>Download <code>.glb</code>, <code>.gltf</code>, <code>.obj</code>, <code>.stl</code>, or <code>.babylon</code></span>
+              <span>Download <code>.glb</code>, <code>.gltf</code>, <code>.obj</code>, <code>.stl</code>, <code>.splat</code>, <code>.ply</code>, or <code>.babylon</code></span>
             </div>
           </div>
         </div>
@@ -1923,6 +1943,17 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
               Stamp built-in surface details (foliage, cracks, rust, runes, emblems), custom PNGs, or AI-generated alpha decals onto curved meshes with rotation, tint, and automatic mesh fusion on GLB/OBJ export.
             </p>
           </div>
+
+          <!-- Feature 21 -->
+          <div class="feature-box">
+            <div class="feature-box-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+            </div>
+            <h4 class="feature-box-title">3D Gaussian Splatting Studio</h4>
+            <p class="feature-box-desc">
+              Import <code>.splat</code>, <code>.ply</code>, <code>.spz</code>, and <code>.sog</code> clouds, clean floaters &amp; crop bounds, generate volumetric presets, convert polygon meshes into crisp leaf/moss splats, merge clouds, and export to <code>.splat</code> or <code>.ply</code>.
+            </p>
+          </div>
         </div>
 
         <!-- 3D UV Texture Painter & Hand-Painted PBR Showcase -->
@@ -2150,6 +2181,119 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
             </div>
           </div>
         </div>
+
+        <!-- 3D Gaussian Splatting Studio Showcase -->
+        <div id="gaussian-splatting" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="section-header" style="margin-bottom: 36px;">
+            <span class="section-tag">3D Gaussian Splatting &amp; Hybrid Scenes</span>
+            <h3 class="section-title" style="font-size: 32px;">Edit 3DGS Scans, Craft Crisp Foliage Splats &amp; Combine with Meshes.</h3>
+            <p class="section-desc">
+              Built directly on Babylon.js <code>GaussianSplattingMesh</code>, Mesh Editor brings 3D Gaussian Splatting into the same interactive studio and AI pipeline as standard polygon geometry.
+            </p>
+          </div>
+
+          <div class="ai-feature-card-grid" style="margin-bottom: 36px;">
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              </div>
+              <h4 class="card-title">Import, Clean, Crop &amp; Export</h4>
+              <p class="card-desc">
+                Load <code>.splat</code>, <code>.ply</code> (standard &amp; compressed + SH), <code>.spz</code>, and <code>.sog</code> files with RAM retention (<code>keepInRam</code>). Strip floaters via opacity/scale filters, crop by radius or box, tune <code>shDegree</code> &amp; <code>minPixelSize</code>, merge clouds, bake non-uniform transforms, and export binary <code>.splat</code> or <code>.ply</code>.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">.splat / .ply / .spz / .sog</span>
+                <span class="card-tag">Floater Cleanup</span>
+                <span class="card-tag">SH Degree 0&ndash;3</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+              </div>
+              <h4 class="card-title">Mesh &rarr; Splats &amp; Volumetric Presets</h4>
+              <p class="card-desc">
+                Generate procedural clouds, foliage canopies, bushes, fire, galaxies, and nebulae&mdash;or sample any polygon mesh into Gaussian Splats with specialized <strong>Leaf Blade (<code>foliage</code>)</strong>, <strong>Moss Tufts (<code>moss</code>)</strong>, and <strong>Soft Puff (<code>fuzzy</code>)</strong> styles.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Surface &amp; Volume</span>
+                <span class="card-tag">Anisotropic Leaves</span>
+                <span class="card-tag">Full Undo / Redo</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
+              </div>
+              <h4 class="card-title">AI Splat Tools &amp; Dedicated Skill</h4>
+              <p class="card-desc">
+                Equipped with <code>modeler_gaussian_splat</code>, <code>modeler_mesh_to_splats</code>, and the built-in <code>gaussian-splatting</code> skill, the AI Agent inspects scan bounds, grounds captures to <code>Y = 0</code>, builds crisp organic foliage alongside procedural trunks, and composes hybrid scenes.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">modeler_gaussian_splat</span>
+                <span class="card-tag">modeler_mesh_to_splats</span>
+                <span class="card-tag">Hybrid Scenes</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="plugin-section-grid">
+            <div>
+              <span class="section-tag">Human + AI Splatting Workflow</span>
+              <h4 class="section-title" style="font-size: 26px;">Mix Photogrammetry Splats &amp; Crisp Foliage with Polygon Meshes.</h4>
+              <p class="section-desc" style="margin-bottom: 18px;">
+                Open <strong>Tools &rarr; Creation &rarr; Gaussian Splatting</strong> in the editor or prompt the AI Agent directly. Gaussian Splats live alongside triangle meshes in the Scene Outliner with full transform gizmos, world bounds inspection, and non-destructive Undo/Redo:
+              </p>
+              <ul class="adapter-list" style="margin-bottom: 20px;">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Clean Raw Captures in Seconds:</strong> Strip low-opacity haze floaters, cap oversized artifacts, crop to a sphere or bounding box, and reduce density before exporting <code>.splat</code> or <code>.ply</code>.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Crisp Botanical Foliage &amp; Moss:</strong> Sample curved fern fronds, shrubs, and tree canopies with oriented, thin leaf-blade ellipsoids instead of rigid low-poly cards or blurry blobs.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Splat-Aware AI Diagnostics:</strong> Scene summaries distinguish <code>GaussianSplattingMesh</code> clouds from polygon meshes so AI self-critique never confuses splats with 0-triangle geometry.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="code-window">
+              <div class="code-header">
+                <div class="code-dots">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="code-title">Gaussian Splatting Studio &bull; AI Tool Pipeline</span>
+                <span style="font-size: 11px; color: var(--accent-hover);">GaussianSplattingMesh</span>
+              </div>
+              <pre class="code-body"><code><span class="code-cm">// 1. Convert a sculpted canopy mesh into crisp anisotropic leaf splats</span>
+<span class="code-fn">modeler_mesh_to_splats</span>({
+  targetMesh: <span class="code-str">'fern_fronds_mesh'</span>,
+  name: <span class="code-str">'fern_splats'</span>,
+  targetSplatCount: <span class="code-num">12000</span>,
+  splatStyle: <span class="code-str">'foliage'</span>,  <span class="code-cm">// default | foliage | moss | fuzzy</span>
+  splatScale: <span class="code-num">0.032</span>,
+  removeSource: <span class="code-kw">true</span>
+});
+
+<span class="code-cm">// 2. Clean floaters, tint, or bake transforms on an imported 3DGS scan</span>
+<span class="code-fn">modeler_gaussian_splat</span>({
+  action: <span class="code-str">'cleanup'</span>, targetMesh: <span class="code-str">'forest_scan'</span>,
+  minOpacity: <span class="code-num">0.08</span>, maxScale: <span class="code-num">0.25</span>, cropRadius: <span class="code-num">8.0</span>
+});
+
+<span class="code-fn">modeler_gaussian_splat</span>({
+  action: <span class="code-str">'bake_transform'</span>, targetMesh: <span class="code-str">'forest_scan'</span>, alignToGround: <span class="code-kw">true</span>
+});</code></pre>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -2321,6 +2465,7 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
           <a href="#ai-copilot" class="nav-link">Human + AI</a>
           <a href="#neural-3d" class="nav-link">Neural 3D</a>
           <a href="#game-pipeline" class="nav-link">Game Pipeline</a>
+          <a href="#gaussian-splatting" class="nav-link">Gaussian Splats</a>
           <a href="#adapters" class="nav-link">Adapters</a>
           <a href="#plugin-system" class="nav-link">Plugin SDK</a>
           <a href="#roadmap" class="nav-link">Roadmap</a>
@@ -2420,6 +2565,13 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
         sub: 'GTA Style Tower',
         screenshot: 'screenshots/gta_tower.jpg',
         model: 'models/gta_tower.glb'
+      },
+      {
+        id: 'fern',
+        title: 'Fern',
+        sub: 'Fern with gaussian splatting',
+        screenshot: 'screenshots/fern.jpg',
+        model: 'models/fern.splat'
       },
       {
         id: 'mushroom',
@@ -2964,10 +3116,10 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
 
     function resetCameraView() {
       if (!activeCamera) return;
-      if (defaultCameraRadius !== null) activeCamera.radius = defaultCameraRadius;
       if (defaultCameraTarget) activeCamera.setTarget(defaultCameraTarget.clone());
       activeCamera.alpha = -Math.PI / 2;
-      activeCamera.beta = Math.PI / 2.5;
+      activeCamera.beta = Math.PI / 2.15;
+      if (defaultCameraRadius !== null) activeCamera.radius = defaultCameraRadius;
     }
 
     function initBabylonEngineAndLoad(index) {
@@ -3030,11 +3182,13 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
       babylonScene.clearColor = new BABYLON.Color4(0.06, 0.08, 0.12, 1);
 
       const canvas = document.getElementById('babylonModalCanvas');
-      const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 2.5, 5, BABYLON.Vector3.Zero(), babylonScene);
+      const camera = new BABYLON.ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 2.15, 5, BABYLON.Vector3.Zero(), babylonScene);
       camera.attachControl(canvas, true);
       camera.wheelPrecision = 30;
       camera.minZ = 0.05;
-      camera.maxZ = 1000;
+      camera.maxZ = 2000;
+      camera.lowerBetaLimit = 0.08;
+      camera.upperBetaLimit = Math.PI * 0.85;
       camera.useAutoRotationBehavior = isAutoRotateActive;
       if (camera.autoRotationBehavior) {
         camera.autoRotationBehavior.idleRotationSpeed = 0.25;
@@ -3070,31 +3224,54 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
             let max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
             let totalVertices = 0;
             let totalIndices = 0;
+            let totalSplats = 0;
 
             result.meshes.forEach((mesh) => {
-              if (mesh.getTotalVertices && mesh.getTotalVertices() > 0) {
-                totalVertices += mesh.getTotalVertices();
-                totalIndices += mesh.getTotalIndices();
+              mesh.computeWorldMatrix(true);
+              const isSplat =
+                mesh._isGaussianSplatting === true ||
+                (typeof mesh.getClassName === 'function' && mesh.getClassName().includes('GaussianSplatting'));
+              const verts = mesh.getTotalVertices ? mesh.getTotalVertices() : 0;
+              if (verts > 0) {
+                if (isSplat) {
+                  totalSplats += verts;
+                } else {
+                  totalVertices += verts;
+                  totalIndices += mesh.getTotalIndices ? mesh.getTotalIndices() : 0;
+                }
                 const bInfo = mesh.getBoundingInfo();
-                min = BABYLON.Vector3.Minimize(min, bInfo.boundingBox.minimumWorld);
-                max = BABYLON.Vector3.Maximize(max, bInfo.boundingBox.maximumWorld);
+                if (bInfo && bInfo.boundingBox) {
+                  bInfo.update(mesh.getWorldMatrix());
+                  min = BABYLON.Vector3.Minimize(min, bInfo.boundingBox.minimumWorld);
+                  max = BABYLON.Vector3.Maximize(max, bInfo.boundingBox.maximumWorld);
+                }
               }
             });
 
             if (min.x !== Infinity) {
               const center = BABYLON.Vector3.Center(min, max);
-              const size = BABYLON.Vector3.Distance(min, max);
+              const size = Math.max(BABYLON.Vector3.Distance(min, max), 0.1);
               defaultCameraTarget = center;
               defaultCameraRadius = Math.max(size * 1.5, 1.8);
 
+              // Update target first, then explicitly reset alpha/beta/radius so large/tall meshes
+              // are always framed from half-height eye level rather than from below.
               camera.setTarget(center);
+              camera.alpha = -Math.PI / 2;
+              camera.beta = Math.PI / 2.15;
               camera.radius = defaultCameraRadius;
-              camera.lowerRadiusLimit = size * 0.15;
-              camera.upperRadiusLimit = size * 8;
+              camera.lowerRadiusLimit = Math.max(size * 0.15, 0.1);
+              camera.upperRadiusLimit = Math.max(size * 8, 20);
             }
 
             const triangles = Math.round(totalIndices / 3);
-            babylonMeshInfo.innerHTML = `<strong>${item.title}</strong> &bull; ${totalVertices.toLocaleString()} vertices &bull; ${triangles.toLocaleString()} triangles &bull; Babylon.js PBR`;
+            if (totalSplats > 0 && triangles === 0) {
+              babylonMeshInfo.innerHTML = `<strong>${item.title}</strong> &bull; ${totalSplats.toLocaleString()} Gaussian splats &bull; Babylon.js 3DGS`;
+            } else if (totalSplats > 0) {
+              babylonMeshInfo.innerHTML = `<strong>${item.title}</strong> &bull; ${totalSplats.toLocaleString()} splats &bull; ${triangles.toLocaleString()} triangles &bull; Hybrid 3DGS`;
+            } else {
+              babylonMeshInfo.innerHTML = `<strong>${item.title}</strong> &bull; ${totalVertices.toLocaleString()} vertices &bull; ${triangles.toLocaleString()} triangles &bull; Babylon.js PBR`;
+            }
           }
         })
         .catch((err) => {

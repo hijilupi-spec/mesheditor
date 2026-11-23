@@ -104,6 +104,7 @@ export interface MeshEditorAppHost {
   updateTexturePaintUI(): void;
   updateTexturePaintStencilOverlay(): void;
   updateHeightmapUI(): void;
+  updateGaussianSplatUI(): void;
   openHeightmapPaintModal(initialTab?: 'height' | 'mix'): void;
   renderToolsMenu(): void;
   refreshAIEndpointBadge(): void;

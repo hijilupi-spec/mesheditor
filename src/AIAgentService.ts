@@ -103,6 +103,7 @@ import {
   ZFightingCheckOptions,
   ZFightingReport,
 } from './geometry/zFightingDetector';
+import { getSplatCount, isGaussianSplatMesh } from './splatting/GaussianSplatUtils';
 
 export type {
   ProceduralTextureType,
@@ -134,6 +135,8 @@ export const CORE_TOOL_NAMES: readonly string[] = [
   'modeler_merge_meshes',
   'modeler_generate_texture',
   'modeler_generate_neural_mesh',
+  'modeler_gaussian_splat',
+  'modeler_mesh_to_splats',
 ];
 
 export const CORE_TOOL_SET: ReadonlySet<string> = new Set(CORE_TOOL_NAMES);
@@ -1102,15 +1105,21 @@ export class AIAgentService {
         };
       }
 
-      const triangles = Math.floor(m.getTotalIndices() / 3);
+      const isSplat = isGaussianSplatMesh(m);
+      const triangles = isSplat ? 0 : Math.floor(m.getTotalIndices() / 3);
+      const splatCount = isSplat ? getSplatCount(m as any) : 0;
       const volumeApprox = Math.max(1e-6, Math.abs(size.x * size.y * size.z));
 
       return {
         name: m.name,
+        type: isSplat ? 'GaussianSplattingMesh' : 'Mesh',
+        isGaussianSplat: isSplat,
         visible: m.isVisible,
         isSelected: this.service.selectedNodes.includes(m) || this.service.selectedMesh === m,
         parentGroup: m.parent && this.service.isGroupNode(m.parent) ? m.parent.name : null,
-        vertices: m.getTotalVertices(),
+        vertices: isSplat ? splatCount : m.getTotalVertices(),
+        splatCount: isSplat ? splatCount : undefined,
+        shDegree: isSplat ? (m as any).shDegree ?? 0 : undefined,
         triangles,
         subMeshesCount: m.subMeshes?.length || 1,
         position: {
@@ -1146,12 +1155,13 @@ export class AIAgentService {
         totalSceneTriangles > 0 ? Number(((m.triangles / totalSceneTriangles) * 100).toFixed(1)) : 0,
     }));
 
-    // Compute automatic topology & proportion diagnostics
+    // Compute automatic topology & proportion diagnostics (for triangle meshes only)
+    const triangleMeshes = meshes.filter((m) => !m.isGaussianSplat);
     const proportionWarnings: string[] = [];
-    if (meshes.length >= 2) {
-      const sortedByVol = [...meshes].sort((a, b) => b.volumeApprox - a.volumeApprox);
+    if (triangleMeshes.length >= 2) {
+      const sortedByVol = [...triangleMeshes].sort((a, b) => b.volumeApprox - a.volumeApprox);
       const primary = sortedByVol[0];
-      for (const m of meshes) {
+      for (const m of triangleMeshes) {
         if (
           m.name !== primary.name &&
           m.volumeApprox < primary.volumeApprox * 0.015 &&
@@ -1167,13 +1177,15 @@ export class AIAgentService {
     const minPoly = typeof this.config.minPolygons === 'number' ? this.config.minPolygons : 200;
     const maxPoly = typeof this.config.maxPolygons === 'number' ? this.config.maxPolygons : 25000;
     const budgetStatus =
-      totalSceneTriangles === 0
+      meshes.length === 0
         ? 'empty'
-        : totalSceneTriangles < minPoly
-          ? 'below_minimum'
-          : totalSceneTriangles > maxPoly
-            ? 'exceeds_maximum'
-            : 'within_budget';
+        : totalSceneTriangles === 0
+          ? 'within_budget'
+          : totalSceneTriangles < minPoly
+            ? 'below_minimum'
+            : totalSceneTriangles > maxPoly
+              ? 'exceeds_maximum'
+              : 'within_budget';
 
     const groups = this.service.groups
       .filter((g) => !g.isDisposed())

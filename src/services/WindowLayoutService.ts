@@ -964,6 +964,7 @@ export class WindowLayoutService {
           this.app.initDecalUI();
           this.app.initTexturePaintUI();
           this.app.initHeightmapUI();
+          this.app.initGaussianSplatUI();
           this.app.refreshIcons();
         }
       }

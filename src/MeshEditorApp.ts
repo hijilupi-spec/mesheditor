@@ -47,6 +47,7 @@ import { AITextureUIService } from './textures/AITextureUIService';
 import { TextMeshUIService } from './textMesh/TextMeshUIService';
 import { DecalUIService } from './decals/DecalUIService';
 import { HeightmapUIService } from './heightmap/HeightmapUIService';
+import { GaussianSplatUIService } from './splatting/GaussianSplatUIService';
 import { VoxelPainterUIService } from './voxel/VoxelPainterUIService';
 import { PathExtrusionUIService } from './pathExtrusion/PathExtrusionUIService';
 import { CompressModelUIService } from './compression/CompressModelUIService';
@@ -149,6 +150,7 @@ export class MeshEditorApp {
   public readonly textMeshUI: TextMeshUIService = new TextMeshUIService(this as unknown as MeshEditorAppHost);
   public readonly decalUI: DecalUIService = new DecalUIService(this as unknown as MeshEditorAppHost);
   public readonly heightmapUI: HeightmapUIService = new HeightmapUIService(this as unknown as MeshEditorAppHost);
+  public readonly gaussianSplatUI: GaussianSplatUIService = new GaussianSplatUIService(this as unknown as MeshEditorAppHost);
   public readonly voxelPainterUI: VoxelPainterUIService = new VoxelPainterUIService(this as unknown as MeshEditorAppHost);
   public readonly pathExtrusionUI: PathExtrusionUIService = new PathExtrusionUIService(this as unknown as MeshEditorAppHost);
   public readonly compressModelUI: CompressModelUIService = new CompressModelUIService(this as unknown as MeshEditorAppHost);
@@ -355,6 +357,7 @@ export class MeshEditorApp {
         this.updateDecalUI();
         this.updateTexturePaintUI();
         this.updateHeightmapUI();
+        this.updateGaussianSplatUI();
         const statsSelection = this.getElement<HTMLElement>('statsSelection');
         if (statsSelection) {
           statsSelection.textContent = activeMesh
@@ -383,6 +386,7 @@ export class MeshEditorApp {
         this.updateDecalUI();
         this.updateTexturePaintUI();
         this.updateHeightmapUI();
+        this.updateGaussianSplatUI();
         this.renderPathExtrusionUI();
         const statsSelection = this.getElement<HTMLElement>('statsSelection');
         if (statsSelection) {
@@ -418,6 +422,7 @@ export class MeshEditorApp {
         this.updateDecalUI();
         this.updateTexturePaintUI();
         this.updateHeightmapUI();
+        this.updateGaussianSplatUI();
         this.adapter.onModelLoaded?.(filename, this);
         options.events?.onModelLoaded?.(filename);
       },
@@ -976,6 +981,7 @@ export class MeshEditorApp {
     this.initDecalUI();
     this.initTexturePaintUI();
     this.initHeightmapUI();
+    this.initGaussianSplatUI();
 
     // Restore saved window layout and active tools from localStorage
     this.restoreDialogLayout();
@@ -2051,5 +2057,13 @@ export class MeshEditorApp {
 
   public updateHeightmapUI(): void {
     this.heightmapUI.updateHeightmapUI();
+  }
+
+  public initGaussianSplatUI(): void {
+    this.gaussianSplatUI.initGaussianSplatUI();
+  }
+
+  public updateGaussianSplatUI(): void {
+    this.gaussianSplatUI.updateGaussianSplatUI();
   }
 }

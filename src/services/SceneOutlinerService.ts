@@ -1,4 +1,5 @@
 import { Material, Mesh, Node, TransformNode } from '@babylonjs/core';
+import { getSplatCount, isGaussianSplatMesh } from '../splatting/GaussianSplatUtils';
 import type { MeshEditorAppHost } from './MeshEditorAppHost';
 
 export class SceneOutlinerService {
@@ -157,8 +158,11 @@ export class SceneOutlinerService {
       const icon = document.createElement('span');
       icon.className = 'outliner-item-icon';
       let iconName = 'box';
+      const isSplat = isGaussianSplatMesh(node);
       if (isGroup) {
         iconName = 'folder';
+      } else if (isSplat) {
+        iconName = 'sparkles';
       } else if (node instanceof Mesh) {
         iconName = node.getTotalVertices() > 0 ? 'box' : 'box-select';
       } else {
@@ -175,7 +179,13 @@ export class SceneOutlinerService {
       left.appendChild(name);
 
       // Badges
-      if (node instanceof Mesh && node.getTotalVertices() > 0) {
+      if (isSplat) {
+        const splatCount = getSplatCount(node as any);
+        const badge = document.createElement('span');
+        badge.className = 'outliner-badge';
+        badge.textContent = `${splatCount.toLocaleString()} Splats`;
+        left.appendChild(badge);
+      } else if (node instanceof Mesh && node.getTotalVertices() > 0) {
         const polyCount = Math.floor(node.getTotalIndices() / 3);
         const badge = document.createElement('span');
         badge.className = 'outliner-badge';

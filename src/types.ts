@@ -54,7 +54,7 @@ export interface PrimitiveConfig {
 export type CSGOperationType = 'subtract' | 'union' | 'intersect' | 'slice';
 
 export interface ExportOptions {
-  format: 'glb' | 'gltf' | 'obj' | 'stl' | 'babylon';
+  format: 'glb' | 'gltf' | 'obj' | 'stl' | 'babylon' | 'splat' | 'ply';
   filename: string;
   selectedOnly?: boolean;
 }

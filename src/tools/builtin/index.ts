@@ -45,4 +45,6 @@ export * from './DecalTool';
 export * from './PaintTextureTool';
 export * from './CreateHeightmapTool';
 export * from './CheckZFightingTool';
+export * from './ManageGaussianSplatTool';
+export * from './MeshToSplatsTool';
 

@@ -104,6 +104,7 @@ describe('AI Mesh Agent (Text-to-Mesh, Image-to-Mesh & Mesh Update) Integration 
         'mesh-updater',
         'image-to-mesh',
         'figure-sculptor',
+        'gaussian-splatting',
         'neural-3d-generator',
         'six-pass-pipeline',
       ]);
@@ -112,6 +113,7 @@ describe('AI Mesh Agent (Text-to-Mesh, Image-to-Mesh & Mesh Update) Integration 
       expect(skills.find((s) => s.id === 'mesh-updater')?.enabled).toBe(true);
       expect(skills.find((s) => s.id === 'image-to-mesh')?.enabled).toBe(true);
       expect(skills.find((s) => s.id === 'figure-sculptor')?.enabled).toBe(true);
+      expect(skills.find((s) => s.id === 'gaussian-splatting')?.enabled).toBe(true);
       expect(skills.find((s) => s.id === 'voxel-painter')?.enabled).toBe(false);
       expect(skills.find((s) => s.id === 'neural-3d-generator')?.enabled).toBe(false);
       expect(skills.find((s) => s.id === 'six-pass-pipeline')?.enabled).toBe(false);

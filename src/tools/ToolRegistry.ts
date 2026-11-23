@@ -48,6 +48,8 @@ import {
   PaintTextureTool,
   CreateHeightmapTool,
   CheckZFightingTool,
+  ManageGaussianSplatTool,
+  MeshToSplatsTool,
 } from './builtin';
 
 /**
@@ -179,5 +181,7 @@ export function createDefaultToolRegistry(): ToolRegistry {
     new PaintTextureTool(),
     new CreateHeightmapTool(),
     new CheckZFightingTool(),
+    new ManageGaussianSplatTool(),
+    new MeshToSplatsTool(),
   ]);
 }

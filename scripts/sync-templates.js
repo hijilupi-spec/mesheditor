@@ -31,6 +31,7 @@ const TOOLS = [
   { className: 'DecalEditorTool', file: 'DecalEditorTool.ejs', id: 'dialog-decal' },
   { className: 'TexturePaintEditorTool', file: 'TexturePaintEditorTool.ejs', id: 'dialog-texture-paint' },
   { className: 'HeightmapEditorTool', file: 'HeightmapEditorTool.ejs', id: 'dialog-heightmap' },
+  { className: 'GaussianSplatEditorTool', file: 'GaussianSplatEditorTool.ejs', id: 'dialog-gaussian-splat' },
 ];
 
 function getAppMetadata() {

@@ -1,4 +1,5 @@
 import type { PrimitiveShape } from '../types';
+import { isGaussianSplatMesh } from '../splatting/GaussianSplatUtils';
 import type { MeshEditorAppHost } from './MeshEditorAppHost';
 
 export class ModelingPanelUIService {
@@ -8,9 +9,10 @@ export class ModelingPanelUIService {
     if (
       !this.app.service.selectedMesh ||
       this.app.service.isEditorHelper(this.app.service.selectedMesh) ||
+      isGaussianSplatMesh(this.app.service.selectedMesh) ||
       this.app.service.selectedMesh.getTotalVertices() === 0
     ) {
-      this.app.showToast('Please select a valid 3D mesh with geometry first.', 'warning');
+      this.app.showToast('Please select a valid 3D triangle mesh with geometry first.', 'warning');
       return;
     }
     this.app.csgParams.targetMesh = this.app.service.selectedMesh.name;
@@ -22,9 +24,10 @@ export class ModelingPanelUIService {
     if (
       !this.app.service.selectedMesh ||
       this.app.service.isEditorHelper(this.app.service.selectedMesh) ||
+      isGaussianSplatMesh(this.app.service.selectedMesh) ||
       this.app.service.selectedMesh.getTotalVertices() === 0
     ) {
-      this.app.showToast('Please select a valid 3D mesh with geometry first.', 'warning');
+      this.app.showToast('Please select a valid 3D triangle mesh with geometry first.', 'warning');
       return;
     }
     this.app.csgParams.toolMesh = this.app.service.selectedMesh.name;
@@ -96,7 +99,12 @@ export class ModelingPanelUIService {
 
   public updateCSGGUI(): void {
     const validMeshes = this.app.service.importedMeshes.filter(
-      (m) => !this.app.service.isEditorHelper(m) && m.name !== '__root__' && m.getTotalVertices() > 0 && (!m.isEnabled || m.isEnabled())
+      (m) =>
+        !this.app.service.isEditorHelper(m) &&
+        !isGaussianSplatMesh(m) &&
+        m.name !== '__root__' &&
+        m.getTotalVertices() > 0 &&
+        (!m.isEnabled || m.isEnabled())
     );
     const meshNames = validMeshes.map((m) => m.name);
     const options = ['None', ...meshNames];
@@ -113,7 +121,7 @@ export class ModelingPanelUIService {
     // Auto-suggest selected mesh as target if target is None, or pick first valid mesh
     if (this.app.csgParams.targetMesh === 'None') {
       const sel = this.app.service.selectedMesh;
-      if (sel && !this.app.service.isEditorHelper(sel) && sel.name !== '__root__' && sel.getTotalVertices() > 0) {
+      if (sel && !this.app.service.isEditorHelper(sel) && !isGaussianSplatMesh(sel) && sel.name !== '__root__' && sel.getTotalVertices() > 0) {
         this.app.csgParams.targetMesh = sel.name;
       } else if (validMeshes.length > 0) {
         this.app.csgParams.targetMesh = validMeshes[0].name;

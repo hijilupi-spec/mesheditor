@@ -1,0 +1,181 @@
+<div id="dialog-gaussian-splat" class="floating-dialog" style="top: 120px; right: 365px; width: 350px; display: none">
+  <div class="dialog-header">
+    <span class="dialog-title"><i class="app-icon" data-lucide="sparkles"></i> Gaussian Splatting</span>
+    <div class="dialog-actions">
+      <button class="dialog-btn btn-help" title="Help &amp; Tool Guide" aria-label="Help"><i class="app-icon" data-lucide="help-circle"></i></button>
+      <button class="dialog-btn btn-min" title="Minimize"><i class="app-icon" data-lucide="minus"></i></button>
+      <button class="dialog-btn btn-close" title="Close"><i class="app-icon" data-lucide="x"></i></button>
+    </div>
+  </div>
+  <div class="dialog-body sculpt-tool-body">
+    <div id="gsSelectedBadge" class="tool-help-box">
+      Import a .splat / .ply / .spz / .sog file, generate a volumetric preset, or convert a triangle mesh into Gaussian Splats.
+    </div>
+
+    <input type="file" id="gsFileInput" accept=".splat,.ply,.spz,.sog,.json" style="display: none" />
+
+    <!-- 1. Active Splat Cloud Selector & Import -->
+    <div class="tool-control-group">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="upload"></i> Active Cloud &amp; Import</div>
+      <div class="tool-row" style="margin-top: 4px;">
+        <select id="gsTargetSelect" class="tool-select" style="flex: 1; min-width: 0;" aria-label="Active Gaussian Splat Cloud"></select>
+      </div>
+      <div class="tool-row" style="margin-top: 6px; justify-content: space-between;">
+        <button type="button" id="btnGSImportFile" class="tool-btn tool-btn-primary" style="flex: 1; height: 30px; font-size: 11px;">
+          <i class="app-icon" data-lucide="folder-open"></i> Import Splat (.splat, .ply, .spz, .sog)...
+        </button>
+      </div>
+      <label class="tool-row" style="margin-top: 4px; justify-content: flex-start; gap: 6px; cursor: pointer;">
+        <input type="checkbox" id="gsFlipYCheckbox" />
+        <span class="tool-sublabel">Flip Y Axis on Import</span>
+      </label>
+    </div>
+
+    <!-- 2. Create Volumetric Preset -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="sparkles"></i> Procedural Splat Preset</div>
+      <div class="tool-row" style="margin-top: 4px; gap: 6px;">
+        <select id="gsPresetSelect" class="tool-select" style="flex: 1;" aria-label="Gaussian Splat Preset">
+          <option value="cloud">Cumulus Cloud</option>
+          <option value="foliage">Foliage Canopy</option>
+          <option value="bush">Organic Bush</option>
+          <option value="fire">Campfire / Flame</option>
+          <option value="galaxy">Spiral Galaxy</option>
+          <option value="nebula">Volumetric Nebula</option>
+        </select>
+        <input type="number" id="gsPresetCountNum" class="tool-number" min="100" max="50000" step="250" value="2500" style="width: 68px; text-align: right;" title="Splat Count" aria-label="Preset Splat Count" />
+        <input type="number" id="gsPresetRadiusNum" class="tool-number" min="0.2" max="50" step="0.2" value="1.2" style="width: 54px; text-align: right;" title="Radius (meters)" aria-label="Preset Radius" />
+      </div>
+      <button type="button" id="btnGSCreatePreset" class="sculpt-btn" style="width: 100%; height: 28px; margin-top: 6px; font-size: 11px;">
+        <i class="app-icon" data-lucide="sparkles"></i> Generate Splat Preset
+      </button>
+    </div>
+
+    <!-- 3. Mesh -> Splats Conversion -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="box"></i> Convert Mesh &rarr; Splats</div>
+      <div class="tool-row" style="margin-top: 4px; gap: 6px;">
+        <select id="gsSourceMeshSelect" class="tool-select" style="flex: 1; min-width: 0;" aria-label="Source Triangle Mesh"></select>
+      </div>
+      <div class="tool-row" style="margin-top: 6px; gap: 6px;">
+        <select id="gsConvertModeSelect" class="tool-select" style="flex: 1;" aria-label="Sampling Mode">
+          <option value="surface">Surface Sampling</option>
+          <option value="volume">Volume Fill</option>
+        </select>
+        <select id="gsConvertStyleSelect" class="tool-select" style="flex: 1;" aria-label="Splat Style">
+          <option value="default">Default Discs</option>
+          <option value="foliage">Leaf Blades (Foliage)</option>
+          <option value="moss">Moss Tufts</option>
+          <option value="fuzzy">Soft Puffs</option>
+        </select>
+        <input type="number" id="gsConvertCountNum" class="tool-number" min="100" max="100000" step="500" value="4000" style="width: 68px; text-align: right;" title="Target Splat Count" aria-label="Target Splat Count" />
+      </div>
+      <div class="tool-row" style="margin-top: 6px; justify-content: space-between;">
+        <label class="tool-row" style="justify-content: flex-start; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="gsConvertRemoveSource" />
+          <span class="tool-sublabel">Hide Original Mesh</span>
+        </label>
+        <button type="button" id="btnGSConvertMesh" class="tool-btn tool-btn-primary" style="height: 28px; padding: 0 12px; font-size: 11px;">
+          Convert
+        </button>
+      </div>
+    </div>
+
+    <!-- 4. Render Quality & Controls -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="sliders"></i> Render Tuning</div>
+
+      <div class="sculpt-slider-row" style="margin-top: 4px;">
+        <div class="sculpt-slider-header">
+          <label class="sculpt-slider-label" for="gsShDegreeRange">SH Degree</label>
+          <span id="gsShDegreeVal" class="sculpt-slider-val">0</span>
+        </div>
+        <input type="range" id="gsShDegreeRange" min="0" max="3" step="1" value="0" class="tool-range" />
+      </div>
+
+      <div class="sculpt-slider-row" style="margin-top: 4px;">
+        <div class="sculpt-slider-header">
+          <label class="sculpt-slider-label" for="gsMinPixelSizeRange">Min Pixel Size</label>
+          <span id="gsMinPixelSizeVal" class="sculpt-slider-val">0.0 px</span>
+        </div>
+        <input type="range" id="gsMinPixelSizeRange" min="0" max="8" step="0.5" value="0" class="tool-range" />
+      </div>
+
+      <div class="tool-row" style="margin-top: 4px; justify-content: space-between;">
+        <label class="tool-row" style="justify-content: flex-start; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="gsDisableDepthSortCheckbox" />
+          <span class="tool-sublabel">Disable Depth Sort</span>
+        </label>
+        <label class="tool-row" style="justify-content: flex-start; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="gsIblShadowsCheckbox" />
+          <span class="tool-sublabel">IBL Shadow Textures</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 5. Floater Cleanup & Crop -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="scissors"></i> Cleanup, Crop &amp; Decimate</div>
+      <div class="tool-row" style="margin-top: 4px; gap: 6px;">
+        <label class="tool-sublabel" for="gsMinOpacityNum" style="flex: 1;">Min Opacity</label>
+        <input type="number" id="gsMinOpacityNum" class="tool-number" min="0" max="0.99" step="0.05" value="0.05" style="width: 60px; text-align: right;" />
+        <label class="tool-sublabel" for="gsMaxScaleNum" style="flex: 1; text-align: right;">Max Scale</label>
+        <input type="number" id="gsMaxScaleNum" class="tool-number" min="0" max="20" step="0.1" value="0" style="width: 58px; text-align: right;" title="0 = no scale limit" />
+      </div>
+      <div class="tool-row" style="margin-top: 6px; gap: 6px;">
+        <label class="tool-sublabel" for="gsCropRadiusNum" style="flex: 1;">Crop Radius</label>
+        <input type="number" id="gsCropRadiusNum" class="tool-number" min="0" max="500" step="0.5" value="0" style="width: 60px; text-align: right;" title="0 = disabled" />
+        <label class="tool-sublabel" for="gsSampleStepSelect" style="flex: 1; text-align: right;">Keep Ratio</label>
+        <select id="gsSampleStepSelect" class="tool-select" style="width: 72px;">
+          <option value="1">100%</option>
+          <option value="2">50%</option>
+          <option value="3">33%</option>
+          <option value="4">25%</option>
+        </select>
+      </div>
+      <button type="button" id="btnGSCleanup" class="sculpt-btn" style="width: 100%; height: 28px; margin-top: 6px; font-size: 11px;">
+        <i class="app-icon" data-lucide="wand-2"></i> Clean / Crop / Decimate Splats
+      </button>
+    </div>
+
+    <!-- 6. Scale / Opacity / Color Tint -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="sculpt-section-title"><i class="app-icon" data-lucide="palette"></i> Splat Scale &amp; Color</div>
+      <div class="tool-row" style="margin-top: 4px; gap: 6px;">
+        <label class="tool-sublabel" for="gsScaleMultNum" style="flex: 1;">Scale &times;</label>
+        <input type="number" id="gsScaleMultNum" class="tool-number" min="0.1" max="5" step="0.1" value="1" style="width: 58px; text-align: right;" />
+        <label class="tool-sublabel" for="gsOpacityMultNum" style="flex: 1; text-align: right;">Opacity &times;</label>
+        <input type="number" id="gsOpacityMultNum" class="tool-number" min="0.05" max="3" step="0.05" value="1" style="width: 58px; text-align: right;" />
+      </div>
+      <div class="tool-row" style="margin-top: 6px; gap: 6px;">
+        <input type="color" id="gsTintColorInput" value="#ffffff" class="path-extrusion-color-input" title="Tint Color" aria-label="Tint Color" />
+        <input type="range" id="gsTintStrengthRange" min="0" max="1" step="0.05" value="0" class="tool-range" style="flex: 1;" aria-label="Tint Strength" />
+        <span id="gsTintStrengthVal" class="tool-sublabel" style="min-width: 32px; text-align: right;">0%</span>
+        <button type="button" id="btnGSApplyAdjustment" class="sculpt-btn" style="height: 26px; padding: 0 10px; font-size: 11px;">Apply</button>
+      </div>
+    </div>
+
+    <!-- 7. Transform, Merge & Export -->
+    <div class="tool-control-group" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 10px;">
+      <div class="tool-row" style="gap: 6px;">
+        <button type="button" id="btnGSAlignGround" class="sculpt-btn" style="flex: 1; height: 28px; font-size: 11px;">
+          <i class="app-icon" data-lucide="arrow-down"></i> Ground Y=0
+        </button>
+        <button type="button" id="btnGSBakeTransform" class="sculpt-btn" style="flex: 1; height: 28px; font-size: 11px;">
+          <i class="app-icon" data-lucide="check-circle-2"></i> Bake Transform
+        </button>
+      </div>
+      <button type="button" id="btnGSMergeAll" class="sculpt-btn" style="width: 100%; height: 28px; margin-top: 6px; font-size: 11px;">
+        <i class="app-icon" data-lucide="layers"></i> Merge All Splat Clouds
+      </button>
+      <div class="tool-row" style="gap: 6px; margin-top: 6px;">
+        <button type="button" id="btnGSExportSplat" class="tool-btn tool-btn-primary" style="flex: 1; height: 30px; font-size: 11px;">
+          <i class="app-icon" data-lucide="download"></i> Export .SPLAT
+        </button>
+        <button type="button" id="btnGSExportPly" class="tool-btn" style="flex: 1; height: 30px; font-size: 11px;">
+          <i class="app-icon" data-lucide="download"></i> Export .PLY
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -129,6 +129,11 @@ import { DecalController } from './decals/DecalController';
 import { TexturePaintController } from './painting/TexturePaintController';
 import { HeightmapController } from './heightmap';
 import {
+  GaussianSplatController,
+  isGaussianSplatMesh,
+  isGaussianSplatProxyMesh,
+} from './splatting';
+import {
   BevelModifierOptions,
   NonDestructiveCSGMetadata,
   captureMeshSnapshot,
@@ -188,6 +193,7 @@ export class MeshEditorService {
   public decalController: DecalController;
   public texturePaintController: TexturePaintController;
   public heightmapController: HeightmapController;
+  public gaussianSplatController: GaussianSplatController;
   public get pathWays(): PathExtrusionController {
     return this.pathExtrusion;
   }
@@ -344,6 +350,7 @@ export class MeshEditorService {
     this.decalController = new DecalController(this);
     this.texturePaintController = new TexturePaintController(this);
     this.heightmapController = new HeightmapController(this);
+    this.gaussianSplatController = new GaussianSplatController(this);
     const defaultAtlas = this.textureAtlasManager.getAtlases()[0];
     if (defaultAtlas) {
       this.voxelPainter.useTextureAtlas(defaultAtlas.id);
@@ -1497,12 +1504,12 @@ export class MeshEditorService {
     for (const node of this.selectedNodes) {
       if (node.isDisposed()) continue;
       if (node instanceof Mesh) {
-        if (!this.isEditorHelper(node)) {
+        if (!this.isEditorHelper(node) && !isGaussianSplatMesh(node)) {
           this.highlightLayer.addMesh(node, meshColor);
         }
       } else if (node instanceof TransformNode) {
         for (const child of node.getChildMeshes()) {
-          if (!this.isEditorHelper(child) && child instanceof Mesh) {
+          if (!this.isEditorHelper(child) && child instanceof Mesh && !isGaussianSplatMesh(child)) {
             this.highlightLayer.addMesh(child, childColor);
           }
         }
@@ -1999,15 +2006,22 @@ export class MeshEditorService {
         pastedNodes.push(groupClone);
       } else if (item instanceof Mesh) {
         const uniqueName = `${item.name}_copy_${Date.now().toString().slice(-4)}`;
-        const cloned = item.clone(uniqueName, item.parent);
+        const isSplat = isGaussianSplatMesh(item);
+        const cloned = isSplat ? (item.clone(uniqueName) as Mesh) : item.clone(uniqueName, item.parent);
         if (cloned) {
-          // Detach cloned geometry from the original mesh before centering pivot or editing vertices.
-          makeMeshHierarchyGeometryUnique(cloned);
+          if (isSplat) {
+            cloned.parent = item.parent ?? null;
+          } else {
+            // Detach cloned geometry from the original mesh before centering pivot or editing vertices.
+            makeMeshHierarchyGeometryUnique(cloned);
+          }
           item.computeWorldMatrix(true);
           cloned.computeWorldMatrix(true);
           cloned.setAbsolutePosition(item.getAbsolutePosition().add(delta));
           this.importedMeshes.push(cloned);
-          this.centerMeshPivot(cloned);
+          if (!isSplat) {
+            this.centerMeshPivot(cloned);
+          }
           pastedMeshes.push(cloned);
           pastedNodes.push(cloned);
         }
@@ -2226,7 +2240,7 @@ export class MeshEditorService {
   }
 
   public centerMeshPivot(mesh: Mesh): void {
-    if (!mesh || mesh.isDisposed()) return;
+    if (!mesh || mesh.isDisposed() || isGaussianSplatMesh(mesh)) return;
     mesh.computeWorldMatrix(true);
     const bb = mesh.getBoundingInfo().boundingBox;
     const center = bb.centerWorld.clone();
@@ -2413,7 +2427,7 @@ export class MeshEditorService {
   }
 
   public setMeshWireframe(mesh: Mesh, wireframe: boolean): void {
-    if (!mesh || mesh.isDisposed()) return;
+    if (!mesh || mesh.isDisposed() || isGaussianSplatMesh(mesh)) return;
     const prevMat = mesh.material;
     const prevWireframe = this.isMeshWireframe(mesh);
     if (prevMat && prevWireframe === wireframe) return;
@@ -9041,13 +9055,29 @@ export class MeshEditorService {
       await this.heightmapController?.prepareTexturesForBabylonSerialization();
     }
 
-    const shouldExport = (node: any) => this.shouldExportNode(node, opts.selectedOnly);
+    const shouldExport = (node: any) =>
+      this.shouldExportNode(node, opts.selectedOnly) &&
+      (format === 'babylon' || (!isGaussianSplatMesh(node) && !isGaussianSplatProxyMesh(node)));
 
     try {
       let exportedBlob: Blob | null = null;
       let downloadFallback: (() => void) | null = null;
 
-      if (format === 'glb') {
+      if (format === 'splat' || format === 'ply') {
+        const targetSplat = this.gaussianSplatController.getActiveSplatMesh();
+        if (!targetSplat) {
+          throw new Error('No Gaussian Splat mesh is active in the scene to export.');
+        }
+        exportedBlob = this.gaussianSplatController.exportSplatBlob(targetSplat, format, true);
+        downloadFallback = () => {
+          const url = URL.createObjectURL(exportedBlob!);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${opts.filename}.${format}`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        };
+      } else if (format === 'glb') {
         const glb = await GLTF2Export.GLBAsync(this.scene, opts.filename, {
           shouldExportNode: shouldExport,
         });
@@ -9339,6 +9369,12 @@ export class MeshEditorService {
         gltfLoader.preprocessUrlAsync = async (url: string, rootUrl?: string): Promise<string> => {
           return await this.preprocessLoaderUrl(url, rootUrl);
         };
+      } else if (loader.name === 'splat') {
+        const splatLoader = loader as any;
+        if (splatLoader._loadingOptions) {
+          splatLoader._loadingOptions.keepInRam = true;
+          splatLoader._loadingOptions.disableAutoCameraLimits = true;
+        }
       }
     });
   }
@@ -9454,7 +9490,7 @@ export class MeshEditorService {
 
   public async loadFiles(files: File[]): Promise<void> {
     if (!files || files.length === 0) return;
-    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae', '.babylon'];
+    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae', '.babylon', '.splat', '.spz', '.sog'];
 
     const initialValid = files.filter((f) => !f.name.startsWith('.'));
     if (initialValid.length === 0) return;
@@ -9517,7 +9553,7 @@ export class MeshEditorService {
 
   public async importFiles(files: File[]): Promise<void> {
     if (!files || files.length === 0) return;
-    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae', '.babylon'];
+    const modelExtensions = ['.glb', '.gltf', '.obj', '.stl', '.ply', '.fbx', '.dae', '.babylon', '.splat', '.spz', '.sog'];
 
     const initialValid = files.filter((f) => !f.name.startsWith('.'));
     if (initialValid.length === 0) return;
@@ -10269,6 +10305,7 @@ export class MeshEditorService {
     const count = this.importedMeshes.length;
     let totalPolys = 0;
     for (const m of this.importedMeshes) {
+      if (isGaussianSplatMesh(m)) continue;
       totalPolys += Math.floor((m.getTotalIndices ? m.getTotalIndices() : 0) / 3);
     }
     this.events.onStatsUpdated?.(count, totalPolys);
