@@ -133,6 +133,7 @@ import {
   isGaussianSplatMesh,
   isGaussianSplatProxyMesh,
 } from './splatting';
+import { MiniCadController } from './minicad/MiniCadController';
 import {
   BevelModifierOptions,
   NonDestructiveCSGMetadata,
@@ -194,6 +195,7 @@ export class MeshEditorService {
   public texturePaintController: TexturePaintController;
   public heightmapController: HeightmapController;
   public gaussianSplatController: GaussianSplatController;
+  public miniCadController: MiniCadController;
   public get pathWays(): PathExtrusionController {
     return this.pathExtrusion;
   }
@@ -351,6 +353,7 @@ export class MeshEditorService {
     this.texturePaintController = new TexturePaintController(this);
     this.heightmapController = new HeightmapController(this);
     this.gaussianSplatController = new GaussianSplatController(this);
+    this.miniCadController = new MiniCadController(this);
     const defaultAtlas = this.textureAtlasManager.getAtlases()[0];
     if (defaultAtlas) {
       this.voxelPainter.useTextureAtlas(defaultAtlas.id);
@@ -578,6 +581,7 @@ export class MeshEditorService {
     this.decalController?.setActive(false);
     this.texturePaintController?.dispose();
     this.textMeshController?.setSurfacePlacementActive(false);
+    this.miniCadController?.dispose();
     if (this.engine) {
       this.engine.stopRenderLoop();
       this.engine.dispose();
@@ -789,7 +793,8 @@ export class MeshEditorService {
       !this.textMeshController?.isSurfacePlacementActive &&
       !this.isSculptModeActive() &&
       !this.isWeightPaintModeActive() &&
-      !this.isTexturePaintModeActive();
+      !this.isTexturePaintModeActive() &&
+      !this.miniCadController?.isActive;
 
     this.scene.onPointerObservable.add((pointerInfo) => {
       if (this.isSceneInteractionLocked) {
@@ -1026,7 +1031,8 @@ export class MeshEditorService {
           this.textMeshController?.isSurfacePlacementActive ||
           this.isSculptModeActive() ||
           this.isWeightPaintModeActive() ||
-          this.isTexturePaintModeActive()
+          this.isTexturePaintModeActive() ||
+          this.miniCadController?.isActive
         ) {
           return;
         }
@@ -1192,7 +1198,7 @@ export class MeshEditorService {
   }
 
   public deactivateOtherInteractive3DTools(
-    activeTool: 'facet' | 'sculpt' | 'decal' | 'voxel' | 'path' | 'uv' | 'weight' | 'text_place' | 'texture_paint' | 'none'
+    activeTool: 'facet' | 'sculpt' | 'decal' | 'voxel' | 'path' | 'uv' | 'weight' | 'text_place' | 'texture_paint' | 'minicad' | 'none'
   ): void {
     if (activeTool !== 'facet' && this.facetEditorActive) {
       this.toggleFacetEditor(false);
@@ -1220,6 +1226,9 @@ export class MeshEditorService {
     }
     if (activeTool !== 'texture_paint' && this.texturePaintController?.isActive) {
       this.texturePaintController.setActive(false);
+    }
+    if (activeTool !== 'minicad' && this.miniCadController?.isActive) {
+      this.miniCadController.setActive(false);
     }
   }
 

@@ -105,11 +105,11 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('2. ToolRegistry Management', () => {
-    it('initializes default registry with all 49 built-in modeling tools', () => {
+    it('initializes default registry with all 53 built-in modeling tools', () => {
       const registry = createDefaultToolRegistry();
       const allTools = registry.getAll();
 
-      expect(allTools.length).toBe(49);
+      expect(allTools.length).toBe(53);
       expect(registry.has('modeler_gaussian_splat')).toBe(true);
       expect(registry.has('modeler_mesh_to_splats')).toBe(true);
       expect(registry.has('modeler_get_scene_info')).toBe(true);
@@ -161,7 +161,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(registry.has('modeler_create_heightmap')).toBe(true);
 
       const openAiDefs = registry.getOpenAITools();
-      expect(openAiDefs.length).toBe(49);
+      expect(openAiDefs.length).toBe(53);
       expect(openAiDefs.every((d) => d.type === 'function' && typeof d.function.name === 'string')).toBe(true);
     });
 
@@ -278,13 +278,14 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('4. Tool Abstraction, In-App Help Guides & Dialog Wiring', () => {
-    it('provides unified ToolInterface metadata and comprehensive English help text for all 23 editor tools', () => {
+    it('provides unified ToolInterface metadata and comprehensive English help text for all 24 editor tools', () => {
       const editorTools = getBuiltinEditorTools();
-      expect(editorTools.length).toBe(23);
+      expect(editorTools.length).toBe(24);
 
       const requiredTools = [
         'scene_outliner',
         'create_primitive',
+        'minicad',
         'csg_sculpting',
         'facet_editor',
         'sculpt_retopo',
@@ -453,7 +454,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
 
     it('instantiates all decentralized editor tool classes with self-contained configurations and help guides', () => {
       const tools = createBuiltinEditorTools();
-      expect(tools.length).toBe(23);
+      expect(tools.length).toBe(24);
 
       const heightmapTool = new HeightmapEditorTool();
       expect(heightmapTool.name).toBe('heightmap_terrain');
@@ -664,6 +665,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
         Creation: [
           'AI Mesh Agent',
           'Create Mesh',
+          'MiniCAD Studio',
           'Facet & Vertex Editor',
           'Figure Sculpt & Retopo',
           'Voxel Painter',

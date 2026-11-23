@@ -50,6 +50,10 @@ import {
   CheckZFightingTool,
   ManageGaussianSplatTool,
   MeshToSplatsTool,
+  CadCreatePartTool,
+  CadModifyPartTool,
+  CadAlignAndMeasureTool,
+  CadInspectAndCutListTool,
 } from './builtin';
 
 /**
@@ -183,5 +187,9 @@ export function createDefaultToolRegistry(): ToolRegistry {
     new CheckZFightingTool(),
     new ManageGaussianSplatTool(),
     new MeshToSplatsTool(),
+    new CadCreatePartTool(),
+    new CadModifyPartTool(),
+    new CadAlignAndMeasureTool(),
+    new CadInspectAndCutListTool(),
   ]);
 }

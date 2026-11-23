@@ -11,7 +11,7 @@ export class GaussianSplatEditorTool extends AbstractEditorTool {
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Gaussian Splatting';
   public readonly category = 'Creation';
-  public readonly icon = 'sparkles';
+  public readonly icon = 'chart-bell-curve';
   public readonly order = 20;
   public readonly isExclusive3DTool = false;
 
@@ -19,7 +19,7 @@ export class GaussianSplatEditorTool extends AbstractEditorTool {
     'Import (.splat, .ply, .spz, .sog), generate volumetric splat presets, convert triangle meshes to splats, clean floaters, tune SH/pixel rendering, merge clouds, and export .splat or .ply files.';
 
   public readonly helpText = `
-    <h4><i class="app-icon" data-lucide="sparkles"></i> Gaussian Splatting Studio</h4>
+    <h4><i class="app-icon" data-lucide="chart-bell-curve"></i> Gaussian Splatting Studio</h4>
     <p>Work with 3D Gaussian Splatting clouds (<code>GaussianSplattingMesh</code>) alongside standard polygon meshes in the same Babylon.js scene.</p>
     <ul>
       <li><strong>Import (.splat / .ply / .spz / .sog):</strong> Loads Gaussian Splat files with <code>keepInRam</code> enabled so you can clean, crop, transform, and re-export them.</li>

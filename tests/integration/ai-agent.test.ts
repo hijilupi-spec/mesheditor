@@ -105,6 +105,7 @@ describe('AI Mesh Agent (Text-to-Mesh, Image-to-Mesh & Mesh Update) Integration 
         'image-to-mesh',
         'figure-sculptor',
         'gaussian-splatting',
+        'mini-cad',
         'neural-3d-generator',
         'six-pass-pipeline',
       ]);

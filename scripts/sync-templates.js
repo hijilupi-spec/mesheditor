@@ -32,6 +32,7 @@ const TOOLS = [
   { className: 'TexturePaintEditorTool', file: 'TexturePaintEditorTool.ejs', id: 'dialog-texture-paint' },
   { className: 'HeightmapEditorTool', file: 'HeightmapEditorTool.ejs', id: 'dialog-heightmap' },
   { className: 'GaussianSplatEditorTool', file: 'GaussianSplatEditorTool.ejs', id: 'dialog-gaussian-splat' },
+  { className: 'MiniCadEditorTool', file: 'MiniCadEditorTool.ejs', id: 'dialog-minicad' },
 ];
 
 function getAppMetadata() {

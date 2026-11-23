@@ -246,6 +246,31 @@
         <img id="texturePaintStencilOverlayImg" alt="Stencil Projection Overlay" />
       </div>
 
+      <!-- MiniCAD Viewport HUD & Smart Dimension Overlays (active only in MiniCAD mode) -->
+      <div id="minicadDimensionOverlays" class="minicad-dimension-overlays"></div>
+      <div id="minicadViewportHud" class="minicad-viewport-hud" style="display: none;" role="region" aria-label="MiniCAD Viewport Controls">
+        <div class="minicad-hud-row">
+          <span class="minicad-hud-badge" id="hudCadProfileBadge">3D Print (mm)</span>
+          <div class="minicad-hud-modes">
+            <button type="button" id="btnHudCadSelect" class="minicad-hud-btn active" title="Select, Move &amp; Smart Snap">Align</button>
+            <button type="button" id="btnHudCadPushPull" class="minicad-hud-btn" title="Drag any face to Push/Pull">Push/Pull</button>
+            <button type="button" id="btnHudCadBox" class="minicad-hud-btn" title="Click floor or face to place Box">+Box</button>
+            <button type="button" id="btnHudCadCyl" class="minicad-hud-btn" title="Click floor or face to place Cylinder">+Cyl</button>
+            <button type="button" id="btnHudCadHole" class="minicad-hud-btn" title="Click any face to punch hardware hole">Hole</button>
+          </div>
+          <button type="button" id="btnHudCadClose" class="minicad-hud-close" title="Exit MiniCAD Viewport Mode">Done</button>
+        </div>
+        <div class="minicad-hud-row minicad-hud-subrow">
+          <span id="hudCadHoverBadge" class="minicad-hud-hover">Hover any face to snap, push/pull, or punch holes</span>
+          <div id="hudCadDimsRow" class="minicad-hud-dims" style="display: none;">
+            <label>W <input type="number" id="hudCadDimW" step="0.5" min="1" /></label>
+            <label>H <input type="number" id="hudCadDimH" step="0.5" min="1" /></label>
+            <label>D <input type="number" id="hudCadDimD" step="0.5" min="1" /></label>
+            <span class="minicad-hud-unit">mm</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Program Startup 3D Mesh Loading Animation -->
       <div id="appStartupLoader" class="me-loader-overlay me-startup-loader" role="status" aria-live="polite">
         <div class="me-loader-ambient-glow"></div>
@@ -407,6 +432,7 @@
         <div id="stackpanelRightSidebar" class="stackpanel-sidebar">
         <%- include('./tools/editor/AIAgentEditorTool.ejs') %>
         <%- include('./tools/editor/CreatePrimitiveEditorTool.ejs') %>
+        <%- include('./tools/editor/MiniCadEditorTool.ejs') %>
         <%- include('./tools/editor/FacetEditorTool.ejs') %>
         <%- include('./tools/editor/SculptEditorTool.ejs') %>
         <%- include('./tools/editor/VoxelPainterEditorTool.ejs') %>

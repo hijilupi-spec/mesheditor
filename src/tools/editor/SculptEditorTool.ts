@@ -13,7 +13,7 @@ export class SculptEditorTool extends AbstractEditorTool {
   public readonly menuId = 'menuTools';
   public readonly menuLabel = 'Figure Sculpt & Retopo';
   public readonly category = 'Creation';
-  public readonly icon = 'sparkles';
+  public readonly icon = 'user-round-arrow-left';
   public readonly order = 5;
   public readonly defaultOpen = false;
   public readonly isExclusive3DTool = true;

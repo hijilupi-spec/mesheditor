@@ -68,11 +68,9 @@
           <li><a href="#llm-integrations" class="nav-link">LLM APIs</a></li>
           <li><a href="#neural-3d" class="nav-link">Neural 3D</a></li>
           <li><a href="#ai-textures" class="nav-link">AI Textures</a></li>
-          <li><a href="#game-pipeline" class="nav-link">Game Pipeline</a></li>
           <li><a href="#adapters" class="nav-link">Adapters</a></li>
           <li><a href="#plugin-system" class="nav-link">Plugin System</a></li>
           <li><a href="#features" class="nav-link">Features</a></li>
-          <li><a href="#gaussian-splatting" class="nav-link">Gaussian Splats</a></li>
           <li><a href="#workflows" class="nav-link">Workflows</a></li>
           <li><a href="#roadmap" class="nav-link">Roadmap</a></li>
         </ul>
@@ -812,7 +810,7 @@
                       <div class="ai-diag-subchip"><strong>Procedural &amp; CSG2</strong>5 Topology Archetypes</div>
                       <div class="ai-diag-subchip"><strong>Neural 3D</strong>TRELLIS 2, Hunyuan, Hi3D</div>
                       <div class="ai-diag-subchip"><strong>4-Map PBR</strong>De-Lit [30..240] + Normal</div>
-                      <div class="ai-diag-subchip"><strong>Game Pipeline</strong>Retopo, UV, Bake, Rig</div>
+                      <div class="ai-diag-subchip"><strong>Game &amp; MiniCAD</strong>CAD, Retopo, UV, Rig</div>
                     </div>
                   </article>
 
@@ -891,9 +889,180 @@
             </div>
 
             <figcaption class="ai-diag-caption">
-              <strong>How Collaborative Editing Works:</strong> Every prompt merges your live 3D scene selection, polygon budget, and optional viewport snapshot with modular skills. After the AI executes procedural, neural, PBR, or game-pipeline tools (and optionally self-critiques via a 4-view wireframe sheet), all edits commit as a single atomic Undo/Redo record so you can sculpt directly with 3D gizmos and pass the updated scene straight into the next turn.
+              <strong>How Collaborative Editing Works:</strong> Every prompt merges your live 3D scene selection, polygon budget, and optional viewport snapshot with modular skills. After the AI executes procedural, MiniCAD, neural, PBR, splatting, or game-pipeline tools (and optionally self-critiques via a 4-view wireframe sheet), all edits commit as a single atomic Undo/Redo record so you can sculpt directly with 3D gizmos and pass the updated scene straight into the next turn.
             </figcaption>
           </figure>
+        </div>
+
+        <!-- Human + AI Workflow 1: MiniCAD Precision Modeling -->
+        <div id="ai-minicad" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="plugin-section-grid">
+            <div>
+              <span class="section-tag">Human + AI MiniCAD Workflow</span>
+              <h3 class="section-title" style="font-size: 28px;">Click Faces by Hand, Precision-Engineer with AI.</h3>
+              <p class="section-desc" style="margin-bottom: 18px;">
+                <strong>MiniCAD Studio</strong> pairs effortless direct manipulation in the 3D viewport with dedicated parametric AI tools (<code>cad_create_part</code>, <code>cad_modify_part</code>, <code>cad_align_and_measure</code>, <code>cad_inspect_and_cutlist</code>) and the built-in <code>mini-cad</code> engineering skill:
+              </p>
+              <ul class="adapter-list" style="margin-bottom: 20px;">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Human Visuals + AI Precision:</strong> Block out enclosures or shelves with Click-on-Face and Push/Pull, then ask the AI to <em>&ldquo;Hollow to 2.5 mm walls, add M3 countersunk corner holes, and align the lid with 0.25 mm clearance&rdquo;</em>.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Shared Non-Destructive Recipe Stack:</strong> Every AI-created part stores its live <code>MiniCadRecipe</code> (dimensions, shell, hole patterns, bevels) in <code>mesh.metadata</code>, so you can immediately tweak any millimeter value in the viewport HUD or feature list.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Automated Printability &amp; Woodwork Cut Lists:</strong> The AI runs watertight manifold checks, minimum wall validation, and grouped lumber cut lists (<code>L &times; W &times; T</code> mm) via <code>cad_inspect_and_cutlist</code>.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="code-window">
+              <div class="code-header">
+                <div class="code-dots">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="code-title">MiniCAD Studio &bull; AI Tool Pipeline</span>
+                <span style="font-size: 11px; color: var(--accent-hover);">mini-cad Skill</span>
+              </div>
+              <pre class="code-body"><code><span class="code-cm">// 1. Create a 3D-printable rounded enclosure with 2.5 mm shell</span>
+<span class="code-fn">cad_create_part</span>({
+  profile: <span class="code-str">'3d_print'</span>, name: <span class="code-str">'Sensor_Enclosure'</span>, shape: <span class="code-str">'rounded_box'</span>,
+  widthMm: <span class="code-num">80</span>, heightMm: <span class="code-num">30</span>, depthMm: <span class="code-num">50</span>, cornerRadiusMm: <span class="code-num">4</span>,
+  shellWallMm: <span class="code-num">2.5</span>, shellOpenFace: <span class="code-str">'top'</span>
+});
+
+<span class="code-cm">// 2. Add 4 M3 countersunk corner holes &amp; a front cable port</span>
+<span class="code-fn">cad_modify_part</span>({
+  meshName: <span class="code-str">'Sensor_Enclosure'</span>,
+  addHole: { preset: <span class="code-str">'countersunk_m3'</span>, face: <span class="code-str">'bottom'</span>, symmetricCornerInsetMm: <span class="code-num">6</span> },
+  bevelWidthMm: <span class="code-num">0.6</span>
+});
+
+<span class="code-cm">// 3. Align matching lid &amp; verify watertight manifold printability</span>
+<span class="code-fn">cad_align_and_measure</span>({ targetMeshName: <span class="code-str">'Enclosure_Lid'</span>, anchorMeshName: <span class="code-str">'Sensor_Enclosure'</span>, action: <span class="code-str">'stack_on_top'</span>, gapMm: <span class="code-num">0.25</span> });
+<span class="code-fn">cad_inspect_and_cutlist</span>({ meshName: <span class="code-str">'Sensor_Enclosure'</span>, includeCutList: <span class="code-kw">true</span> });</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Human + AI Workflow 2: Automated AI Game Pipeline -->
+        <div id="ai-game-pipeline" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="plugin-section-grid">
+            <div>
+              <span class="section-tag">Human + AI Game Asset Pipeline</span>
+              <h3 class="section-title" style="font-size: 28px;">5 Topology Archetypes, 6-Pass Vision &amp; Game-Ready Pipeline.</h3>
+              <p class="section-desc" style="margin-bottom: 18px;">
+                Built-in skills (<code>procedural-modeler</code>, <code>figure-sculptor</code>, <code>image-to-mesh</code>, and <code>mesh-updater</code>) guide the AI Agent from initial sculptural topology through retopology, UV unwrapping, 4-map PBR baking, and skeletal rigging&mdash;while every stage stays editable by artists:
+              </p>
+              <ul class="adapter-list" style="margin-bottom: 20px;">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>5 Surface Topology Archetypes:</strong> Combines <code>continuous-sculpt</code> (SDF clay + Catmull-Clark <code>subdivide</code> + 3D <code>vertexPaintRegions</code>), <code>fiber-strand</code> (twist-free Parallel-Transport tapered sweeps), <code>conforming-shell</code> &amp; <code>surface-relief</code>, and <code>assembled-solid</code> (manifold architecture &amp; beveled CSG2).</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>6-Pass Image-to-Mesh &amp; Proportional Budgets:</strong> Plans density tiers with <code>modeler_plan_model</code>, enforces physical seam overlap, prevents flat 2.5D cutouts via the <strong>Anti-Slab <code>distinctZ</code> rule</strong>, and calibrates double-sided 4-map PBR materials.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>100% AI &amp; Skill Programmable:</strong> Retopology (<code>modeler_retopologize_mesh</code>), uniform <code>px/m</code> UV unwrapping (<code>modeler_uv_unwrap</code>), Tangent Normal/AO baking (<code>modeler_bake_textures</code>), and 4-bone auto-rigging (<code>modeler_rig_and_weight</code>) run autonomously from one prompt or step-by-step alongside manual studio tweaks.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="code-window">
+              <div class="code-header">
+                <div class="code-dots">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="code-title">AI Game Asset Pipeline &bull; Tool Chain</span>
+                <span style="font-size: 11px; color: var(--accent-hover);">Skill Execution</span>
+              </div>
+              <pre class="code-body"><code><span class="code-cm">// 1. Continuous-Sculpt SDF Volume + Catmull-Clark Sub-D + Vertex Paint</span>
+<span class="code-fn">modeler_create_sdf_mesh</span>({
+  name: <span class="code-str">'Warrior_HighPoly'</span>, subdivide: <span class="code-num">1</span>, materialPreset: <span class="code-str">'skin'</span>,
+  symmetryX: <span class="code-kw">true</span>, rootTipGradient: { rootColor: <span class="code-str">'#8c4a32'</span>, tipColor: <span class="code-str">'#e2ad8d'</span> },
+  vertexPaintRegions: [{ shape: <span class="code-str">'ellipsoid'</span>, color: <span class="code-str">'#d46a6a'</span>, mirrorX: <span class="code-kw">true</span> }]
+});
+
+<span class="code-cm">// 2. Fiber-Strand Sweep (Parallel Transport Framing + Apex Tip)</span>
+<span class="code-fn">modeler_create_tube</span>({
+  name: <span class="code-str">'Hero_Horn'</span>, smoothPath: <span class="code-kw">true</span>, materialPreset: <span class="code-str">'bone_horn'</span>,
+  stations: [{ x: <span class="code-num">0</span>, y: <span class="code-num">0</span>, z: <span class="code-num">0</span>, rx: <span class="code-num">0.12</span> }, { x: <span class="code-num">0.2</span>, y: <span class="code-num">0.4</span>, z: <span class="code-num">0.1</span>, rx: <span class="code-num">0</span>, rz: <span class="code-num">0</span> }]
+});
+
+<span class="code-cm">// 3. Retopologize, Unwrap Uniform px/m UVs, Bake Maps &amp; Auto-Rig</span>
+<span class="code-fn">modeler_retopologize_mesh</span>({ meshName: <span class="code-str">'Warrior_HighPoly'</span>, mode: <span class="code-str">'quad_cage'</span>, relaxIterations: <span class="code-num">3</span> });
+<span class="code-fn">modeler_uv_unwrap</span>({ meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, targetTexelDensity: <span class="code-num">256</span>, packIslands: <span class="code-kw">true</span> });
+<span class="code-fn">modeler_bake_textures</span>({ lowPolyMeshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, highPolyMeshName: <span class="code-str">'Warrior_HighPoly'</span>, bakeNormals: <span class="code-kw">true</span>, bakeAO: <span class="code-kw">true</span> });
+<span class="code-fn">modeler_rig_and_weight</span>({ meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, action: <span class="code-str">'auto_rig'</span>, template: <span class="code-str">'humanoid'</span>, autoBindSkin: <span class="code-kw">true</span> });</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Human + AI Workflow 3: Gaussian Splatting Hybrid Scenes -->
+        <div id="ai-gaussian-splats" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="plugin-section-grid">
+            <div>
+              <span class="section-tag">Human + AI Splatting Workflow</span>
+              <h3 class="section-title" style="font-size: 28px;">Mix Photogrammetry Splats &amp; Crisp Foliage with Polygon Meshes.</h3>
+              <p class="section-desc" style="margin-bottom: 18px;">
+                Equipped with <code>modeler_gaussian_splat</code>, <code>modeler_mesh_to_splats</code>, and the built-in <code>gaussian-splatting</code> skill, the AI Agent collaborates seamlessly on hybrid scenes alongside manual gizmo placement, cropping, and floater cleanup:
+              </p>
+              <ul class="adapter-list" style="margin-bottom: 20px;">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Clean Raw Captures via Prompt or UI:</strong> Strip low-opacity haze floaters, cap oversized artifacts, crop to a sphere or bounding box, and ground scans to <code>Y = 0</code> with full Undo/Redo.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Crisp Botanical Foliage &amp; Moss:</strong> Sample curved fern fronds, shrubs, and tree canopies with oriented, thin leaf-blade ellipsoids (<code>foliage</code>, <code>moss</code>, <code>fuzzy</code>) alongside procedural mesh trunks.</span>
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <span><strong>Splat-Aware AI Diagnostics:</strong> Scene summaries distinguish <code>GaussianSplattingMesh</code> clouds from polygon meshes so AI self-critique never confuses splats with 0-triangle geometry.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="code-window">
+              <div class="code-header">
+                <div class="code-dots">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="code-title">Gaussian Splatting Studio &bull; AI Tool Pipeline</span>
+                <span style="font-size: 11px; color: var(--accent-hover);">GaussianSplattingMesh</span>
+              </div>
+              <pre class="code-body"><code><span class="code-cm">// 1. Convert a sculpted canopy mesh into crisp anisotropic leaf splats</span>
+<span class="code-fn">modeler_mesh_to_splats</span>({
+  targetMesh: <span class="code-str">'fern_fronds_mesh'</span>,
+  name: <span class="code-str">'fern_splats'</span>,
+  targetSplatCount: <span class="code-num">12000</span>,
+  splatStyle: <span class="code-str">'foliage'</span>,  <span class="code-cm">// default | foliage | moss | fuzzy</span>
+  splatScale: <span class="code-num">0.032</span>,
+  removeSource: <span class="code-kw">true</span>
+});
+
+<span class="code-cm">// 2. Clean floaters, tint, or bake transforms on an imported 3DGS scan</span>
+<span class="code-fn">modeler_gaussian_splat</span>({
+  action: <span class="code-str">'cleanup'</span>, targetMesh: <span class="code-str">'forest_scan'</span>,
+  minOpacity: <span class="code-num">0.08</span>, maxScale: <span class="code-num">0.25</span>, cropRadius: <span class="code-num">8.0</span>
+});
+
+<span class="code-fn">modeler_gaussian_splat</span>({
+  action: <span class="code-str">'bake_transform'</span>, targetMesh: <span class="code-str">'forest_scan'</span>, alignToGround: <span class="code-kw">true</span>
+});</code></pre>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -1324,177 +1493,6 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
   withProceduralMaps: <span class="code-kw">true</span>,
   sheen: <span class="code-num">0.72</span>, clearcoat: <span class="code-num">0.0</span>, subsurfaceTranslucency: <span class="code-num">0.15</span>
 });</code></pre>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- =========================================================================
-         END-TO-END GAME ASSET PIPELINE (CSG BEVEL, RETOPO, UV, BAKING, RIGGING)
-         ========================================================================= -->
-    <section id="game-pipeline" class="section">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-tag">End-to-End Game Asset Pipeline</span>
-          <h2 class="section-title">From High-Poly Sculpt to Rigged Game Character.</h2>
-          <p class="section-desc">
-            Every stage of the real-time game production pipeline—non-destructive boolean beveling, Shrinkwrap &amp; Quad-Draw retopology, uniform Texel Density UV unwrapping, High-to-Low-Poly Normal &amp; AO baking, and skeletal Weight Painting—is built directly into Mesh Editor and controllable by both human artists and AI skills.
-          </p>
-        </div>
-
-        <div class="ai-feature-card-grid" style="margin-bottom: 36px;">
-          <!-- Pipeline Stage 1: Non-Destructive CSG & Bevel Modifier -->
-          <div class="feature-card">
-            <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="7"></circle><circle cx="15" cy="15" r="7"></circle></svg>
-            </div>
-            <h3 class="card-title">Non-Destructive CSG2 &amp; Bevel Modifier</h3>
-            <p class="card-desc">
-              Execute complex Union, Subtract, and Intersect operations while preserving lossless base-mesh snapshots (<strong>Revert to Base</strong>). Round sharp intersection creases non-destructively with a live <strong>Chamfer / Fillet Bevel Modifier</strong> controlled by width, segments, and crease angle threshold.
-            </p>
-            <div class="card-tags">
-              <span class="card-tag">Base Snapshot</span>
-              <span class="card-tag">Chamfer &amp; Fillet</span>
-              <span class="card-tag">modeler_boolean_operation</span>
-            </div>
-          </div>
-
-          <!-- Pipeline Stage 2: Retopology (Shrinkwrap & Quad-Draw) -->
-          <div class="feature-card">
-            <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-            </div>
-            <h3 class="card-title">Shrinkwrap &amp; Quad-Draw Retopology</h3>
-            <p class="card-desc">
-              Project low-poly meshes tightly onto million-polygon sculpts like stretch film using <strong>Shrinkwrap</strong> with surface offset and tangential relaxation. Draw clean 4-sided <strong>Quad-Draw Strips</strong> directly on high-poly surfaces with automatic vertex welding for animation-ready edge loops.
-            </p>
-            <div class="card-tags">
-              <span class="card-tag">Shrinkwrap Projection</span>
-              <span class="card-tag">Quad-Draw Strips</span>
-              <span class="card-tag">modeler_retopologize_mesh</span>
-            </div>
-          </div>
-
-          <!-- Pipeline Stage 3: UV Unwrapping, Texel Density & Island Packing -->
-          <div class="feature-card">
-            <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
-            </div>
-            <h3 class="card-title">Smart UV Unwrapping &amp; Texel Density</h3>
-            <p class="card-desc">
-              Mark cutting seams automatically by sharp crease angles or interactively via 3D edge picking. Unfold charts with harmonic relaxation, enforce uniform <strong>Texel Density (<code>px/m</code>)</strong> across all parts, and pack 2D islands via Skyline/Shelf bin-packing with pixel margin padding.
-            </p>
-            <div class="card-tags">
-              <span class="card-tag">Smart Seams</span>
-              <span class="card-tag">Uniform px/m</span>
-              <span class="card-tag">modeler_uv_unwrap</span>
-            </div>
-          </div>
-
-          <!-- Pipeline Stage 4: High-to-Low-Poly Normal & AO Baking -->
-          <div class="feature-card">
-            <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
-            </div>
-            <h3 class="card-title">Normal Map, AO &amp; Cage Baking</h3>
-            <p class="card-desc">
-              Transfer microscopic sculpt details (pores, wrinkles, rivets, bevels) onto flat low-poly game meshes. Generates an averaged, gap-free <strong>3D Projection Cage</strong> and raycasts <strong>Tangent-Space Normal Maps</strong> &amp; <strong>Ambient Occlusion (AO)</strong> with UV seam dilation.
-            </p>
-            <div class="card-tags">
-              <span class="card-tag">Projection Cage</span>
-              <span class="card-tag">Tangent Normal + AO</span>
-              <span class="card-tag">modeler_bake_textures</span>
-            </div>
-          </div>
-
-          <!-- Pipeline Stage 5: Skeleton Rigging & Weight Painting -->
-          <div class="feature-card">
-            <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 10c.7-.7 1.69 0 2.5 0a2.5 2.5 0 1 0 0-5 .5.5 0 0 1-.5-.5 2.5 2.5 0 1 0-5 0c0 .81.7 1.8 0 2.5l-7 7c-.7.7-1.69 0-2.5 0a2.5 2.5 0 0 0 0 5c.28 0 .5.22.5.5a2.5 2.5 0 1 0 5 0c0-.81-.7-1.8 0-2.5Z"></path></svg>
-            </div>
-            <h3 class="card-title">Skeleton Rigging &amp; 3D Weight Painting</h3>
-            <p class="card-desc">
-              Generate <strong>Humanoid (20-bone)</strong>, <strong>Quadruped (11-bone)</strong>, or <strong>Spine (5-bone)</strong> skeletons fitted to your mesh bounds. Auto-bind capsule skin envelopes, paint normalized 4-bone weights with a live Blue-to-Red heatmap brush (Add, Subtract, Smooth, X-Symmetry), and test joint poses.
-            </p>
-            <div class="card-tags">
-              <span class="card-tag">Auto-Skeleton</span>
-              <span class="card-tag">Weight Heatmap</span>
-              <span class="card-tag">modeler_rig_and_weight</span>
-            </div>
-          </div>
-
-          <!-- Pipeline Stage 6: AI Skill Integration -->
-          <div class="feature-card">
-            <div class="card-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
-            </div>
-            <h3 class="card-title">100% AI &amp; Skill Programmable</h3>
-            <p class="card-desc">
-              All pipeline stages are exposed both as interactive floating studio dialogs and as OpenAI-compatible tools enabling autonomous multi-step asset preparation from a single prompt.
-            </p>
-            <div class="card-tags">
-              <span class="card-tag">Interactive GUI</span>
-              <span class="card-tag">AI Function Calling</span>
-              <span class="card-tag">Unreal / Unity / Godot Ready</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="plugin-section-grid">
-          <div>
-            <span class="section-tag">Automated AI Game Pipeline</span>
-            <h3 class="section-title" style="font-size: 28px;">5 Topology Archetypes, 6-Pass Vision &amp; Game-Ready Pipeline.</h3>
-            <p class="section-desc" style="margin-bottom: 18px;">
-              Built-in skills (<code>procedural-modeler</code>, <code>figure-sculptor</code>, <code>image-to-mesh</code>, and <code>mesh-updater</code>) guide the AI Agent from initial sculptural topology through retopology, UV unwrapping, 4-map PBR baking, and skeletal rigging:
-            </p>
-            <ul class="adapter-list" style="margin-bottom: 20px;">
-              <li>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>5 Surface Topology Archetypes:</strong> Combines <code>continuous-sculpt</code> (SDF clay + Catmull-Clark <code>subdivide</code> + 3D <code>vertexPaintRegions</code>), <code>fiber-strand</code> (twist-free Parallel-Transport tapered sweeps with apex tip convergence), <code>conforming-shell</code> &amp; <code>surface-relief</code> (<code>standProud</code> clearance), and <code>assembled-solid</code> (manifold architecture &amp; beveled CSG2).</span>
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>6-Pass Image-to-Mesh &amp; Proportional Budgets:</strong> Plans density tiers with <code>modeler_plan_model</code>, enforces physical seam overlap, prevents flat 2.5D cutouts via the <strong>Anti-Slab <code>distinctZ</code> rule</strong>, and calibrates double-sided 4-map PBR materials.</span>
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Shrinkwrap Retopo &amp; Uniform <code>px/m</code> UVs:</strong> Wraps clean low-poly quad cages onto high-poly sculpts, marks smart seams, and packs islands to uniform Texel Density.</span>
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span><strong>Cage Normal/AO Baking &amp; 4-Bone Auto-Rigging:</strong> Projects high-res micro-relief via smooth Projection Cages and binds normalized 4-bone weights to Humanoid or Quadruped skeletons.</span>
-              </li>
-            </ul>
-          </div>
-
-          <div class="code-window">
-            <div class="code-header">
-              <div class="code-dots">
-                <span class="dot dot-red"></span>
-                <span class="dot dot-yellow"></span>
-                <span class="dot dot-green"></span>
-              </div>
-              <span class="code-title">AI Game Asset Pipeline &bull; Tool Chain</span>
-              <span style="font-size: 11px; color: var(--accent-hover);">Skill Execution</span>
-            </div>
-            <pre class="code-body"><code><span class="code-cm">// 1. Continuous-Sculpt SDF Volume + Catmull-Clark Sub-D + Vertex Paint</span>
-<span class="code-fn">modeler_create_sdf_mesh</span>({
-  name: <span class="code-str">'Warrior_HighPoly'</span>, subdivide: <span class="code-num">1</span>, materialPreset: <span class="code-str">'skin'</span>,
-  symmetryX: <span class="code-kw">true</span>, rootTipGradient: { rootColor: <span class="code-str">'#8c4a32'</span>, tipColor: <span class="code-str">'#e2ad8d'</span> },
-  vertexPaintRegions: [{ shape: <span class="code-str">'ellipsoid'</span>, color: <span class="code-str">'#d46a6a'</span>, mirrorX: <span class="code-kw">true</span> }]
-});
-
-<span class="code-cm">// 2. Fiber-Strand Sweep (Parallel Transport Framing + Apex Tip)</span>
-<span class="code-fn">modeler_create_tube</span>({
-  name: <span class="code-str">'Hero_Horn'</span>, smoothPath: <span class="code-kw">true</span>, materialPreset: <span class="code-str">'bone_horn'</span>,
-  stations: [{ x: <span class="code-num">0</span>, y: <span class="code-num">0</span>, z: <span class="code-num">0</span>, rx: <span class="code-num">0.12</span> }, { x: <span class="code-num">0.2</span>, y: <span class="code-num">0.4</span>, z: <span class="code-num">0.1</span>, rx: <span class="code-num">0</span>, rz: <span class="code-num">0</span> }]
-});
-
-<span class="code-cm">// 3. Retopologize, Unwrap Uniform px/m UVs, Bake Maps &amp; Auto-Rig</span>
-<span class="code-fn">modeler_retopologize_mesh</span>({ meshName: <span class="code-str">'Warrior_HighPoly'</span>, mode: <span class="code-str">'quad_cage'</span>, relaxIterations: <span class="code-num">3</span> });
-<span class="code-fn">modeler_uv_unwrap</span>({ meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, targetTexelDensity: <span class="code-num">256</span>, packIslands: <span class="code-kw">true</span> });
-<span class="code-fn">modeler_bake_textures</span>({ lowPolyMeshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, highPolyMeshName: <span class="code-str">'Warrior_HighPoly'</span>, bakeNormals: <span class="code-kw">true</span>, bakeAO: <span class="code-kw">true</span> });
-<span class="code-fn">modeler_rig_and_weight</span>({ meshName: <span class="code-str">'Warrior_HighPoly_retopo_cage'</span>, action: <span class="code-str">'auto_rig'</span>, template: <span class="code-str">'humanoid'</span>, autoBindSkin: <span class="code-kw">true</span> });</code></pre>
           </div>
         </div>
       </div>
@@ -1954,6 +1952,159 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
               Import <code>.splat</code>, <code>.ply</code>, <code>.spz</code>, and <code>.sog</code> clouds, clean floaters &amp; crop bounds, generate volumetric presets, convert polygon meshes into crisp leaf/moss splats, merge clouds, and export to <code>.splat</code> or <code>.ply</code>.
             </p>
           </div>
+
+          <!-- Feature 22 -->
+          <div class="feature-box">
+            <div class="feature-box-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"></path><path d="m14.5 12.5 2-2"></path><path d="m11.5 9.5 2-2"></path><path d="m8.5 6.5 2-2"></path><path d="m17.5 15.5 2-2"></path></svg>
+            </div>
+            <h4 class="feature-box-title">MiniCAD Studio (Beginner-Friendly CAD)</h4>
+            <p class="feature-box-desc">
+              Direct millimeter modeling for <strong>3D Print</strong>, <strong>Woodwork</strong>, and <strong>Mechanics</strong>: Click-on-Face placement, live Push/Pull face resizing, Figma-style smart alignment guides, non-destructive shell/hole/bevel stacks, printability checks, cut lists, and true-mm STL export.
+            </p>
+          </div>
+        </div>
+
+        <!-- MiniCAD Studio Showcase (Features Side) -->
+        <div id="minicad-studio" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="section-header" style="margin-bottom: 36px;">
+            <span class="section-tag">MiniCAD Studio &amp; Precision Direct Modeling</span>
+            <h3 class="section-title" style="font-size: 32px;">Beginner-Friendly CAD Without Sketch-Constraint Complexity.</h3>
+            <p class="section-desc">
+              Open <strong>Tools &rarr; Creation &rarr; MiniCAD Studio</strong> to switch the 3D viewport into an intuitive millimeter CAD workspace for 3D printing, woodworking, and mechanical brackets.
+            </p>
+          </div>
+
+          <div class="ai-feature-card-grid">
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"></path><path d="m14.5 12.5 2-2"></path><path d="m11.5 9.5 2-2"></path></svg>
+              </div>
+              <h4 class="card-title">Click-on-Face, Push/Pull &amp; Smart Guides</h4>
+              <p class="card-desc">
+                Hover any face to highlight it, drag faces directly with <strong>Push/Pull</strong> while keeping the opposite face anchored, place boxes or cylinders flush onto any surface, and drag parts with magnetic center/edge snapping and live <strong>Figma-style distance pills</strong> in the viewport HUD.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">3 Workflow Profiles</span>
+                <span class="card-tag">Live Push/Pull</span>
+                <span class="card-tag">Inline W/H/D mm</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+              </div>
+              <h4 class="card-title">Non-Destructive Recipe Stack &amp; Hole Presets</h4>
+              <p class="card-desc">
+                Keep dimensions, hollow <strong>Shell</strong> walls, rectangular cutouts, raised bosses, edge bevels, and hardware holes (<code>M2&ndash;M6</code>, countersunk <code>M3/M4</code>, <code>8 mm</code> wood dowels, slots, and <strong>2&times;2 Symmetric Corners</strong>) editable at any time—resize your box later without losing holes.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Parametric Stack</span>
+                <span class="card-tag">Hardware Presets</span>
+                <span class="card-tag">Starter Assemblies</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+              </div>
+              <h4 class="card-title">Print Check, Woodwork Cut List &amp; True-mm STL</h4>
+              <p class="card-desc">
+                Verify watertight manifold edges, minimum wall thickness, volume (cm&sup3;), and floor contact before slicing, generate grouped <strong>Woodwork Cut Lists</strong> (<code>L &times; W &times; T mm</code>), and export binary <code>.stl</code> files scaled 1:1 to true millimeters.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Manifold Check</span>
+                <span class="card-tag">Woodwork Cut List</span>
+                <span class="card-tag">1:1 STL Export</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game Asset Pipeline Studio Showcase (Features Side) -->
+        <div id="game-pipeline-features" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
+          <div class="section-header" style="margin-bottom: 36px;">
+            <span class="section-tag">Game Asset Production Tools</span>
+            <h3 class="section-title" style="font-size: 32px;">From High-Poly Sculpt to Rigged Game Character.</h3>
+            <p class="section-desc">
+              Interactive floating studio workshops for every stage of real-time game production—non-destructive boolean beveling, Shrinkwrap &amp; Quad-Draw retopology, uniform Texel Density UV unwrapping, High-to-Low-Poly Normal &amp; AO baking, and skeletal Weight Painting.
+            </p>
+          </div>
+
+          <div class="ai-feature-card-grid">
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="7"></circle><circle cx="15" cy="15" r="7"></circle></svg>
+              </div>
+              <h4 class="card-title">Non-Destructive CSG2 &amp; Bevel Modifier</h4>
+              <p class="card-desc">
+                Execute Union, Subtract, and Intersect booleans while preserving lossless base-mesh snapshots (<strong>Revert to Base</strong>) and rounding sharp creases with a live <strong>Chamfer / Fillet Bevel Modifier</strong>.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Base Snapshot</span>
+                <span class="card-tag">Chamfer &amp; Fillet</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+              </div>
+              <h4 class="card-title">Shrinkwrap &amp; Quad-Draw Retopology</h4>
+              <p class="card-desc">
+                Project low-poly cages tightly onto million-polygon sculpts using <strong>Shrinkwrap</strong> with surface offset and tangential relaxation, or draw clean 4-sided <strong>Quad-Draw Strips</strong> directly on high-poly surfaces.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Shrinkwrap Projection</span>
+                <span class="card-tag">Quad-Draw Strips</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+              </div>
+              <h4 class="card-title">Smart UV Unwrapping &amp; Texel Density</h4>
+              <p class="card-desc">
+                Mark cutting seams automatically or via 3D edge picking, unfold charts with harmonic relaxation, enforce uniform <strong>Texel Density (<code>px/m</code>)</strong>, and pack 2D islands via Skyline/Shelf bin-packing.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Smart Seams</span>
+                <span class="card-tag">Uniform px/m</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+              </div>
+              <h4 class="card-title">Normal Map, AO &amp; Cage Baking</h4>
+              <p class="card-desc">
+                Transfer micro sculpt details onto low-poly game meshes using an averaged <strong>3D Projection Cage</strong> that raycasts <strong>Tangent-Space Normal Maps</strong> &amp; <strong>Ambient Occlusion (AO)</strong> with seam dilation.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Projection Cage</span>
+                <span class="card-tag">Tangent Normal + AO</span>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 10c.7-.7 1.69 0 2.5 0a2.5 2.5 0 1 0 0-5 .5.5 0 0 1-.5-.5 2.5 2.5 0 1 0-5 0c0 .81.7 1.8 0 2.5l-7 7c-.7.7-1.69 0-2.5 0a2.5 2.5 0 0 0 0 5c.28 0 .5.22.5.5a2.5 2.5 0 1 0 5 0c0-.81-.7-1.8 0-2.5Z"></path></svg>
+              </div>
+              <h4 class="card-title">Skeleton Rigging &amp; 3D Weight Painting</h4>
+              <p class="card-desc">
+                Spawn Humanoid (20-bone), Quadruped (11-bone), or Spine (5-bone) skeletons, auto-bind capsule skin envelopes, paint normalized 4-bone weights with a live heatmap brush, and test joint poses.
+              </p>
+              <div class="card-tags">
+                <span class="card-tag">Auto-Skeleton</span>
+                <span class="card-tag">Weight Heatmap</span>
+                <span class="card-tag">Unreal / Unity / Godot</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 3D UV Texture Painter & Hand-Painted PBR Showcase -->
@@ -2182,17 +2333,17 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
           </div>
         </div>
 
-        <!-- 3D Gaussian Splatting Studio Showcase -->
+        <!-- 3D Gaussian Splatting Studio Showcase (Features Side) -->
         <div id="gaussian-splatting" style="margin-top: 56px; padding-top: 48px; border-top: 1px solid var(--border-color);">
           <div class="section-header" style="margin-bottom: 36px;">
             <span class="section-tag">3D Gaussian Splatting &amp; Hybrid Scenes</span>
             <h3 class="section-title" style="font-size: 32px;">Edit 3DGS Scans, Craft Crisp Foliage Splats &amp; Combine with Meshes.</h3>
             <p class="section-desc">
-              Built directly on Babylon.js <code>GaussianSplattingMesh</code>, Mesh Editor brings 3D Gaussian Splatting into the same interactive studio and AI pipeline as standard polygon geometry.
+              Built directly on Babylon.js <code>GaussianSplattingMesh</code>, Mesh Editor brings 3D Gaussian Splatting into the same interactive studio and Scene Outliner as standard polygon geometry, with full transform gizmos, world bounds inspection, and non-destructive Undo/Redo.
             </p>
           </div>
 
-          <div class="ai-feature-card-grid" style="margin-bottom: 36px;">
+          <div class="ai-feature-card-grid">
             <div class="feature-card">
               <div class="card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
@@ -2227,70 +2378,15 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
               <div class="card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg>
               </div>
-              <h4 class="card-title">AI Splat Tools &amp; Dedicated Skill</h4>
+              <h4 class="card-title">Outliner &amp; Hybrid Composition</h4>
               <p class="card-desc">
-                Equipped with <code>modeler_gaussian_splat</code>, <code>modeler_mesh_to_splats</code>, and the built-in <code>gaussian-splatting</code> skill, the AI Agent inspects scan bounds, grounds captures to <code>Y = 0</code>, builds crisp organic foliage alongside procedural trunks, and composes hybrid scenes.
+                Inspect splat counts, adjust tint and opacity, transform splat clouds alongside triangle meshes in the Scene Outliner, and export hybrid scenes seamlessly.
               </p>
               <div class="card-tags">
-                <span class="card-tag">modeler_gaussian_splat</span>
-                <span class="card-tag">modeler_mesh_to_splats</span>
+                <span class="card-tag">Outliner Integration</span>
+                <span class="card-tag">Transform Gizmos</span>
                 <span class="card-tag">Hybrid Scenes</span>
               </div>
-            </div>
-          </div>
-
-          <div class="plugin-section-grid">
-            <div>
-              <span class="section-tag">Human + AI Splatting Workflow</span>
-              <h4 class="section-title" style="font-size: 26px;">Mix Photogrammetry Splats &amp; Crisp Foliage with Polygon Meshes.</h4>
-              <p class="section-desc" style="margin-bottom: 18px;">
-                Open <strong>Tools &rarr; Creation &rarr; Gaussian Splatting</strong> in the editor or prompt the AI Agent directly. Gaussian Splats live alongside triangle meshes in the Scene Outliner with full transform gizmos, world bounds inspection, and non-destructive Undo/Redo:
-              </p>
-              <ul class="adapter-list" style="margin-bottom: 20px;">
-                <li>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span><strong>Clean Raw Captures in Seconds:</strong> Strip low-opacity haze floaters, cap oversized artifacts, crop to a sphere or bounding box, and reduce density before exporting <code>.splat</code> or <code>.ply</code>.</span>
-                </li>
-                <li>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span><strong>Crisp Botanical Foliage &amp; Moss:</strong> Sample curved fern fronds, shrubs, and tree canopies with oriented, thin leaf-blade ellipsoids instead of rigid low-poly cards or blurry blobs.</span>
-                </li>
-                <li>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  <span><strong>Splat-Aware AI Diagnostics:</strong> Scene summaries distinguish <code>GaussianSplattingMesh</code> clouds from polygon meshes so AI self-critique never confuses splats with 0-triangle geometry.</span>
-                </li>
-              </ul>
-            </div>
-
-            <div class="code-window">
-              <div class="code-header">
-                <div class="code-dots">
-                  <span class="dot dot-red"></span>
-                  <span class="dot dot-yellow"></span>
-                  <span class="dot dot-green"></span>
-                </div>
-                <span class="code-title">Gaussian Splatting Studio &bull; AI Tool Pipeline</span>
-                <span style="font-size: 11px; color: var(--accent-hover);">GaussianSplattingMesh</span>
-              </div>
-              <pre class="code-body"><code><span class="code-cm">// 1. Convert a sculpted canopy mesh into crisp anisotropic leaf splats</span>
-<span class="code-fn">modeler_mesh_to_splats</span>({
-  targetMesh: <span class="code-str">'fern_fronds_mesh'</span>,
-  name: <span class="code-str">'fern_splats'</span>,
-  targetSplatCount: <span class="code-num">12000</span>,
-  splatStyle: <span class="code-str">'foliage'</span>,  <span class="code-cm">// default | foliage | moss | fuzzy</span>
-  splatScale: <span class="code-num">0.032</span>,
-  removeSource: <span class="code-kw">true</span>
-});
-
-<span class="code-cm">// 2. Clean floaters, tint, or bake transforms on an imported 3DGS scan</span>
-<span class="code-fn">modeler_gaussian_splat</span>({
-  action: <span class="code-str">'cleanup'</span>, targetMesh: <span class="code-str">'forest_scan'</span>,
-  minOpacity: <span class="code-num">0.08</span>, maxScale: <span class="code-num">0.25</span>, cropRadius: <span class="code-num">8.0</span>
-});
-
-<span class="code-fn">modeler_gaussian_splat</span>({
-  action: <span class="code-str">'bake_transform'</span>, targetMesh: <span class="code-str">'forest_scan'</span>, alignToGround: <span class="code-kw">true</span>
-});</code></pre>
             </div>
           </div>
         </div>
@@ -2464,8 +2560,7 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
         <div style="display: flex; gap: 24px;">
           <a href="#ai-copilot" class="nav-link">Human + AI</a>
           <a href="#neural-3d" class="nav-link">Neural 3D</a>
-          <a href="#game-pipeline" class="nav-link">Game Pipeline</a>
-          <a href="#gaussian-splatting" class="nav-link">Gaussian Splats</a>
+          <a href="#features" class="nav-link">Features</a>
           <a href="#adapters" class="nav-link">Adapters</a>
           <a href="#plugin-system" class="nav-link">Plugin SDK</a>
           <a href="#roadmap" class="nav-link">Roadmap</a>
@@ -2565,6 +2660,13 @@ editor.service.aiAgent.<span class="code-fn">saveConfig</span>({
         sub: 'GTA Style Tower',
         screenshot: 'screenshots/gta_tower.jpg',
         model: 'models/gta_tower.glb'
+      },
+      {
+        id: 'power_outlet',
+        title: 'Power Outlet',
+        sub: 'EU Power Outlet modeled in MiniCAD feature',
+        screenshot: 'screenshots/power_outlet.jpg',
+        model: 'models/power_outlet.babylon'
       },
       {
         id: 'fern',

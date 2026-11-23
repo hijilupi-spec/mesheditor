@@ -9,6 +9,7 @@ export * from './template';
 export * from './builtInSkills';
 export * from './voxel';
 export * from './pathExtrusion';
+export * from './minicad';
 export * from './compression/ModelCompressor';
 export * from './loaders/ColladaConverter';
 export * from './geometry/bevelModifier';

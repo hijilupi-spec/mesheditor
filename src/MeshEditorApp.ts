@@ -51,6 +51,7 @@ import { GaussianSplatUIService } from './splatting/GaussianSplatUIService';
 import { VoxelPainterUIService } from './voxel/VoxelPainterUIService';
 import { PathExtrusionUIService } from './pathExtrusion/PathExtrusionUIService';
 import { CompressModelUIService } from './compression/CompressModelUIService';
+import { MiniCadUIService } from './minicad/MiniCadUIService';
 
 export { DEFAULT_MESH_EDITOR_SETTINGS, MeshEditorSettings, SETTINGS_STORAGE_KEY };
 
@@ -154,6 +155,7 @@ export class MeshEditorApp {
   public readonly voxelPainterUI: VoxelPainterUIService = new VoxelPainterUIService(this as unknown as MeshEditorAppHost);
   public readonly pathExtrusionUI: PathExtrusionUIService = new PathExtrusionUIService(this as unknown as MeshEditorAppHost);
   public readonly compressModelUI: CompressModelUIService = new CompressModelUIService(this as unknown as MeshEditorAppHost);
+  public readonly miniCadUI: MiniCadUIService = new MiniCadUIService(this as unknown as MeshEditorAppHost);
 
   // Backwards-compatible accessors to service-owned state
   public get compressLoadedFile(): File | null {
@@ -358,6 +360,7 @@ export class MeshEditorApp {
         this.updateTexturePaintUI();
         this.updateHeightmapUI();
         this.updateGaussianSplatUI();
+        this.updateMiniCadUI();
         const statsSelection = this.getElement<HTMLElement>('statsSelection');
         if (statsSelection) {
           statsSelection.textContent = activeMesh
@@ -387,6 +390,7 @@ export class MeshEditorApp {
         this.updateTexturePaintUI();
         this.updateHeightmapUI();
         this.updateGaussianSplatUI();
+        this.updateMiniCadUI();
         this.renderPathExtrusionUI();
         const statsSelection = this.getElement<HTMLElement>('statsSelection');
         if (statsSelection) {
@@ -423,6 +427,7 @@ export class MeshEditorApp {
         this.updateTexturePaintUI();
         this.updateHeightmapUI();
         this.updateGaussianSplatUI();
+        this.updateMiniCadUI();
         this.adapter.onModelLoaded?.(filename, this);
         options.events?.onModelLoaded?.(filename);
       },
@@ -982,6 +987,7 @@ export class MeshEditorApp {
     this.initTexturePaintUI();
     this.initHeightmapUI();
     this.initGaussianSplatUI();
+    this.initMiniCadUI();
 
     // Restore saved window layout and active tools from localStorage
     this.restoreDialogLayout();
@@ -2033,6 +2039,14 @@ export class MeshEditorApp {
 
   public updateDecalUI(): void {
     this.decalUI.updateDecalUI();
+  }
+
+  public initMiniCadUI(): void {
+    this.miniCadUI.initMiniCadUI();
+  }
+
+  public updateMiniCadUI(): void {
+    this.miniCadUI.updateMiniCadUI();
   }
 
   public initTexturePaintUI(): void {

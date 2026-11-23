@@ -1,0 +1,178 @@
+<div id="dialog-minicad" class="floating-dialog" style="top: 100px; left: 348px; width: 356px; display: none">
+  <div class="dialog-header">
+    <span class="dialog-title"><i class="app-icon" data-lucide="ruler"></i> MiniCAD Studio</span>
+    <div class="dialog-actions">
+      <button class="dialog-btn btn-help" title="Help & Tool Guide" aria-label="Help"><i class="app-icon" data-lucide="help-circle"></i></button>
+      <button class="dialog-btn btn-min" title="Minimize"><i class="app-icon" data-lucide="minus"></i></button>
+      <button class="dialog-btn btn-close" title="Close"><i class="app-icon" data-lucide="x"></i></button>
+    </div>
+  </div>
+  <div class="dialog-body minicad-body">
+    <!-- Active Mode Toggle -->
+    <div class="tool-control-group">
+      <button type="button" id="btnMiniCadToggleMode" class="tool-btn tool-btn-primary btn-block">
+        <i class="app-icon" data-lucide="ruler"></i> Enable MiniCAD Viewport Mode
+      </button>
+    </div>
+
+    <!-- Profile, Snap & Color -->
+    <div class="tool-control-group">
+      <label class="tool-label" for="miniCadProfileSelect">Workflow Profile &amp; Grid Snap</label>
+      <div class="tool-row">
+        <select id="miniCadProfileSelect" class="tool-select" style="flex: 1;">
+          <option value="3d_print">3D Print (mm)</option>
+          <option value="woodwork">Woodwork &amp; Furniture (mm)</option>
+          <option value="mechanics">Mechanics &amp; Hardware (mm)</option>
+        </select>
+        <select id="miniCadSnapSelect" class="tool-select" style="width: 82px;" title="Snap increment in millimeters">
+          <option value="0.5">0.5 mm</option>
+          <option value="1" selected>1 mm</option>
+          <option value="5">5 mm</option>
+          <option value="10">10 mm</option>
+          <option value="0">Free</option>
+        </select>
+        <input type="color" id="miniCadColorPicker" value="#3b82f6" title="Part color" class="minicad-color-input" />
+      </div>
+    </div>
+
+    <!-- Viewport Interaction Modes -->
+    <div class="tool-control-group">
+      <span class="tool-label">Interaction Mode</span>
+      <div class="minicad-btn-grid">
+        <button type="button" id="btnMiniCadModeSelect" class="tool-btn minicad-btn" title="Select, move on plane & snap with smart guides">
+          <i class="app-icon" data-lucide="mouse-pointer"></i> Align
+        </button>
+        <button type="button" id="btnMiniCadModePushPull" class="tool-btn minicad-btn" title="Drag any face to extrude or shrink">
+          <i class="app-icon" data-lucide="move-vertical"></i> Push/Pull
+        </button>
+        <button type="button" id="btnMiniCadModeBox" class="tool-btn minicad-btn" title="Click floor or any face to place a box">
+          <i class="app-icon" data-lucide="box"></i> +Box
+        </button>
+        <button type="button" id="btnMiniCadModeCyl" class="tool-btn minicad-btn" title="Click floor or any face to place a cylinder">
+          <i class="app-icon" data-lucide="cylinder"></i> +Cyl
+        </button>
+        <button type="button" id="btnMiniCadModeHole" class="tool-btn minicad-btn" title="Click any face to punch a hardware hole">
+          <i class="app-icon" data-lucide="circle-dot"></i> Hole
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Create & Starter Assemblies -->
+    <div class="tool-control-group">
+      <span class="tool-label">Quick Shapes &amp; Starter Assemblies</span>
+      <div class="minicad-btn-grid">
+        <button type="button" id="btnMiniCadAddBox" class="tool-btn minicad-btn">Box</button>
+        <button type="button" id="btnMiniCadAddRoundedBox" class="tool-btn minicad-btn">Rounded</button>
+        <button type="button" id="btnMiniCadAddCylinder" class="tool-btn minicad-btn">Cylinder</button>
+        <button type="button" id="btnMiniCadAddTube" class="tool-btn minicad-btn">Tube</button>
+        <button type="button" id="btnMiniCadAddBracket" class="tool-btn minicad-btn">L-Bracket</button>
+        <button type="button" id="btnMiniCadAddPlate" class="tool-btn minicad-btn">Plate</button>
+      </div>
+      <div class="minicad-grid-2" style="margin-top: 4px;">
+        <button type="button" id="btnMiniCadTplEnclosure" class="tool-btn minicad-btn" title="Box with 2.5 mm shell, cable port &amp; M3 lid">Enclosure</button>
+        <button type="button" id="btnMiniCadTplBracket" class="tool-btn minicad-btn" title="L-Bracket with M4 mounting holes">Bracket</button>
+        <button type="button" id="btnMiniCadTplShelf" class="tool-btn minicad-btn" title="18 mm wooden shelf box assembly">Shelf Unit</button>
+        <button type="button" id="btnMiniCadTplSpacer" class="tool-btn minicad-btn" title="Beveled spacer tube">Spacer</button>
+      </div>
+    </div>
+
+    <!-- Hardware Hole Punch Settings -->
+    <div class="tool-control-group">
+      <label class="tool-label" for="miniCadHolePreset">Hardware Hole Preset (for Hole Mode)</label>
+      <div class="tool-row">
+        <select id="miniCadHolePreset" class="tool-select" style="flex: 1;"></select>
+        <input type="number" id="numMiniCadHoleInset" class="tool-number" value="6" min="1" step="1" style="width: 58px;" title="Corner inset (mm)" />
+      </div>
+      <div class="tool-row" style="margin-top: 2px; justify-content: flex-start; gap: 12px;">
+        <label class="tool-sublabel" style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="chkMiniCadHoleThrough" checked /> Through-All
+        </label>
+        <label class="tool-sublabel" style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="chkMiniCadHoleCorners" /> 2&times;2 Corners
+        </label>
+      </div>
+    </div>
+
+    <!-- Selected Part Parametric Inspector -->
+    <div id="miniCadNoSelectionHint" class="tool-help-box">
+      Select or create a CAD part to edit exact millimeter dimensions, wall shells, bevels, and feature stack.
+    </div>
+
+    <div id="miniCadSelectedSection" style="display: none;">
+      <div class="tool-control-group">
+        <div class="tool-row" style="justify-content: space-between;">
+          <span class="tool-label">Part Dimensions (mm)</span>
+          <button type="button" id="btnMiniCadDropFloor" class="tool-btn minicad-btn minicad-btn-compact">Drop to Floor</button>
+        </div>
+        <div class="minicad-dim-grid">
+          <label class="minicad-dim-field"><span>W</span><input type="number" id="miniCadDimW" class="tool-number" step="0.5" min="1" /></label>
+          <label class="minicad-dim-field"><span>H</span><input type="number" id="miniCadDimH" class="tool-number" step="0.5" min="1" /></label>
+          <label class="minicad-dim-field"><span>D</span><input type="number" id="miniCadDimD" class="tool-number" step="0.5" min="1" /></label>
+          <label class="minicad-dim-field"><span>R</span><input type="number" id="miniCadDimR" class="tool-number" step="0.5" min="0" /></label>
+        </div>
+      </div>
+
+      <!-- Shell & Bevel Modifiers -->
+      <div class="tool-control-group">
+        <span class="tool-label">Shell &amp; Edge Bevel (Non-Destructive)</span>
+        <div class="tool-row">
+          <input type="number" id="numMiniCadShellWall" class="tool-number" value="2" min="0" step="0.5" style="width: 60px;" title="Wall thickness (mm); 0 removes shell" />
+          <select id="selMiniCadShellFace" class="tool-select" style="flex: 1;">
+            <option value="top">Open Top</option>
+            <option value="front">Open Front</option>
+            <option value="back">Open Back</option>
+            <option value="left">Open Left</option>
+            <option value="right">Open Right</option>
+            <option value="bottom">Open Bottom</option>
+            <option value="none">Closed Cavity</option>
+          </select>
+          <button type="button" id="btnMiniCadApplyShell" class="tool-btn minicad-btn minicad-btn-compact">Shell</button>
+        </div>
+        <div class="tool-row" style="margin-top: 2px;">
+          <input type="number" id="numMiniCadBevelWidth" class="tool-number" value="0.8" min="0" step="0.2" style="width: 60px;" title="Bevel width (mm); 0 removes bevel" />
+          <select id="selMiniCadBevelSegs" class="tool-select" style="flex: 1;">
+            <option value="1">Chamfer (1 seg)</option>
+            <option value="2" selected>Fillet (2 segs)</option>
+            <option value="3">Smooth (3 segs)</option>
+          </select>
+          <button type="button" id="btnMiniCadApplyBevel" class="tool-btn minicad-btn minicad-btn-compact">Bevel</button>
+        </div>
+      </div>
+
+      <!-- Non-Destructive Feature Stack -->
+      <div class="tool-control-group">
+        <div class="tool-row" style="justify-content: space-between;">
+          <span class="tool-label">Feature Stack</span>
+          <button type="button" id="btnMiniCadBake" class="tool-btn minicad-btn minicad-btn-compact" title="Convert parametric recipe to static mesh">Bake</button>
+        </div>
+        <div id="miniCadFeatureList" class="minicad-feature-list"></div>
+      </div>
+    </div>
+
+    <!-- Smart Align & Gap -->
+    <div class="tool-control-group">
+      <div class="tool-row" style="justify-content: space-between;">
+        <span class="tool-label">Smart Align &amp; Gap</span>
+        <input type="number" id="numMiniCadAlignGap" class="tool-number" value="0" step="1" style="width: 66px;" title="Exact gap in mm" />
+      </div>
+      <div class="minicad-btn-grid">
+        <button type="button" id="btnMiniCadAlignCenterX" class="tool-btn minicad-btn">Center X</button>
+        <button type="button" id="btnMiniCadAlignCenterZ" class="tool-btn minicad-btn">Center Z</button>
+        <button type="button" id="btnMiniCadAlignStackTop" class="tool-btn minicad-btn">Stack Top</button>
+        <button type="button" id="btnMiniCadAlignFlushLeft" class="tool-btn minicad-btn">Flush Left</button>
+        <button type="button" id="btnMiniCadAlignFlushFront" class="tool-btn minicad-btn">Flush Front</button>
+        <button type="button" id="btnMiniCadAlignGapX" class="tool-btn minicad-btn">Set Gap X</button>
+      </div>
+    </div>
+
+    <!-- Inspection & True-mm Export -->
+    <div class="tool-control-group" style="margin-bottom: 0;">
+      <div class="tool-row">
+        <button type="button" id="btnMiniCadPrintCheck" class="tool-btn minicad-btn" style="flex: 1;">Print Check</button>
+        <button type="button" id="btnMiniCadCutList" class="tool-btn minicad-btn" style="flex: 1;">Cut List</button>
+        <button type="button" id="btnMiniCadExportStl" class="tool-btn tool-btn-primary" style="flex: 1.2;">STL (mm)</button>
+      </div>
+      <div id="miniCadReportOutput" class="tool-help-box" style="display: none; margin-top: 6px; max-height: 150px; overflow: auto;"></div>
+    </div>
+  </div>
+</div>

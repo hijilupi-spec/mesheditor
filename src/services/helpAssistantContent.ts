@@ -1,6 +1,7 @@
 export type HelpActionId =
   | 'start-tour'
   | 'open-create-mesh'
+  | 'open-minicad'
   | 'open-voxel-painter'
   | 'open-path-extrusion'
   | 'open-text-mesh'
@@ -314,10 +315,10 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
         variant: 'secondary',
       },
     ],
-    keywords: ['create', 'new', 'primitive', 'box', 'sphere', 'voxel', 'text', 'terrain', 'sculpt', 'path', 'extrude', 'build'],
+    keywords: ['create', 'new', 'primitive', 'box', 'sphere', 'voxel', 'text', 'terrain', 'sculpt', 'path', 'extrude', 'build', 'minicad', 'cad', '3d print', 'woodwork', 'bracket', 'enclosure', 'holes', 'cut list', 'mm'],
     sections: [
       {
-        title: '5 Easy Ways to Build Anything',
+        title: '7 Easy Ways to Build Anything',
         icon: 'layers',
         layout: 'grid',
         items: [
@@ -331,7 +332,16 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
             actions: [{ action: 'open-create-mesh', label: 'Try Create Mesh', icon: 'box' }],
           },
           {
-            title: '2. Pixel Blocks (Voxel Painter)',
+            title: '2. Precision Parts & Woodworking (MiniCAD Studio)',
+            badge: 'Precision CAD',
+            icon: 'ruler',
+            descriptionHtml:
+              'Beginner-friendly millimeter CAD without complex sketch constraints! Choose <strong>3D Print</strong>, <strong>Woodwork</strong>, or <strong>Mechanics</strong>, click any face to build or punch hardware holes (M2–M6, countersunk, 2×2 corners), drag faces with <strong>Push/Pull</strong>, snap with Figma-style smart guides, check printability / cut lists, and export <strong>1:1 STL (mm)</strong>.',
+            tip: 'Use Starter Assemblies (Enclosure, Bracket, Shelf Unit, Spacer) to start with ready-made parametric parts.',
+            actions: [{ action: 'open-minicad', label: 'Try MiniCAD Studio', icon: 'ruler' }],
+          },
+          {
+            title: '3. Pixel Blocks (Voxel Painter)',
             badge: 'Block Art',
             icon: 'grid-3x3',
             descriptionHtml:
@@ -340,7 +350,7 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
             actions: [{ action: 'open-voxel-painter', label: 'Try Voxel Painter', icon: 'grid-3x3' }],
           },
           {
-            title: '3. Draw a Path (Path Extrusion)',
+            title: '4. Draw a Path (Path Extrusion)',
             badge: 'Walls & Pipes',
             icon: 'route',
             descriptionHtml:
@@ -348,7 +358,7 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
             actions: [{ action: 'open-path-extrusion', label: 'Try Path Extrusion', icon: 'route' }],
           },
           {
-            title: '4. 3D Letters & Logos (3D Text)',
+            title: '5. 3D Letters & Logos (3D Text)',
             badge: 'Signage',
             icon: 'type',
             descriptionHtml:
@@ -356,7 +366,7 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
             actions: [{ action: 'open-text-mesh', label: 'Try 3D Text', icon: 'type' }],
           },
           {
-            title: '5. Mountains & Landscapes (Heightmap Terrain)',
+            title: '6. Mountains & Landscapes (Heightmap Terrain)',
             badge: 'Environments',
             icon: 'mountain',
             descriptionHtml:
@@ -364,7 +374,7 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
             actions: [{ action: 'open-heightmap', label: 'Try Heightmap Terrain', icon: 'mountain' }],
           },
           {
-            title: '6. Digital Clay (Figure Sculpt & Retopo)',
+            title: '7. Digital Clay (Figure Sculpt & Retopo)',
             badge: 'Characters',
             icon: 'smile',
             descriptionHtml:
@@ -446,6 +456,14 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
             descriptionHtml:
               'Want to drill a hole or merge two overlapping objects cleanly? Open <strong>Constructive Solid Geometry</strong>, pick a Target mesh and a Cutter mesh, then click <strong>Subtract</strong> (cut out) or <strong>Union</strong> (fuse).',
             actions: [{ action: 'open-csg', label: 'Open CSG Tool', icon: 'combine' }],
+          },
+          {
+            title: 'Precision Resize, Shells & Holes (MiniCAD)',
+            badge: 'Non-Destructive CAD',
+            icon: 'ruler',
+            descriptionHtml:
+              'In <strong>MiniCAD Studio</strong>, drag any face with <strong>Push/Pull</strong>, type exact <code>W / H / D</code> values in millimeters in the viewport HUD, hollow out boxes with <strong>Shell</strong>, punch non-destructive M2–M6 or countersunk holes, and align parts with exact gaps.',
+            actions: [{ action: 'open-minicad', label: 'Open MiniCAD Studio', icon: 'ruler' }],
           },
           {
             title: 'Push or Inset Flat Faces',
@@ -703,6 +721,14 @@ export const HELP_ASSISTANT_TOPICS: HelpTopicDefinition[] = [
             descriptionHtml:
               'Happy with your 3D shape and only want new surface art (like mossy bark, worn leather, or sci-fi metal panels)? Open <strong>Tools → Materials → AI Texture Generator</strong> to create seamless PBR textures and apply them with one click.',
             actions: [{ action: 'open-ai-texture', label: 'Open AI Texture Generator', icon: 'image' }],
+          },
+          {
+            title: 'Co-Design Precision Parts in MiniCAD Studio',
+            badge: 'Human + AI CAD',
+            icon: 'ruler',
+            descriptionHtml:
+              'Build rough enclosures, brackets, or shelves in <strong>MiniCAD Studio</strong>, then ask the AI Mesh Agent to <em>"Hollow this box with 2.5 mm walls, add M3 countersunk corner holes, and run a printability check"</em> or <em>"Generate a woodwork cut list"</em>. Everything stays editable in your Feature Stack.',
+            actions: [{ action: 'open-minicad', label: 'Open MiniCAD Studio', icon: 'ruler' }],
           },
         ],
       },

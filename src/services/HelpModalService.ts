@@ -552,6 +552,9 @@ export class HelpModalService {
       case 'open-create-mesh':
         this.openToolDialogFromHelp('dialog-create-primitive', 'Create Mesh');
         break;
+      case 'open-minicad':
+        this.openToolDialogFromHelp('dialog-minicad', 'MiniCAD Studio');
+        break;
       case 'open-voxel-painter':
         this.openToolDialogFromHelp('dialog-voxel-painter', 'Voxel Painter');
         break;

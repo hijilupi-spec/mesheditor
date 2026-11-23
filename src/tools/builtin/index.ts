@@ -47,4 +47,5 @@ export * from './CreateHeightmapTool';
 export * from './CheckZFightingTool';
 export * from './ManageGaussianSplatTool';
 export * from './MeshToSplatsTool';
+export * from './MiniCadTools';
 

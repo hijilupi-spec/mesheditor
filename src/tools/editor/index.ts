@@ -23,6 +23,7 @@ import { DecalEditorTool } from './DecalEditorTool';
 import { TexturePaintEditorTool } from './TexturePaintEditorTool';
 import { HeightmapEditorTool } from './HeightmapEditorTool';
 import { GaussianSplatEditorTool } from './GaussianSplatEditorTool';
+import { MiniCadEditorTool } from './MiniCadEditorTool';
 import { TOOL_VIEWS, getToolViewTemplate } from './toolViews';
 
 export {
@@ -50,6 +51,7 @@ export {
   TexturePaintEditorTool,
   HeightmapEditorTool,
   GaussianSplatEditorTool,
+  MiniCadEditorTool,
   TOOL_VIEWS,
   getToolViewTemplate,
 };
@@ -61,6 +63,7 @@ export function createBuiltinEditorTools(): ToolInterface[] {
   return [
     new OutlinerEditorTool(),
     new CreatePrimitiveEditorTool(),
+    new MiniCadEditorTool(),
     new CSGEditorTool(),
     new FacetEditorTool(),
     new SculptEditorTool(),

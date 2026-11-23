@@ -137,6 +137,10 @@ export const CORE_TOOL_NAMES: readonly string[] = [
   'modeler_generate_neural_mesh',
   'modeler_gaussian_splat',
   'modeler_mesh_to_splats',
+  'cad_create_part',
+  'cad_modify_part',
+  'cad_align_and_measure',
+  'cad_inspect_and_cutlist',
 ];
 
 export const CORE_TOOL_SET: ReadonlySet<string> = new Set(CORE_TOOL_NAMES);
@@ -1257,6 +1261,13 @@ export class AIAgentService {
           return hasNeural;
         case 'voxel-painter':
           return /\b(voxel|pixel|blocky|minecraft|sprite|8-bit|retro)\b/i.test(promptText);
+        case 'mini-cad':
+          return (
+            !!this.service?.miniCadController?.isActive ||
+            /\b(cad|minicad|3d\s*print|stl|enclosure|housing|bracket|mounting|tolerance|clearance|countersunk|m[2-6]\b|dowel|cut\s*list|woodwork|shelf|cabinet|plywood|spacer|flange|millimeter|\d+\s*mm)\b/i.test(
+              promptText
+            )
+          );
         case 'figure-sculptor':
           return (
             hasImages ||

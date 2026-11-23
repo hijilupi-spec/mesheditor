@@ -10119,3 +10119,274 @@ dialog#helpTourPopover.help-tour-popover:is(:popover-open, .\:popover-open, .is-
     transition: none;
   }
 }
+
+/* =========================================================================
+   MINICAD STUDIO & VIEWPORT SMART GUIDES HUD
+   ========================================================================= */
+.minicad-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.minicad-color-input {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.minicad-btn-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.minicad-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.tool-btn.minicad-btn {
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  padding: 4px 6px;
+  background: #21262d;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  color: #e6edf3;
+  font-size: 11px;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 1;
+}
+
+.tool-btn.minicad-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
+.tool-btn.minicad-btn.active {
+  background: #1f6feb;
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.tool-btn.minicad-btn.minicad-btn-compact {
+  width: auto;
+  min-height: 24px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.minicad-dim-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.minicad-dim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #8b949e;
+}
+
+.minicad-dim-field input {
+  width: 100%;
+}
+
+.minicad-feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.minicad-feature-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #e6edf3;
+}
+
+.minicad-feature-del {
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.minicad-feature-del:hover {
+  color: #f85149;
+}
+
+.minicad-cutlist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.minicad-cutlist-table th,
+.minicad-cutlist-table td {
+  text-align: left;
+  padding: 3px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.minicad-dimension-overlays {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 95;
+  overflow: hidden;
+}
+
+.minicad-guide-pill {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #e0f7ff;
+  background: rgba(13, 27, 42, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.7);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+
+.minicad-guide-pill.is-center {
+  color: #fae8ff;
+  border-color: rgba(232, 121, 249, 0.8);
+}
+
+.minicad-viewport-hud {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(22, 27, 34, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: #e6edf3;
+  max-width: calc(100vw - 40px);
+}
+
+.minicad-hud-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.minicad-hud-subrow {
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.minicad-hud-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #38bdf8;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.14);
+}
+
+.minicad-hud-modes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.minicad-hud-btn {
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #21262d;
+  color: #c9d1d9;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.minicad-hud-btn.active {
+  background: #1f6feb;
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.minicad-hud-close {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #238636;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.minicad-hud-hover {
+  color: #8b949e;
+  font-size: 11px;
+}
+
+.minicad-hud-dims {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.minicad-hud-dims label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+}
+
+.minicad-hud-dims input {
+  width: 54px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #0d1117;
+  color: #e6edf3;
+  font-size: 11px;
+}
+
+.minicad-hud-unit {
+  font-size: 11px;
+  color: #8b949e;
+}

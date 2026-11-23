@@ -153,6 +153,15 @@ describe('Help Assistant & Guided Tour Integration Tests', () => {
 
     expect(app.isHelpModalOpen()).toBe(false);
     expect(app.isDialogOpen('dialog-create-primitive')).toBe(true);
+
+    // Also test opening MiniCAD Studio from Create New Models topic
+    app.openHelpModal('create');
+    const openMiniCadBtn = helpModal.querySelector('[data-help-action="open-minicad"]') as HTMLButtonElement;
+    expect(openMiniCadBtn).not.toBeNull();
+    openMiniCadBtn.click();
+
+    expect(app.isHelpModalOpen()).toBe(false);
+    expect(app.isDialogOpen('dialog-minicad')).toBe(true);
   });
 
   it('runs the non-modal Guided Tour across all steps and supports returning to Help Hub', () => {
