@@ -182,6 +182,48 @@ describe('Gaussian Splatting Studio, AI Tools & Skill Integration Tests', () => 
     expect(converted.buffer.byteLength).toBe(320 * SPLAT_RECORD_BYTES);
   });
 
+  it('preserves upright Y orientation across .splat and .ply export and reload round-trips', async () => {
+    const ctrl = service.gaussianSplatController;
+
+    // Create a tall asymmetric splat column spanning Y in [1.0, 4.0] in Babylon (+Y up)
+    const buf = new ArrayBuffer(2 * SPLAT_RECORD_BYTES);
+    const fBuf = new Float32Array(buf);
+    const uBuf = new Uint8Array(buf);
+    writeSplatRecord(fBuf, uBuf, 0, { x: 0, y: 1.0, z: 0, sx: 0.1, sy: 0.1, sz: 0.1, r: 255, g: 0, b: 0, a: 255, qx: 0, qy: 0, qz: 0, qw: 1 });
+    writeSplatRecord(fBuf, uBuf, 1, { x: 0, y: 4.0, z: 0, sx: 0.1, sy: 0.1, sz: 0.1, r: 0, g: 255, b: 0, a: 255, qx: 0, qy: 0, qz: 0, qw: 1 });
+
+    const original = ctrl.createFromSplatsBuffer('upright_test', buf);
+    expect(ctrl.getSplatStats(original).worldBounds.min[1]).toBeCloseTo(1.0, 3);
+    expect(ctrl.getSplatStats(original).worldBounds.max[1]).toBeCloseTo(4.0, 3);
+
+    // Export .splat: file stores +Y down (-4.0 .. -1.0) so SPLATFileLoader's scaling.y=-1 renders upright
+    const exportedSplat = ctrl.exportSplatBlob(original, 'splat', true);
+    const exportedBuf = await exportedSplat.arrayBuffer();
+    const expFloats = new Float32Array(exportedBuf);
+    expect(expFloats[1]).toBeCloseTo(-1.0, 4);
+    expect(expFloats[8 + 1]).toBeCloseTo(-4.0, 4);
+
+    // Reload .splat via loadSplatFromFile (disable depth sort in headless env without Worker)
+    const reloadedMeshes = await ctrl.loadSplatFromFile(new File([exportedBuf], 'upright_test.splat'), {
+      replaceScene: true,
+    });
+    expect(reloadedMeshes.length).toBe(1);
+    const reloaded = reloadedMeshes[0];
+    expect(reloaded.scaling.y).toBeCloseTo(-1, 4);
+    expect(ctrl.getSplatStats(reloaded).worldBounds.min[1]).toBeCloseTo(1.0, 3);
+    expect(ctrl.getSplatStats(reloaded).worldBounds.max[1]).toBeCloseTo(4.0, 3);
+
+    // Re-export the reloaded mesh (which has scaling.y = -1) as .ply and verify world Y stays [1.0, 4.0]
+    const reExportedPly = ctrl.exportSplatBlob(reloaded, 'ply', true);
+    const reloadedPly = await ctrl.loadSplatFromFile(
+      new File([await reExportedPly.arrayBuffer()], 'upright_reexport.ply'),
+      { replaceScene: true }
+    );
+    expect(reloadedPly.length).toBe(1);
+    expect(ctrl.getSplatStats(reloadedPly[0]).worldBounds.min[1]).toBeCloseTo(1.0, 3);
+    expect(ctrl.getSplatStats(reloadedPly[0]).worldBounds.max[1]).toBeCloseTo(4.0, 3);
+  });
+
   it('exposes AI tools (modeler_gaussian_splat & modeler_mesh_to_splats), skill, and splat-aware scene summary', async () => {
     const skill = BUILT_IN_AGENT_SKILLS.find((s) => s.id === 'gaussian-splatting');
     expect(skill).toBeDefined();

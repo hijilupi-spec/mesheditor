@@ -12,6 +12,7 @@ export { GaussianSplatUIService } from './GaussianSplatUIService';
 export {
   clampByte,
   encodeSplatsToPlyBuffer,
+  flipSplatsBufferY,
   getSplatCount,
   hexToRgbBytes,
   isGaussianSplatMesh,

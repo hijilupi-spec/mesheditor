@@ -166,7 +166,32 @@ export function quaternionFromNormal(normal: Vector3): Quaternion {
 }
 
 /**
- * Transforms a `.splat` ArrayBuffer by an arbitrary 4x4 matrix (supporting non-uniform scaling).
+ * Reflects a `.splat` ArrayBuffer across the XZ plane (`y -> -y` and mirrored quaternion)
+ * to convert between Babylon.js (`+Y up`) and standard 3DGS `.splat`/`.ply` (`+Y down`) coordinates.
+ */
+export function flipSplatsBufferY(splatsData: ArrayBuffer, vertexCount?: number): ArrayBuffer {
+  const count = vertexCount ?? Math.floor(splatsData.byteLength / SPLAT_RECORD_BYTES);
+  const out = splatsData.slice(0, count * SPLAT_RECORD_BYTES);
+  const fBuf = new Float32Array(out);
+  const uBuf = new Uint8Array(out);
+
+  for (let i = 0; i < count; i++) {
+    const rec = readSplatRecord(fBuf, uBuf, i);
+    writeSplatRecord(fBuf, uBuf, i, {
+      ...rec,
+      y: -rec.y,
+      qx: -rec.qx,
+      qy: rec.qy,
+      qz: -rec.qz,
+      qw: rec.qw,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Transforms a `.splat` ArrayBuffer by an arbitrary 4x4 matrix (supporting non-uniform & negative scaling).
  */
 export function transformSplatsBuffer(
   splatsData: ArrayBuffer,
@@ -183,6 +208,9 @@ export function transformSplatsBuffer(
   matrix.decompose(scaleVec, rotQuat, transVec);
   rotQuat.normalize();
 
+  const flipX = scaleVec.x < 0;
+  const flipY = scaleVec.y < 0;
+  const flipZ = scaleVec.z < 0;
   const absSx = Math.max(1e-5, Math.abs(scaleVec.x));
   const absSy = Math.max(1e-5, Math.abs(scaleVec.y));
   const absSz = Math.max(1e-5, Math.abs(scaleVec.z));
@@ -196,7 +224,24 @@ export function transformSplatsBuffer(
     pos.set(rec.x, rec.y, rec.z);
     Vector3.TransformCoordinatesToRef(pos, matrix, pos);
 
-    splatQuat.set(rec.qx, rec.qy, rec.qz, rec.qw).normalize();
+    let qx = rec.qx;
+    let qy = rec.qy;
+    let qz = rec.qz;
+    const qw = rec.qw;
+    if (flipX) {
+      qy = -qy;
+      qz = -qz;
+    }
+    if (flipY) {
+      qx = -qx;
+      qz = -qz;
+    }
+    if (flipZ) {
+      qx = -qx;
+      qy = -qy;
+    }
+
+    splatQuat.set(qx, qy, qz, qw).normalize();
     rotQuat.multiplyToRef(splatQuat, combinedQuat);
     combinedQuat.normalize();
 

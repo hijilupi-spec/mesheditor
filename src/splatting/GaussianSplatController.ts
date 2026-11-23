@@ -16,6 +16,7 @@ import type { MeshEditorService } from '../MeshEditorService';
 import {
   clampByte,
   encodeSplatsToPlyBuffer,
+  flipSplatsBufferY,
   getSplatCount,
   hexToRgbBytes,
   isGaussianSplatMesh,
@@ -219,6 +220,46 @@ export class GaussianSplatController {
     };
   }
 
+  private async importWithSplatOptions(
+    importFn: () => Promise<any>,
+    baseName: string,
+    flipY: boolean
+  ): Promise<any> {
+    let headlessMesh: GaussianSplattingMesh | null = null;
+    if (typeof Worker === 'undefined') {
+      headlessMesh = new GaussianSplattingMesh(baseName, null, this.service.scene, true);
+      headlessMesh.disableDepthSort = true;
+    }
+
+    const obs = SceneLoader.OnPluginActivatedObservable.add((loader) => {
+      if (loader.name === 'splat') {
+        const splatLoader = loader as any;
+        splatLoader._loadingOptions = {
+          ...(splatLoader._loadingOptions || {}),
+          keepInRam: true,
+          flipY,
+          disableAutoCameraLimits: true,
+          ...(headlessMesh ? { gaussianSplattingMesh: headlessMesh } : {}),
+        };
+      }
+    });
+
+    try {
+      const result = await importFn();
+      if (headlessMesh && !(result?.meshes || []).includes(headlessMesh) && !headlessMesh.isDisposed()) {
+        headlessMesh.dispose();
+      }
+      return result;
+    } catch (err) {
+      if (headlessMesh && !headlessMesh.isDisposed()) {
+        headlessMesh.dispose();
+      }
+      throw err;
+    } finally {
+      SceneLoader.OnPluginActivatedObservable.remove(obs);
+    }
+  }
+
   /**
    * Imports a Gaussian Splatting file (`.splat`, `.ply`, `.spz`, `.sog`) with `keepInRam: true`.
    */
@@ -236,24 +277,24 @@ export class GaussianSplatController {
       this.service.clearModel();
     }
 
-    FilesInputStore.FilesToLoad[file.name.toLowerCase()] = file;
-    const result = await SceneLoader.ImportMeshAsync('', 'file:', file, this.service.scene, undefined, ext, {
-      pluginOptions: {
-        splat: {
-          keepInRam: true,
-          flipY: !!options.flipY,
-          disableAutoCameraLimits: true,
-        },
-      },
-    } as any);
-
-    const splatMeshes = (result.meshes || []).filter((m): m is GaussianSplattingMesh => isGaussianSplatMesh(m));
     const baseName = file.name.replace(/\.[^/.]+$/, '');
+    FilesInputStore.FilesToLoad[file.name.toLowerCase()] = file;
+    const result = await this.importWithSplatOptions(
+      () => SceneLoader.ImportMeshAsync('', 'file:', file, this.service.scene, undefined, ext),
+      baseName,
+      !!options.flipY
+    );
+
+    const splatMeshes = (result.meshes || []).filter((m: any): m is GaussianSplattingMesh => isGaussianSplatMesh(m));
     const added: GaussianSplattingMesh[] = [];
 
     splatMeshes.forEach((m, idx) => {
       m.isPickable = true;
-      if (!m.name || m.name === 'GaussianSplattingMesh') {
+      if (options.flipY && ext !== '.spz') {
+        m.scaling.y *= -1;
+        m.computeWorldMatrix(true);
+      }
+      if (!m.name || m.name === 'GaussianSplattingMesh' || m.name === 'GaussianSplatting') {
         m.name = splatMeshes.length === 1 ? baseName : `${baseName}_${idx + 1}`;
       }
       if (!this.service.importedMeshes.includes(m)) {
@@ -321,27 +362,23 @@ export class GaussianSplatController {
     options: { name?: string; flipY?: boolean; alignToGround?: boolean } = {}
   ): Promise<GaussianSplattingMesh[]> {
     const filename = options.name || url.split('/').pop() || 'splat.splat';
+    const baseName = filename.replace(/\.[^/.]+$/, '');
     const lastSlash = url.lastIndexOf('/');
     const rootUrl = lastSlash !== -1 ? url.substring(0, lastSlash + 1) : './';
     const file = lastSlash !== -1 ? url.substring(lastSlash + 1) : url;
 
-    const result = await SceneLoader.ImportMeshAsync('', rootUrl, file, this.service.scene, undefined, undefined, {
-      pluginOptions: {
-        splat: {
-          keepInRam: true,
-          flipY: !!options.flipY,
-          disableAutoCameraLimits: true,
-        },
-      },
-    } as any);
+    const result = await this.importWithSplatOptions(
+      () => SceneLoader.ImportMeshAsync('', rootUrl, file, this.service.scene),
+      baseName,
+      !!options.flipY
+    );
 
-    const added = (result.meshes || []).filter((m): m is GaussianSplattingMesh => isGaussianSplatMesh(m));
-    const baseName = filename.replace(/\.[^/.]+$/, '');
+    const added = (result.meshes || []).filter((m: any): m is GaussianSplattingMesh => isGaussianSplatMesh(m));
     const prevSelected = [...this.service.selectedNodes];
 
     added.forEach((m, idx) => {
       m.isPickable = true;
-      if (options.name || !m.name || m.name === 'GaussianSplattingMesh') {
+      if (options.name || !m.name || m.name === 'GaussianSplattingMesh' || m.name === 'GaussianSplatting') {
         m.name = added.length === 1 ? baseName : `${baseName}_${idx + 1}`;
       }
       if (options.alignToGround) {
@@ -1327,7 +1364,8 @@ export class GaussianSplatController {
   }
 
   /**
-   * Exports a GaussianSplattingMesh to a binary `.splat` or `.ply` Blob.
+   * Exports a GaussianSplattingMesh to a binary `.splat` or `.ply` Blob in standard
+   * 3DGS (`+Y down`) coordinates so SPLATFileLoader and external 3DGS viewers load it upright.
    */
   public exportSplatBlob(
     mesh: GaussianSplattingMesh,
@@ -1339,9 +1377,19 @@ export class GaussianSplatController {
     }
     const count = getSplatCount(mesh);
     mesh.computeWorldMatrix(true);
-    const buffer = bakeWorldTransform
-      ? transformSplatsBuffer(mesh.splatsData, count, mesh.getWorldMatrix())
-      : mesh.splatsData.slice(0, count * SPLAT_RECORD_BYTES);
+
+    let buffer: ArrayBuffer;
+    if (bakeWorldTransform) {
+      // Transform into Babylon World Space (+Y up), then convert to standard 3DGS (+Y down)
+      const worldBuffer = transformSplatsBuffer(mesh.splatsData, count, mesh.getWorldMatrix());
+      buffer = flipSplatsBufferY(worldBuffer, count);
+    } else if (mesh.scaling.y >= 0) {
+      // Local data is +Y up (created in Babylon): flip Y for standard 3DGS file format
+      buffer = flipSplatsBufferY(mesh.splatsData, count);
+    } else {
+      // Local data was loaded via SPLATFileLoader (already +Y down with mesh.scaling.y < 0)
+      buffer = mesh.splatsData.slice(0, count * SPLAT_RECORD_BYTES);
+    }
 
     if (format === 'ply') {
       const plyBuf = encodeSplatsToPlyBuffer(buffer, count);
