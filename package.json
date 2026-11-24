@@ -1,6 +1,6 @@
 {
   "name": "mesheditor",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "A free, open-source 3D modeling studio powered by Babylon.js. Create, edit, sculpt, retopologize and optimize 3D assets with optional AI assistance. Available on desktop, web & touch devices (iPad/iPhone/Android), Electron app and embeddable Web Component. Supports GLB, GLTF, OBJ, STL and PLY.",
   "private": false,
   "main": "dist-lib/index.umd.js",
@@ -44,6 +44,7 @@
     "ai:cli-bridge": "node scripts/local-cli-bridge.js",
     "build": "webpack --mode production",
     "build:pages": "npm run build:lib:bundle && npm run build && node scripts/prepare-pages.js",
+    "build:itch": "npm run build && node scripts/prepare-itch.js",
     "build:dev": "webpack --mode development",
     "prod": "webpack serve --mode production --port 8080",
     "sync:skills": "node scripts/sync-skills.js",
@@ -67,7 +68,7 @@
     "test:e2e": "playwright test",
     "test:all": "vitest run && playwright test",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist dist-lib release",
+    "clean": "rm -rf dist dist-lib dist-itch release",
     "prepublishOnly": "npm run build:lib"
   },
   "keywords": [
