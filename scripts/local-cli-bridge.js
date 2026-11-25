@@ -119,7 +119,10 @@ function runCli(provider, modelId, prompt) {
         args.push('--model', modelId);
       }
     } else if (provider.id === 'codex') {
-      args = ['exec', prompt];
+      // Codex accepts a prompt on stdin (`-`). Passing the full prompt as an
+      // argv entry can exceed the OS per-argument limit for Mesh Editor's
+      // large tool schemas and multi-turn modeling history (spawn E2BIG).
+      args = ['exec', '-'];
       if (modelId && modelId !== 'codex') {
         args.push('--model', modelId);
       }
@@ -131,9 +134,17 @@ function runCli(provider, modelId, prompt) {
     }
 
     const child = spawn(provider.binary, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [provider.id === 'codex' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       env: process.env,
     });
+
+    if (provider.id === 'codex') {
+      child.stdin.on('error', () => {
+        // The CLI may exit before consuming stdin; the close/error handlers
+        // below report the useful process result.
+      });
+      child.stdin.end(prompt);
+    }
 
     let stdout = '';
     let stderr = '';
