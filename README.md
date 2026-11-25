@@ -43,6 +43,7 @@ Distributed under the **[Apache License 2.0](LICENSE)**.
   - [Programmatic TypeScript Integration](#programmatic-typescript-integration)
 - [Extensibility & Custom Plugin System](#extensibility--custom-plugin-system)
 - [Desktop Application (Electron)](#desktop-application-electron)
+- [Android Application (APK)](#android-application-apk)
 - [Testing Architecture & Test Suites](#testing-architecture--test-suites)
   - [Headless 3D Integration Tests (Vitest + NullEngine)](#headless-3d-integration-tests-vitest--nullengine)
   - [Browser E2E Tests (Playwright)](#browser-e2e-tests-playwright)
@@ -795,6 +796,22 @@ npm run desktop:build:all
 >    *(Or `xattr -cr ~/Downloads/"Mesh Editor.app"` if running directly from Downloads).*
 > 2. **System Settings**: Go to **System Settings > Privacy & Security**, scroll to the **Security** section, and click **"Open Anyway"**.
 > 3. **Ad-Hoc Signing**: In `electron-builder.yml`, `identity: "-"` is explicitly configured to sign the entire bundle structure ad-hoc, ensuring Mach-O binary validation and sealed resources pass verification on Apple Silicon.
+
+---
+
+## Android Application (APK)
+
+The Android app wraps the production web build with Capacitor and runs locally in Android's WebView. It uses the existing touch controls and responsive mobile layout. The Android project requires JDK 21 and Android SDK Platform 36.
+
+```bash
+# Build an installable debug APK (requires Android SDK and JDK 21)
+npm ci
+npm run android:apk
+
+# Output: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+To open the native project in Android Studio, first run `npm run android:sync`, then `npm run android:open`. Importing models uses the Android file picker. AI features that call external providers still require network access and user-supplied provider settings.
 
 ---
 

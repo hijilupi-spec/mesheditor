@@ -43,6 +43,9 @@
     "ai:bridge": "node scripts/antigravity-bridge.js",
     "ai:cli-bridge": "node scripts/local-cli-bridge.js",
     "build": "webpack --mode production",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "build:pages": "npm run build:lib:bundle && npm run build && node scripts/prepare-pages.js",
     "build:itch": "npm run build && node scripts/prepare-itch.js",
     "build:dev": "webpack --mode development",
@@ -97,6 +100,8 @@
     "@babylonjs/loaders": ">=9.29.0",
     "@babylonjs/materials": ">=9.29.0",
     "@babylonjs/serializers": ">=9.29.0",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
     "dat.gui": "^0.7.9",
     "earcut": "2.2.4",
     "lucide": "^1.76.0",
@@ -105,6 +110,7 @@
     "tippy.js": "^6.3.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
     "@playwright/test": "^1.64.1",
     "@types/dat.gui": "^0.7.13",
     "@types/node": "^26.2.0",
