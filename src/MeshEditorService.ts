@@ -9531,6 +9531,7 @@ export class MeshEditorService {
         try {
           const text = await primaryFile.text();
           const parsed = JSON.parse(text);
+          this.restoreRobloxAssetValidatorMetadata(parsed.metadata);
           if (parsed.metadata?.meshEditor) {
             this.restoreProjectState(parsed.metadata.meshEditor);
           }
@@ -9627,6 +9628,7 @@ export class MeshEditorService {
         try {
           const text = await file.text();
           const parsed = JSON.parse(text);
+          this.restoreRobloxAssetValidatorMetadata(parsed.metadata);
           if (parsed.metadata?.meshEditor) {
             this.restoreProjectState(parsed.metadata.meshEditor);
           }
@@ -9677,6 +9679,7 @@ export class MeshEditorService {
         try {
           const res = await fetch(url);
           const parsed = await res.json();
+          this.restoreRobloxAssetValidatorMetadata(parsed.metadata);
           if (parsed.metadata?.meshEditor) {
             this.restoreProjectState(parsed.metadata.meshEditor);
           }
@@ -9721,6 +9724,7 @@ export class MeshEditorService {
         try {
           const res = await fetch(url);
           const parsed = await res.json();
+          this.restoreRobloxAssetValidatorMetadata(parsed.metadata);
           if (parsed.metadata?.meshEditor) {
             this.restoreProjectState(parsed.metadata.meshEditor);
           }
@@ -9742,6 +9746,15 @@ export class MeshEditorService {
    * Restores embedded project state (e.g. VoxelPainter blocks/palette, pathways, custom tool state)
    * from a loaded .babylon scene file.
    */
+  private restoreRobloxAssetValidatorMetadata(metadata: any): void {
+    if (!metadata || typeof metadata !== 'object') return;
+    const restored: Record<string, unknown> = {};
+    if (metadata.robloxAssetManifest) restored.robloxAssetManifest = metadata.robloxAssetManifest;
+    if (metadata.robloxAssetValidation) restored.robloxAssetValidation = metadata.robloxAssetValidation;
+    if (Object.keys(restored).length === 0) return;
+    this.scene.metadata = { ...(this.scene.metadata || {}), ...restored };
+  }
+
   public restoreProjectState(projectData: MeshEditorProjectData | any): void {
     if (!projectData || typeof projectData !== 'object') return;
     const tools = projectData.tools || {};

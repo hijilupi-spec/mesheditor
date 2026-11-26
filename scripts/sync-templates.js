@@ -33,6 +33,7 @@ const TOOLS = [
   { className: 'HeightmapEditorTool', file: 'HeightmapEditorTool.ejs', id: 'dialog-heightmap' },
   { className: 'GaussianSplatEditorTool', file: 'GaussianSplatEditorTool.ejs', id: 'dialog-gaussian-splat' },
   { className: 'MiniCadEditorTool', file: 'MiniCadEditorTool.ejs', id: 'dialog-minicad' },
+  { className: 'RobloxAssetValidatorEditorTool', file: 'RobloxAssetValidatorEditorTool.ejs', id: 'dialog-roblox-validator' },
 ];
 
 function getAppMetadata() {
@@ -141,4 +142,3 @@ export function getMeshEditorTemplate(): string {
 syncTemplates();
 
 module.exports = { syncTemplates, getAppMetadata };
-

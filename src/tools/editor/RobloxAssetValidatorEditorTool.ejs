@@ -1,0 +1,12 @@
+<div id="dialog-roblox-validator" class="floating-dialog" style="top: 110px; left: 330px; width: 390px; max-height: 80vh; display: none">
+  <div class="dialog-header"><span class="dialog-title"><i class="app-icon" data-lucide="shield-check"></i> Roblox Asset Validator</span><div class="dialog-actions"><button class="dialog-btn btn-help" title="Help & Tool Guide" aria-label="Help"><i class="app-icon" data-lucide="help-circle"></i></button><button class="dialog-btn btn-min" title="Minimize"><i class="app-icon" data-lucide="minus"></i></button><button class="dialog-btn btn-close" title="Close"><i class="app-icon" data-lucide="x"></i></button></div></div>
+  <div class="dialog-body" style="overflow:auto; max-height:72vh">
+    <div class="tool-control-group"><label class="tool-label" for="robloxProfile">Asset Profile</label><select id="robloxProfile" class="tool-select" data-field="profile"><option value="static_prop_mesh_v1">Static Prop Mesh v1</option><option value="layered_tshirt_v1">Layered T-Shirt v1</option></select></div>
+    <div class="tool-help-box" data-field="status">No report yet. Run validation.</div>
+    <div class="tool-control-group tool-sublabel" data-field="counts">PASS 0 · WARNING 0 · FAIL 0 · NOT TESTED 0</div>
+    <div class="tool-row"><button type="button" class="tool-action-btn tool-btn-primary" data-action="validate">Revalidate</button><button type="button" class="tool-action-btn" data-action="postflight">Check Exported GLB</button><button type="button" class="tool-action-btn" data-action="export">Download JSON Report</button></div>
+    <input type="file" accept=".glb,model/gltf-binary" data-field="glb" style="display:none" />
+    <div style="margin-top:10px" data-field="checks"></div>
+    <div class="tool-help-box">A local preflight is separate from export verification and Roblox Studio verification. NOT TESTED checks do not pass automatically.</div>
+  </div>
+</div>

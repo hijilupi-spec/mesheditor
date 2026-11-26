@@ -278,9 +278,9 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
   });
 
   describe('4. Tool Abstraction, In-App Help Guides & Dialog Wiring', () => {
-    it('provides unified ToolInterface metadata and comprehensive English help text for all 24 editor tools', () => {
+    it('provides unified ToolInterface metadata and comprehensive English help text for all 25 editor tools', () => {
       const editorTools = getBuiltinEditorTools();
-      expect(editorTools.length).toBe(24);
+      expect(editorTools.length).toBe(25);
 
       const requiredTools = [
         'scene_outliner',
@@ -307,6 +307,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
         'texture_painter',
         'heightmap_terrain',
         'gaussian_splatting',
+        'roblox_asset_validator',
       ];
 
       for (const name of requiredTools) {
@@ -454,7 +455,11 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
 
     it('instantiates all decentralized editor tool classes with self-contained configurations and help guides', () => {
       const tools = createBuiltinEditorTools();
-      expect(tools.length).toBe(24);
+      expect(tools.length).toBe(25);
+
+      const robloxValidator = tools.find((tool) => tool.name === 'roblox_asset_validator');
+      expect(robloxValidator?.dialogId).toBe('dialog-roblox-validator');
+      expect(robloxValidator?.menuLabel).toBe('Roblox Asset Validator');
 
       const heightmapTool = new HeightmapEditorTool();
       expect(heightmapTool.name).toBe('heightmap_terrain');
@@ -642,7 +647,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
       expect(physicsBtn).not.toBeNull();
     });
 
-    it('organizes all 22 editor tools into Generic, Materials, Creation, Optimization, and Characters submenus', () => {
+    it('organizes all 25 editor tools into Generic, Materials, Creation, Optimization, and Characters submenus', () => {
       document.body.innerHTML = '';
       const container = document.createElement('div');
       container.id = 'app-test-container-categories';
@@ -676,7 +681,7 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
           'Heightmap Terrain',
           'Gaussian Splatting',
         ],
-        Optimization: ['Compress Model', 'Texture Optimizer'],
+        Optimization: ['Compress Model', 'Texture Optimizer', 'Roblox Asset Validator'],
         Characters: ['Rigging & Weight Paint'],
       };
 
@@ -1419,6 +1424,13 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
     });
 
     it('preserves TerrainMaterial, 3 splat textures, and heightmap state when saving and reloading .babylon project', async () => {
+      const validatorManifest = { profileId: 'static_prop_mesh_v1', profileVersion: 1 };
+      const validatorReport = { schemaVersion: 1, profileId: 'static_prop_mesh_v1', stale: false, checks: [] };
+      service.scene.metadata = {
+        ...(service.scene.metadata || {}),
+        robloxAssetManifest: validatorManifest,
+        robloxAssetValidation: validatorReport,
+      };
       const aiItem = await service.aiTextureGenerator.generateTexture({
         prompt: 'Ancient canyon sandstone',
         name: 'CanyonSandstone',
@@ -1468,6 +1480,8 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
           type: 'application/json',
         });
         await reloadService.loadFiles([babylonFile]);
+        expect(reloadService.scene.metadata?.robloxAssetManifest).toEqual(validatorManifest);
+        expect(reloadService.scene.metadata?.robloxAssetValidation).toEqual(validatorReport);
 
         const restoredTerrain = reloadService.heightmapController.getActiveTerrainMesh();
         expect(restoredTerrain).not.toBeNull();
@@ -1488,4 +1502,3 @@ describe('Modular Tools Architecture (ToolInterface, AbstractTool, ToolRegistry)
     });
   });
 });
-

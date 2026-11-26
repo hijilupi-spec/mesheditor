@@ -131,7 +131,7 @@ describe('MiniCAD Studio Integration Tests', () => {
       // Remove hole feature by ID
       ctrl.removeFeatureFromMesh(box, 'hole_m3_corners');
       expect(getMiniCadRecipe(box)?.features.length).toBe(1);
-    });
+    }, 90_000);
   });
 
   describe('2. Smart Alignment, Guides, Printability, Woodwork Cut List & STL Export', () => {

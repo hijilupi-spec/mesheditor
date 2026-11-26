@@ -24,6 +24,7 @@ import { TexturePaintEditorTool } from './TexturePaintEditorTool';
 import { HeightmapEditorTool } from './HeightmapEditorTool';
 import { GaussianSplatEditorTool } from './GaussianSplatEditorTool';
 import { MiniCadEditorTool } from './MiniCadEditorTool';
+import { RobloxAssetValidatorEditorTool } from './RobloxAssetValidatorEditorTool';
 import { TOOL_VIEWS, getToolViewTemplate } from './toolViews';
 
 export {
@@ -52,6 +53,7 @@ export {
   HeightmapEditorTool,
   GaussianSplatEditorTool,
   MiniCadEditorTool,
+  RobloxAssetValidatorEditorTool,
   TOOL_VIEWS,
   getToolViewTemplate,
 };
@@ -85,6 +87,7 @@ export function createBuiltinEditorTools(): ToolInterface[] {
     new TexturePaintEditorTool(),
     new HeightmapEditorTool(),
     new GaussianSplatEditorTool(),
+    new RobloxAssetValidatorEditorTool(),
   ];
 }
 
